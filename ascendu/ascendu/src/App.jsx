@@ -78,16 +78,17 @@ const xpToNext    = (xp) => {
   return { lvl, into: xp - cur, span: next - cur, pct: (xp - cur) / (next - cur) };
 };
 
-// Evolution tiers — the avatar's silhouette changes as you climb.
+// Evolution tiers tell a gentle life-stage story. Progress is expressed through
+// curiosity, light and experience — never through body shape or physical ideals.
 const EVO_TIERS = [
-  { id:"sprout",  name:"Sprout Student", minLvl:1,  desc:"Just getting started" },
-  { id:"learner", name:"Learner",        minLvl:3,  desc:"Finding your rhythm" },
-  { id:"scholar", name:"Scholar",        minLvl:6,  desc:"Focus is a habit now" },
-  { id:"adept",   name:"Adept",          minLvl:10, desc:"Deep work comes easy" },
-  { id:"sage",    name:"Sage",           minLvl:16, desc:"Mastery in motion" },
-  { id:"luminary",name:"Luminary",       minLvl:24, desc:"A steady source of light" },
-  { id:"beacon",  name:"Beacon",         minLvl:36, desc:"Consistency that guides the way" },
-  { id:"astral",  name:"Astral Scholar", minLvl:50, desc:"A whole world shaped by focus" },
+  { id:"sprout",  name:"New Light",       minLvl:1,  desc:"A tiny spark has arrived" },
+  { id:"learner", name:"Little Spark",    minLvl:3,  desc:"Curiosity is waking up" },
+  { id:"scholar", name:"Young Learner",   minLvl:6,  desc:"Every session reveals something new" },
+  { id:"adept",   name:"Wayfinder",       minLvl:10, desc:"A steady rhythm is taking shape" },
+  { id:"sage",    name:"Lightkeeper",     minLvl:16, desc:"Focus has become a trusted skill" },
+  { id:"luminary",name:"Luminary",        minLvl:24, desc:"A calm light for the path ahead" },
+  { id:"beacon",  name:"Beacon",          minLvl:36, desc:"Consistency that guides the way" },
+  { id:"astral",  name:"Astral Scholar",  minLvl:50, desc:"A whole world shaped by focus" },
 ];
 const tierForLevel = (lvl) => [...EVO_TIERS].reverse().find(t => lvl >= t.minLvl) || EVO_TIERS[0];
 
@@ -273,16 +274,32 @@ body { background:var(--lm-bg); }
 .sg-header { backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
 .sg-nav { backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 .sg-main { width:100%; }
-.lm-focus-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,390px); gap:18px; align-items:stretch; }
+.lm-focus-layout { display:grid; grid-template-columns:minmax(390px,1.12fr) minmax(320px,.88fr); gap:18px; align-items:stretch; }
 .lm-focus-card, .lm-stage-card { background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:28px; box-shadow:var(--lm-shadow-soft); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-.lm-focus-card { padding:24px; }
-.lm-stage-card { padding:18px 22px 22px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:530px; }
+.lm-focus-card { grid-column:2; grid-row:1; padding:28px; }
+.lm-stage-card { grid-column:1; grid-row:1; padding:20px 24px 24px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:560px; }
 .lm-stage-card::before { content:""; position:absolute; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle,var(--lm-primary-shadow),transparent 68%); top:26px; left:50%; transform:translateX(-50%); pointer-events:none; }
 .lm-section-kicker { display:flex; align-items:center; gap:8px; color:var(--lm-primary); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; margin-bottom:7px; }
 .lm-section-kicker::before { content:""; width:18px; height:2px; border-radius:2px; background:linear-gradient(90deg,var(--lm-primary),var(--lm-accent)); }
 .lm-focus-heading { margin:0 0 6px; font-size:clamp(25px,3vw,34px); line-height:1.08; letter-spacing:-.045em; color:var(--lm-ink); }
-.lm-focus-copy { margin:0 0 22px; color:var(--lm-muted); font-size:13px; line-height:1.55; }
+.lm-focus-copy { margin:0 0 22px; max-width:42ch; color:var(--lm-muted); font-size:13px; line-height:1.55; }
 .lm-field-label { display:block; margin:14px 0 7px; color:var(--lm-muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.lm-essential-block { margin-top:17px; }
+.lm-essential-block:first-of-type { margin-top:0; }
+.lm-choice-row { display:flex; flex-wrap:wrap; gap:8px; }
+.lm-session-options { margin-top:16px; border:1px solid var(--lm-border); border-radius:16px; background:color-mix(in srgb,var(--lm-surface-raised) 72%,transparent); overflow:hidden; }
+.lm-session-options summary { list-style:none; display:flex; align-items:center; justify-content:space-between; min-height:46px; padding:0 14px; color:var(--lm-muted); cursor:pointer; font-size:11px; font-weight:800; letter-spacing:.02em; }
+.lm-session-options summary::-webkit-details-marker { display:none; }
+.lm-session-options summary::after { content:"+"; width:22px; height:22px; display:grid; place-items:center; border-radius:50%; background:var(--lm-primary-soft); color:var(--lm-primary); font-size:16px; font-weight:500; transition:transform .2s ease; }
+.lm-session-options[open] summary::after { transform:rotate(45deg); }
+.lm-session-options[open] summary { color:var(--lm-ink); border-bottom:1px solid var(--lm-border); }
+.lm-session-options-body { padding:2px 14px 15px; }
+.lm-first-session-note { display:flex; gap:10px; align-items:flex-start; margin:14px 0 0; padding:12px 13px; border:1px solid var(--lm-border-strong); border-radius:15px; background:var(--lm-primary-soft); color:var(--lm-muted); font-size:11px; line-height:1.5; }
+.lm-first-session-note strong { display:block; margin-bottom:2px; color:var(--lm-ink); font-size:12px; }
+.lm-primary-action { width:100%; min-height:52px; margin-top:18px; border:0; border-radius:17px; color:#fff; cursor:pointer; font-family:inherit; font-size:13px; font-weight:850; letter-spacing:.01em; box-shadow:0 13px 30px var(--lm-primary-shadow); }
+.lm-growth-stage { display:flex; align-items:center; justify-content:center; gap:8px; margin:2px auto 10px; color:var(--lm-muted); font-size:11px; }
+.lm-growth-stage strong { color:var(--lm-ink); }
+.lm-growth-dot { width:7px; height:7px; border-radius:50%; background:var(--lm-accent); box-shadow:0 0 12px var(--lm-accent); }
 .lm-intention { width:100%; min-height:48px; resize:none; color:var(--lm-ink); background:var(--lm-surface-raised); border:1px solid var(--lm-border); border-radius:14px; padding:13px 14px; font-family:inherit; font-size:13px; font-weight:600; line-height:1.45; outline:none; transition:border-color .2s, box-shadow .2s; }
 .lm-intention:focus { border-color:var(--lm-primary); box-shadow:0 0 0 4px var(--lm-primary-soft); }
 .lm-intention::placeholder { color:var(--lm-muted-soft); }
@@ -296,9 +313,9 @@ body { background:var(--lm-bg); }
 .lm-session-intent strong { color:var(--lm-ink); font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
 .lm-orb-stage { min-height:270px; display:flex; justify-content:center; align-items:flex-end; position:relative; z-index:1; }
 .lm-orb-stage::after { content:""; position:absolute; width:210px; height:34px; bottom:19px; border-radius:50%; background:radial-gradient(ellipse,rgba(38,30,83,.19),transparent 70%); filter:blur(7px); z-index:-1; }
-.lm-world-frame { position:relative; width:100%; height:270px; margin:10px 0 0; overflow:hidden; border:1px solid rgba(255,255,255,.24); border-radius:22px; background:var(--lm-surface-raised); box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 18px 42px rgba(34,27,77,.14); isolation:isolate; }
+.lm-world-frame { position:relative; width:100%; height:300px; margin:8px 0 0; overflow:hidden; border:1px solid rgba(255,255,255,.24); border-radius:24px; background:var(--lm-surface-raised); box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 18px 42px rgba(34,27,77,.14); isolation:isolate; }
 .lm-world-frame::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 -44px 70px rgba(18,20,45,.12); pointer-events:none; z-index:3; }
-.lm-world-avatar { position:absolute; inset:0 0 -18px; z-index:2; display:flex; justify-content:center; align-items:flex-end; pointer-events:none; transform:scale(.77); transform-origin:center bottom; }
+.lm-world-avatar { position:absolute; inset:0 0 -12px; z-index:2; display:flex; justify-content:center; align-items:flex-end; pointer-events:none; transform:scale(.9); transform-origin:center bottom; }
 .lm-world-weather { position:absolute; z-index:4; top:12px; left:12px; display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid rgba(255,255,255,.25); border-radius:999px; background:rgba(19,22,48,.45); color:#fff; box-shadow:0 5px 18px rgba(16,20,52,.15); backdrop-filter:blur(10px); font-size:10px; font-weight:800; letter-spacing:.02em; }
 .lm-world-progress { margin:12px 0 2px; padding:11px 12px; border:1px solid var(--lm-border); border-radius:15px; background:var(--lm-surface-raised); }
 .lm-world-progress-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
@@ -312,6 +329,18 @@ body { background:var(--lm-bg); }
 .lm-spark-b { right:17%; top:20%; animation-delay:-1.4s; width:4px; height:4px; }
 .lm-spark-c { right:25%; top:58%; animation-delay:-2.7s; }
 @keyframes lmFloat { 0%,100%{transform:translateY(0) scale(.85);opacity:.45;} 50%{transform:translateY(-14px) scale(1.15);opacity:1;} }
+@keyframes lmAuraBreathe { 0%,100%{opacity:.42;transform:scale(.96);} 50%{opacity:.7;transform:scale(1.04);} }
+@keyframes lmBubbleRise { 0%{opacity:0;transform:translateY(9px) scale(.65);} 18%{opacity:.82;} 78%{opacity:.46;} 100%{opacity:0;transform:translateY(-42px) scale(1.12);} }
+@keyframes lmFigureFloat { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);} }
+@keyframes lmOrbitSlow { to{transform:rotate(360deg);} }
+@keyframes lmAvatarBlink { 0%,92%,100%{transform:scaleY(1);} 95%{transform:scaleY(.08);} 97%{transform:scaleY(1);} }
+@keyframes lmSparkOut { 0%{opacity:0;transform:translate(0,0) scale(.4);} 22%{opacity:1;} 100%{opacity:0;transform:translate(var(--spark-x),var(--spark-y)) scale(1.15);} }
+.lm-avatar-aura { animation:lmAuraBreathe 4.8s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.lm-effervescent-bubble { animation:lmBubbleRise var(--bubble-duration,5s) ease-in-out infinite; animation-delay:var(--bubble-delay,0s); transform-box:fill-box; transform-origin:center; }
+.lm-avatar-figure { animation:lmFigureFloat 4.2s ease-in-out infinite; transform-box:fill-box; transform-origin:center bottom; }
+.lm-avatar-orbit { animation:lmOrbitSlow 24s linear infinite; transform-box:fill-box; transform-origin:center; }
+.lm-avatar-eyes { animation:lmAvatarBlink 6.4s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.lm-celebrate-spark { animation:lmSparkOut 1.25s cubic-bezier(.22,1,.36,1) both; transform-box:fill-box; transform-origin:center; }
 @keyframes lmCelebrate { 0%,100%{transform:translateY(0) scale(1);} 24%{transform:translateY(-16px) scale(1.03);} 52%{transform:translateY(0) scale(.98);} 72%{transform:translateY(-7px) scale(1.01);} }
 .lm-avatar-svg.is-celebrating { animation:lmCelebrate 1.5s cubic-bezier(.22,1,.36,1); transform-box:fill-box; transform-origin:center bottom; }
 .lm-daily-card { display:flex; align-items:center; gap:12px; margin-top:16px; padding:12px 14px; border:1px solid var(--lm-border); border-radius:15px; background:var(--lm-surface-raised); }
@@ -359,7 +388,8 @@ body { background:var(--lm-bg); }
   .sg-nav { position:fixed !important; left:12px; right:12px; bottom:10px; z-index:250; padding:6px !important; border:1px solid var(--lm-border) !important; border-radius:21px; background:var(--lm-surface) !important; box-shadow:0 16px 50px rgba(24,20,48,.22); }
   .sg-nav button { padding:8px 0 !important; }
   .lm-focus-layout { grid-template-columns:1fr; gap:14px; }
-  .lm-stage-card { min-height:480px; order:-1; }
+  .lm-focus-card, .lm-stage-card { grid-column:auto; grid-row:auto; }
+  .lm-stage-card { min-height:500px; order:-1; }
   .lm-focus-card { padding:19px 16px; }
   .lm-quick-actions { gap:7px; }
 }
@@ -367,7 +397,7 @@ body { background:var(--lm-bg); }
   .lm-stage-card { min-height:450px; padding-inline:14px; }
   .lm-orb-stage { min-height:245px; transform:scale(.92); margin:-8px 0; }
   .lm-world-frame { height:238px; }
-  .lm-world-avatar { transform:scale(.68); }
+  .lm-world-avatar { transform:scale(.76); }
   .lm-quick-actions { grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1007,209 +1037,181 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
 }
 function AvatarSVG({ progress=0.5, tier="sprout", equipped={}, color="#5B8DEF", paused=false, large=false, idle=false, celebrate=false }) {
   const uid = useId().replace(/:/g, "");
-  const size = large ? 240 : 160;
   const W = large ? 240 : 160, H = large ? 260 : 190;
+  const size = large ? 240 : 160;
+  const u = large ? 1 : 0.68;
   const cx = W/2;
-  const groundY = H - (large?30:22);
-  // Growth: avatar scales from 0.45→1.0 over the session; idle shows full size.
-  const g = idle ? 1 : (0.45 + progress*0.55);
-  const bodyH = (large?92:64) * g;
-  const headR = (large?30:21) * g;
-  const headCy = groundY - bodyH - headR*0.7;
-  const skin = "#F0C9A0", skinShade = "#E0B088";
-  const tierIdx = EVO_TIERS.findIndex(t=>t.id===tier);
-  // Robe color deepens with tier
-  const robeColors = ["#9DB4C0","#7FA8C9","#6A95C7","#5B8DEF","#7B6FE0","#9B6FE0"];
-  const robe = robeColors[Math.min(tierIdx, robeColors.length-1)];
-  const opacity = paused ? 0.55 : 1;
+  const groundY = H - (large ? 24 : 16);
+  const tierIdx = Math.max(0, EVO_TIERS.findIndex(t=>t.id===tier));
+  const stage = EVO_TIERS[tierIdx] || EVO_TIERS[0];
+  const stages = [
+    { bodyH:54,  headR:31, topW:23, botW:31, robeA:"#EEE9FF", robeB:"#A99BFF", glow:"#FFE6A8" },
+    { bodyH:70,  headR:30, topW:25, botW:34, robeA:"#DCEBFF", robeB:"#87B6F2", glow:"#CDEBFF" },
+    { bodyH:86,  headR:28, topW:27, botW:38, robeA:"#DDE8FF", robeB:"#6F9EEA", glow:"#BFDFFF" },
+    { bodyH:96,  headR:27, topW:29, botW:41, robeA:"#DCD8FF", robeB:"#7668E8", glow:"#C8C0FF" },
+    { bodyH:104, headR:26, topW:30, botW:43, robeA:"#E6D8FF", robeB:"#8D66DC", glow:"#DCC6FF" },
+    { bodyH:111, headR:25, topW:32, botW:45, robeA:"#F1DFFF", robeB:"#A45FD1", glow:"#F0C9FF" },
+    { bodyH:116, headR:25, topW:33, botW:47, robeA:"#FFF0D5", robeB:"#B477D8", glow:"#FFE6A8" },
+    { bodyH:120, headR:24, topW:34, botW:49, robeA:"#FFF3D9", robeB:"#876FE8", glow:"#FFF0B8" },
+  ];
+  const cfg = stages[Math.min(tierIdx, stages.length-1)];
+  const bodyH = cfg.bodyH*u, headR = cfg.headR*u;
+  const topW = cfg.topW*u, botW = cfg.botW*u;
+  const headCy = groundY - bodyH - headR*.48;
+  const bodyTopY = headCy + headR*.72;
+  const isBaby = tierIdx===0;
+  const opacity = paused ? .58 : 1;
+  const sessionScale = idle ? 1 : .96 + Math.min(1,progress)*.04;
+  const auraCenterY = headCy + (groundY-headCy)*.48;
+  const auraRadius = (bodyH*.62 + headR) * (1 + Math.min(1,progress)*.05);
+  const skin = "#F1C9A4", skinShade = "#DAA982";
 
   const hat = cosmeticById(equipped.hat);
   const aura = cosmeticById(equipped.aura);
   const pet = cosmeticById(equipped.pet);
+  const auraTone = aura?.draw==="glow" || aura?.draw==="galaxy" ? aura.color : cfg.glow;
 
-  const baseProps = {
-    viewBox:`0 0 ${W} ${H}`, width:size, height:large?260:190,
-    className:`lm-avatar-svg${celebrate?" is-celebrating":""}`, role:"img", "aria-label":`${tier} focus avatar`,
-    style:{ overflow:"visible", filter:paused?"grayscale(45%)":"drop-shadow(0 16px 20px rgba(48,38,96,.16))", transition:"filter 0.4s" }
-  };
   const robeGradient = `${uid}-robe`;
   const skinGradient = `${uid}-skin`;
-  const softGlow = `${uid}-glow`;
+  const auraGradient = `${uid}-aura`;
+  const lightGradient = `${uid}-light`;
+  const blur = `${uid}-blur`;
+  const baseProps = {
+    viewBox:`0 0 ${W} ${H}`, width:size, height:large?260:190,
+    className:`lm-avatar-svg${celebrate?" is-celebrating":""}`, role:"img",
+    "aria-label":`${stage.name}, growth stage ${tierIdx+1} of ${EVO_TIERS.length}`,
+    style:{overflow:"visible",filter:paused?"grayscale(35%)":"drop-shadow(0 16px 22px rgba(48,38,96,.18))",transition:"filter .4s"},
+  };
 
-  // ── Aura (behind body) ──
-  let auraEl = null;
-  if (aura && aura.draw === "glow" && !paused) {
-    auraEl = <circle cx={cx} cy={groundY-bodyH*0.55} r={bodyH*0.9+headR} fill={aura.color} opacity={0.16}/>;
-  } else if (aura && aura.draw === "galaxy" && !paused) {
-    auraEl = (
-      <g opacity={0.9}>
-        <circle cx={cx} cy={groundY-bodyH*0.55} r={bodyH*0.95+headR} fill={aura.color} opacity={0.14}/>
-        {[...Array(6)].map((_,i)=>{
-          const a=(i/6)*Math.PI*2 + progress*4;
-          const rr=bodyH*0.8+headR;
-          return <circle key={i} cx={cx+Math.cos(a)*rr} cy={groundY-bodyH*0.55+Math.sin(a)*rr*0.7} r={2.5} fill="#fff" opacity={0.8}/>;
-        })}
-      </g>
-    );
-  }
+  const bubbles = [
+    [-.74,.18,4,-1.2,5.2],[-.56,.72,2.6,-3.4,4.6],[-.34,.04,3,-2.1,5.8],
+    [.38,.14,3.4,-4.1,5.4],[.58,.62,2.5,-.8,4.8],[.76,.30,4,-2.8,6.1],
+    [-.12,.82,2.2,-1.7,4.4],[.15,.48,2.8,-3.1,5.1],
+  ];
+  const celebration = [
+    [-28,-35,-34,-42,"#FFE28A"],[24,-40,30,-46,"#CDBFFF"],[-42,-5,-48,-22,"#8DE1D1"],
+    [38,-8,48,-25,"#FFB2C8"],[-12,-55,-8,-52,"#FFFFFF"],[12,-18,18,-38,"#FFD28C"],
+  ];
 
-  // ── Body silhouette varies by tier ──
-  // Sprout: small rounded robe. Higher tiers: taller, with shoulder structure.
-  const bodyTopW = (large?34:24) * (0.8 + tierIdx*0.04) * g;
-  const bodyBotW = (large?52:36) * (0.85 + tierIdx*0.05) * g;
-  const bodyTopY = headCy + headR*0.8;
-  const body = (
-    <path d={`M${cx-bodyTopW} ${bodyTopY}
-              Q${cx-bodyTopW*1.1} ${groundY-bodyH*0.4} ${cx-bodyBotW} ${groundY}
-              L${cx+bodyBotW} ${groundY}
-              Q${cx+bodyTopW*1.1} ${groundY-bodyH*0.4} ${cx+bodyTopW} ${bodyTopY} Z`}
-          fill={`url(#${robeGradient})`} stroke="rgba(255,255,255,.38)" strokeWidth={large?1.4:1} opacity={opacity}/>
+  const body = isBaby ? (
+    <g opacity={opacity}>
+      <path d={`M${cx-topW*.88} ${bodyTopY-2} Q${cx} ${bodyTopY-10} ${cx+topW*.88} ${bodyTopY-2}
+                Q${cx+botW*1.02} ${groundY-20*u} ${cx} ${groundY}
+                Q${cx-botW*1.02} ${groundY-20*u} ${cx-topW*.88} ${bodyTopY-2} Z`}
+            fill={`url(#${robeGradient})`} stroke="rgba(255,255,255,.68)" strokeWidth={1.4*u}/>
+      <path d={`M${cx-topW*.68} ${bodyTopY+15*u} Q${cx+4*u} ${bodyTopY+28*u} ${cx+botW*.6} ${groundY-15*u}`}
+            fill="none" stroke="rgba(255,255,255,.62)" strokeWidth={3*u} strokeLinecap="round"/>
+      <path d={`M${cx+topW*.66} ${bodyTopY+14*u} Q${cx-2*u} ${bodyTopY+29*u} ${cx-botW*.48} ${groundY-14*u}`}
+            fill="none" stroke="rgba(84,68,159,.18)" strokeWidth={1.2*u} strokeLinecap="round"/>
+      <circle cx={cx-topW*.65} cy={bodyTopY+8*u} r={4*u} fill={`url(#${skinGradient})`}/>
+    </g>
+  ) : (
+    <g opacity={opacity}>
+      <path d={`M${cx-topW} ${bodyTopY} Q${cx-topW*1.12} ${groundY-bodyH*.42} ${cx-botW} ${groundY}
+                L${cx+botW} ${groundY} Q${cx+topW*1.12} ${groundY-bodyH*.42} ${cx+topW} ${bodyTopY} Z`}
+            fill={`url(#${robeGradient})`} stroke="rgba(255,255,255,.52)" strokeWidth={1.35*u}/>
+      <path d={`M${cx-topW} ${bodyTopY+3*u} Q${cx} ${bodyTopY+17*u} ${cx+topW} ${bodyTopY+3*u}`}
+            fill="none" stroke="rgba(255,255,255,.72)" strokeWidth={(tierIdx>=4?4:2.5)*u} strokeLinecap="round"/>
+      <path d={`M${cx-topW*.78} ${bodyTopY+15*u} Q${cx-topW*1.34} ${bodyTopY+38*u} ${cx-topW*.72} ${bodyTopY+50*u}`}
+            fill="none" stroke={cfg.robeB} strokeWidth={10*u} strokeLinecap="round" opacity=".88"/>
+      <path d={`M${cx+topW*.78} ${bodyTopY+15*u} Q${cx+topW*1.34} ${bodyTopY+38*u} ${cx+topW*.72} ${bodyTopY+50*u}`}
+            fill="none" stroke={cfg.robeB} strokeWidth={10*u} strokeLinecap="round" opacity=".88"/>
+      <circle cx={cx-topW*.72} cy={bodyTopY+51*u} r={4.5*u} fill={`url(#${skinGradient})`}/>
+      <circle cx={cx+topW*.72} cy={bodyTopY+51*u} r={4.5*u} fill={`url(#${skinGradient})`}/>
+      {tierIdx>=2 && (
+        <g>
+          <circle cx={cx} cy={bodyTopY+51*u} r={(8+tierIdx*.6)*u} fill={`url(#${lightGradient})`} filter={`url(#${blur})`} opacity=".75"/>
+          <circle cx={cx} cy={bodyTopY+51*u} r={(3.5+tierIdx*.25)*u} fill="#FFF8CF" stroke="#fff" strokeWidth={.8*u}/>
+        </g>
+      )}
+      {tierIdx>=5 && <path d={`M${cx-botW*.72} ${groundY-20*u} Q${cx} ${groundY-29*u} ${cx+botW*.72} ${groundY-20*u}`}
+        fill="none" stroke="#FFE6A2" strokeWidth={2*u} opacity=".82"/>}
+    </g>
   );
-  // Collar / trim that appears from "scholar" up
-  const collar = tierIdx>=2 && (
-    <path d={`M${cx-bodyTopW} ${bodyTopY} L${cx} ${bodyTopY+headR*0.5} L${cx+bodyTopW} ${bodyTopY} Z`}
-          fill="#fff" opacity={opacity*0.85}/>
-  );
 
-  // ── Head ──
   const head = (
     <g opacity={opacity}>
-      <circle cx={cx} cy={headCy} r={headR} fill={`url(#${skinGradient})`} stroke="rgba(255,255,255,.48)" strokeWidth={large?1.4:1}/>
-      <path d={`M${cx-headR} ${headCy} A${headR} ${headR} 0 0 1 ${cx+headR} ${headCy}`} fill={skinShade} opacity={0.25}/>
-      {/* hair — fuller with tier */}
-      <path d={`M${cx-headR*1.02} ${headCy-headR*0.1}
-                Q${cx} ${headCy-headR*1.5} ${cx+headR*1.02} ${headCy-headR*0.1}
-                Q${cx+headR*0.6} ${headCy-headR*0.6} ${cx} ${headCy-headR*0.55}
-                Q${cx-headR*0.6} ${headCy-headR*0.6} ${cx-headR*1.02} ${headCy-headR*0.1} Z`}
-            fill={["#3A2E25","#4A3B2E","#2E2620","#5A4A3A","#6B5B4A","#7A6A5A"][Math.min(tierIdx,5)]}/>
-      {/* face — eyes + small smile, calm when focusing */}
-      {!paused && <>
-        <circle cx={cx-headR*0.35} cy={headCy+headR*0.05} r={headR*0.09} fill="#3A3A3A"/>
-        <circle cx={cx+headR*0.35} cy={headCy+headR*0.05} r={headR*0.09} fill="#3A3A3A"/>
-        <path d={`M${cx-headR*0.3} ${headCy+headR*0.45} Q${cx} ${headCy+headR*0.65} ${cx+headR*0.3} ${headCy+headR*0.45}`}
-              stroke="#B07050" strokeWidth={large?2:1.5} fill="none" strokeLinecap="round"/>
-      </>}
-      {paused && <>
-        {/* closed/resting eyes */}
-        <line x1={cx-headR*0.5} y1={headCy} x2={cx-headR*0.2} y2={headCy} stroke="#3A3A3A" strokeWidth={1.5} strokeLinecap="round"/>
-        <line x1={cx+headR*0.2} y1={headCy} x2={cx+headR*0.5} y2={headCy} stroke="#3A3A3A" strokeWidth={1.5} strokeLinecap="round"/>
+      <circle cx={cx} cy={headCy} r={headR} fill={`url(#${skinGradient})`} stroke="rgba(255,255,255,.7)" strokeWidth={1.3*u}/>
+      {isBaby ? (
+        <path d={`M${cx-5*u} ${headCy-headR*.96} C${cx-13*u} ${headCy-headR-8*u} ${cx+3*u} ${headCy-headR-12*u} ${cx+4*u} ${headCy-headR-3*u}
+                  C${cx+4*u} ${headCy-headR+2*u} ${cx-2*u} ${headCy-headR+1*u} ${cx-1*u} ${headCy-headR-4*u}`}
+              fill="none" stroke="#72513C" strokeWidth={2.8*u} strokeLinecap="round"/>
+      ) : (
+        <path d={`M${cx-headR*1.02} ${headCy-headR*.08} Q${cx-headR*.8} ${headCy-headR*1.02} ${cx} ${headCy-headR*1.08}
+                  Q${cx+headR*.82} ${headCy-headR*1.02} ${cx+headR*1.02} ${headCy-headR*.08}
+                  Q${cx+headR*.56} ${headCy-headR*.53} ${cx} ${headCy-headR*.47}
+                  Q${cx-headR*.56} ${headCy-headR*.53} ${cx-headR*1.02} ${headCy-headR*.08} Z`}
+              fill={["#72513C","#674735","#51382E","#4C382F","#5B4538","#66503F","#715B47","#806A50"][tierIdx]}/>
+      )}
+      {!paused ? (
+        <g className="lm-avatar-eyes">
+          <ellipse cx={cx-headR*.34} cy={headCy+headR*.08} rx={headR*.095} ry={headR*.125} fill="#34313D"/>
+          <ellipse cx={cx+headR*.34} cy={headCy+headR*.08} rx={headR*.095} ry={headR*.125} fill="#34313D"/>
+          <circle cx={cx-headR*.31} cy={headCy+headR*.035} r={headR*.032} fill="#fff"/>
+          <circle cx={cx+headR*.37} cy={headCy+headR*.035} r={headR*.032} fill="#fff"/>
+        </g>
+      ) : (
+        <g stroke="#4B4140" strokeWidth={1.6*u} strokeLinecap="round">
+          <path d={`M${cx-headR*.5} ${headCy+headR*.08} Q${cx-headR*.34} ${headCy+headR*.17} ${cx-headR*.18} ${headCy+headR*.08}`}/>
+          <path d={`M${cx+headR*.18} ${headCy+headR*.08} Q${cx+headR*.34} ${headCy+headR*.17} ${cx+headR*.5} ${headCy+headR*.08}`}/>
+        </g>
+      )}
+      <path d={`M${cx-headR*.22} ${headCy+headR*.48} Q${cx} ${headCy+headR*(isBaby?.58:.66)} ${cx+headR*.22} ${headCy+headR*.48}`}
+            stroke="#B57664" strokeWidth={1.5*u} fill="none" strokeLinecap="round"/>
+      {isBaby && <>
+        <circle cx={cx-headR*.58} cy={headCy+headR*.38} r={headR*.12} fill="#F29A9A" opacity=".23"/>
+        <circle cx={cx+headR*.58} cy={headCy+headR*.38} r={headR*.12} fill="#F29A9A" opacity=".23"/>
       </>}
     </g>
   );
 
-  // ── Hat ──
   let hatEl = null;
-  if (hat && hat.draw !== "none") {
-    const hy = headCy - headR*0.85;
-    if (hat.draw === "cap") hatEl = (
-      <g opacity={opacity}>
-        <path d={`M${cx-headR*0.95} ${hy+headR*0.35} Q${cx} ${hy-headR*0.5} ${cx+headR*0.95} ${hy+headR*0.35} Z`} fill={hat.color}/>
-        <ellipse cx={cx+headR*0.7} cy={hy+headR*0.4} rx={headR*0.55} ry={headR*0.14} fill={hat.color}/>
-      </g>
-    );
-    else if (hat.draw === "beanie") hatEl = (
-      <g opacity={opacity}>
-        <path d={`M${cx-headR} ${hy+headR*0.5} Q${cx} ${hy-headR*0.65} ${cx+headR} ${hy+headR*0.5} Z`} fill={hat.color}/>
-        <rect x={cx-headR} y={hy+headR*0.4} width={headR*2} height={headR*0.28} rx={headR*0.14} fill={hat.color} opacity={0.8}/>
-        <circle cx={cx} cy={hy-headR*0.45} r={headR*0.18} fill="#fff"/>
-      </g>
-    );
-    else if (hat.draw === "grad") hatEl = (
-      <g opacity={opacity}>
-        <rect x={cx-headR*0.7} y={hy} width={headR*1.4} height={headR*0.5} rx={3} fill={hat.color}/>
-        <polygon points={`${cx},${hy-headR*0.35} ${cx-headR*1.25},${hy+headR*0.1} ${cx},${hy+headR*0.55} ${cx+headR*1.25},${hy+headR*0.1}`} fill={hat.color}/>
-        <circle cx={cx+headR*1.1} cy={hy+headR*0.1} r={2.5} fill="#E8B84B"/>
-        <line x1={cx+headR*1.1} y1={hy+headR*0.1} x2={cx+headR*1.1} y2={hy+headR*0.7} stroke="#E8B84B" strokeWidth={1.5}/>
-      </g>
-    );
-    else if (hat.draw === "crown") hatEl = (
-      <g opacity={opacity}>
-        <path d={`M${cx-headR*0.85} ${hy+headR*0.5}
-                  L${cx-headR*0.85} ${hy} L${cx-headR*0.4} ${hy+headR*0.3} L${cx} ${hy-headR*0.2}
-                  L${cx+headR*0.4} ${hy+headR*0.3} L${cx+headR*0.85} ${hy} L${cx+headR*0.85} ${hy+headR*0.5} Z`}
-              fill={hat.color} stroke="#C99A2E" strokeWidth={1}/>
-        <circle cx={cx} cy={hy+headR*0.2} r={2.5} fill="#E0533A"/>
-      </g>
-    );
-    else if (hat.draw === "halo") hatEl = (
-      <ellipse cx={cx} cy={headCy-headR*1.25} rx={headR*0.85} ry={headR*0.28}
-               fill="none" stroke={hat.color} strokeWidth={large?4:3} opacity={paused?0.4:0.95}/>
-    );
+  if(hat && hat.draw!=="none"){
+    const hy = headCy-headR*.86;
+    if(hat.draw==="cap") hatEl = <g opacity={opacity}><path d={`M${cx-headR*.95} ${hy+headR*.35} Q${cx} ${hy-headR*.5} ${cx+headR*.95} ${hy+headR*.35} Z`} fill={hat.color}/><ellipse cx={cx+headR*.7} cy={hy+headR*.4} rx={headR*.55} ry={headR*.14} fill={hat.color}/></g>;
+    else if(hat.draw==="beanie") hatEl = <g opacity={opacity}><path d={`M${cx-headR} ${hy+headR*.5} Q${cx} ${hy-headR*.65} ${cx+headR} ${hy+headR*.5} Z`} fill={hat.color}/><rect x={cx-headR} y={hy+headR*.4} width={headR*2} height={headR*.28} rx={headR*.14} fill={hat.color} opacity=".82"/><circle cx={cx} cy={hy-headR*.45} r={headR*.18} fill="#fff"/></g>;
+    else if(hat.draw==="grad") hatEl = <g opacity={opacity}><polygon points={`${cx},${hy-headR*.35} ${cx-headR*1.25},${hy+headR*.1} ${cx},${hy+headR*.55} ${cx+headR*1.25},${hy+headR*.1}`} fill={hat.color}/><line x1={cx+headR*1.08} y1={hy+headR*.1} x2={cx+headR*1.08} y2={hy+headR*.72} stroke="#E8B84B" strokeWidth={1.5*u}/></g>;
+    else if(hat.draw==="crown") hatEl = <path d={`M${cx-headR*.86} ${hy+headR*.5} L${cx-headR*.86} ${hy} L${cx-headR*.4} ${hy+headR*.3} L${cx} ${hy-headR*.2} L${cx+headR*.4} ${hy+headR*.3} L${cx+headR*.86} ${hy} L${cx+headR*.86} ${hy+headR*.5} Z`} fill={hat.color} stroke="#C99A2E" strokeWidth={u}/>;
+    else if(hat.draw==="halo") hatEl = <ellipse cx={cx} cy={headCy-headR*1.25} rx={headR*.86} ry={headR*.27} fill="none" stroke={hat.color} strokeWidth={4*u} opacity={paused?.4:.95}/>;
   }
 
-  // ── Companion pet (orbits) ──
   let petEl = null;
-  if (pet && pet.draw !== "none") {
-    const px = cx + (large?64:46);
-    const py = groundY - bodyH*0.35 + Math.sin(progress*8)*4;
-    if (pet.draw === "cat") petEl = (
-      <g opacity={opacity}>
-        <ellipse cx={px} cy={py} rx={11} ry={9} fill={pet.color}/>
-        <circle cx={px} cy={py-9} r={7} fill={pet.color}/>
-        <polygon points={`${px-6},${py-13} ${px-2},${py-9} ${px-8},${py-8}`} fill={pet.color}/>
-        <polygon points={`${px+6},${py-13} ${px+2},${py-9} ${px+8},${py-8}`} fill={pet.color}/>
-        <circle cx={px-2.5} cy={py-9} r={1.3} fill="#000"/><circle cx={px+2.5} cy={py-9} r={1.3} fill="#000"/>
-        <path d={`M${px+10} ${py+2} q8 -2 4 -10`} stroke={pet.color} strokeWidth={3} fill="none" strokeLinecap="round"/>
-      </g>
-    );
-    else if (pet.draw === "owl") petEl = (
-      <g opacity={opacity}>
-        <ellipse cx={px} cy={py} rx={10} ry={12} fill={pet.color}/>
-        <circle cx={px-3.5} cy={py-3} r={3.5} fill="#fff"/><circle cx={px+3.5} cy={py-3} r={3.5} fill="#fff"/>
-        <circle cx={px-3.5} cy={py-3} r={1.5} fill="#000"/><circle cx={px+3.5} cy={py-3} r={1.5} fill="#000"/>
-        <polygon points={`${px},${py-1} ${px-2},${py+2} ${px+2},${py+2}`} fill="#E8A23C"/>
-        <polygon points={`${px-8},${py-9} ${px-4},${py-11} ${px-4},${py-6}`} fill={pet.color}/>
-        <polygon points={`${px+8},${py-9} ${px+4},${py-11} ${px+4},${py-6}`} fill={pet.color}/>
-      </g>
-    );
-    else if (pet.draw === "sprite") petEl = (
-      <g opacity={paused?0.4:0.95}>
-        <circle cx={px} cy={py} r={7} fill={pet.color} opacity={0.5}/>
-        <circle cx={px} cy={py} r={4} fill={pet.color}/>
-        {[...Array(4)].map((_,i)=>{ const a=(i/4)*Math.PI*2+progress*6;
-          return <circle key={i} cx={px+Math.cos(a)*10} cy={py+Math.sin(a)*10} r={1.5} fill="#fff"/>; })}
-      </g>
-    );
+  if(pet && pet.draw!=="none"){
+    const px=cx+66*u, py=groundY-20*u+Math.sin(progress*8)*3*u;
+    if(pet.draw==="cat") petEl = <g opacity={opacity}><ellipse cx={px} cy={py} rx={11*u} ry={9*u} fill={pet.color}/><circle cx={px} cy={py-9*u} r={7*u} fill={pet.color}/><path d={`M${px-6*u} ${py-12*u} l${4*u} ${-5*u} l${3*u} ${6*u} M${px+6*u} ${py-12*u} l${-4*u} ${-5*u} l${-3*u} ${6*u}`} fill={pet.color} stroke={pet.color} strokeWidth={2*u}/><circle cx={px-2.5*u} cy={py-9*u} r={1.2*u} fill="#25232A"/><circle cx={px+2.5*u} cy={py-9*u} r={1.2*u} fill="#25232A"/></g>;
+    else if(pet.draw==="owl") petEl = <g opacity={opacity}><ellipse cx={px} cy={py} rx={10*u} ry={12*u} fill={pet.color}/><circle cx={px-3.5*u} cy={py-3*u} r={3.5*u} fill="#fff"/><circle cx={px+3.5*u} cy={py-3*u} r={3.5*u} fill="#fff"/><circle cx={px-3.5*u} cy={py-3*u} r={1.4*u} fill="#25232A"/><circle cx={px+3.5*u} cy={py-3*u} r={1.4*u} fill="#25232A"/></g>;
+    else if(pet.draw==="sprite") petEl = <g opacity={paused?.4:.95}><circle cx={px} cy={py} r={10*u} fill={pet.color} opacity=".18"/><circle cx={px} cy={py} r={4*u} fill={pet.color}/><circle cx={px-5*u} cy={py-2*u} r={1.2*u} fill="#fff"/><circle cx={px+5*u} cy={py+2*u} r={1.2*u} fill="#fff"/></g>;
   }
-
-  const shadow = <ellipse cx={cx} cy={groundY+5} rx={bodyBotW*1.22} ry={large?9:6} fill="rgba(40,31,82,0.13)" filter={`url(#${softGlow})`}/>;
-  const sparkle = progress>=1 && !paused && idle===false && (
-    <>
-      <path d={`M ${cx-headR*1.45} ${headCy-headR*.7} l 3 7 7 3 -7 3 -3 7 -3-7 -7-3 7-3z`} fill="#FFD477" opacity=".9"/>
-      <path d={`M ${cx+headR*1.4} ${headCy-headR*1.02} l 2 5 5 2 -5 2 -2 5 -2-5 -5-2 5-2z`} fill="#B8ADFF" opacity=".95"/>
-    </>
-  );
-  const pauseIcon = paused && (
-    <text x={cx} y={headCy-headR*1.8} fontSize={large?26:18} textAnchor="middle" opacity={0.7}>⏸</text>
-  );
 
   return (
     <svg {...baseProps}>
       <defs>
-        <linearGradient id={robeGradient} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor={color}/>
-          <stop offset="54%" stopColor={robe}/>
-          <stop offset="100%" stopColor={BRAND.primary}/>
-        </linearGradient>
-        <radialGradient id={skinGradient} cx="35%" cy="25%" r="80%">
-          <stop offset="0%" stopColor="#FFE6C8"/>
-          <stop offset="70%" stopColor={skin}/>
-          <stop offset="100%" stopColor={skinShade}/>
-        </radialGradient>
-        <filter id={softGlow} x="-50%" y="-100%" width="200%" height="300%">
-          <feGaussianBlur stdDeviation={large?5:3.5}/>
-        </filter>
+        <linearGradient id={robeGradient} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={cfg.robeA}/><stop offset="52%" stopColor={color}/><stop offset="100%" stopColor={cfg.robeB}/></linearGradient>
+        <radialGradient id={skinGradient} cx="34%" cy="25%" r="80%"><stop offset="0%" stopColor="#FFE9D0"/><stop offset="70%" stopColor={skin}/><stop offset="100%" stopColor={skinShade}/></radialGradient>
+        <radialGradient id={auraGradient}><stop offset="0%" stopColor="#fff" stopOpacity=".78"/><stop offset="36%" stopColor={auraTone} stopOpacity=".45"/><stop offset="100%" stopColor={auraTone} stopOpacity="0"/></radialGradient>
+        <radialGradient id={lightGradient}><stop offset="0%" stopColor="#fff"/><stop offset="44%" stopColor="#FFF4B5"/><stop offset="100%" stopColor={auraTone} stopOpacity="0"/></radialGradient>
+        <filter id={blur} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation={5*u}/></filter>
       </defs>
-      <circle cx={cx} cy={groundY-bodyH*.58} r={bodyH*.94+headR} fill="none" stroke={color} strokeWidth="1" opacity={paused ? 0.08 : 0.14} strokeDasharray="3 8"/>
-      {auraEl}
-      {shadow}
-      {body}
-      {collar}
-      {petEl}
-      {head}
-      {hatEl}
-      {sparkle}
-      {pauseIcon}
+
+      <circle className="lm-avatar-aura" cx={cx} cy={auraCenterY} r={auraRadius*1.13} fill={`url(#${auraGradient})`} opacity={paused?.25:.72}/>
+      <g className="lm-avatar-orbit" opacity={paused?.15:.36}>
+        <ellipse cx={cx} cy={auraCenterY} rx={auraRadius*.88} ry={auraRadius*.64} fill="none" stroke={auraTone} strokeWidth={1.2*u} strokeDasharray={`${2*u} ${9*u}`}/>
+      </g>
+      {bubbles.map(([dx,dy,r,d,t],i)=><circle key={i} className="lm-effervescent-bubble" cx={cx+dx*auraRadius} cy={auraCenterY+dy*auraRadius*.55} r={r*u} fill="none" stroke={i%3===0?"#fff":auraTone} strokeWidth={1.15*u} opacity=".72" style={{"--bubble-delay":`${d}s`,"--bubble-duration":`${t}s`}}/>)}
+      {aura?.draw==="galaxy" && <g className="lm-avatar-orbit">{[0,1,2,3,4,5].map(i=>{const a=i*Math.PI/3, rr=auraRadius*.93;return <circle key={i} cx={cx+Math.cos(a)*rr} cy={auraCenterY+Math.sin(a)*rr*.7} r={2.2*u} fill="#fff"/>;})}</g>}
+
+      <ellipse cx={cx} cy={groundY+5*u} rx={botW*1.28} ry={7*u} fill="rgba(34,29,74,.14)" filter={`url(#${blur})`}/>
+      <g transform={`translate(${cx} ${groundY}) scale(${sessionScale}) translate(${-cx} ${-groundY})`}>
+        <g className="lm-avatar-figure">
+          {body}
+          {petEl}
+          {head}
+          {hatEl}
+        </g>
+      </g>
+
+      {celebrate && celebration.map(([x,y,tx,ty,c],i)=><circle key={i} className="lm-celebrate-spark" cx={cx+x*u} cy={auraCenterY+y*u*.25} r={(i%2?3:4)*u} fill={c} style={{"--spark-x":`${tx*u}px`,"--spark-y":`${ty*u}px`,animationDelay:`${i*.06}s`}}/>)}
+      {paused && <g opacity=".72" transform={`translate(${cx-12*u} ${headCy-headR*1.75})`}><rect width={24*u} height={20*u} rx={10*u} fill="rgba(28,25,53,.55)"/><rect x={8*u} y={6*u} width={3*u} height={8*u} rx={1.5*u} fill="#fff"/><rect x={14*u} y={6*u} width={3*u} height={8*u} rx={1.5*u} fill="#fff"/></g>}
     </svg>
   );
 }
@@ -1918,6 +1920,8 @@ export default function App() {
   const initials = user.slice(0,2).toUpperCase();
   const dailyGoalSecs = Math.max(15, dailyGoal) * 60;
   const dailyGoalPct = Math.min(1, todaySecs / dailyGoalSecs);
+  const isNewUser = xp < 1;
+  const tierPosition = Math.max(0, EVO_TIERS.findIndex(t=>t.id===tier.id));
   const navItems = [
     ["focus","Focus","◉"],
     ["classes","Classes","♧"],
@@ -1935,7 +1939,7 @@ export default function App() {
         <div style={S.header} className="sg-header">
           <div style={S.logo}>{BRAND.logo} {BRAND.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <div style={S.coinChip}>🪙 {coins}</div>
+            {!isNewUser && <div style={S.coinChip}>🪙 {coins}</div>}
             <button style={S.menuBtn} onClick={()=>setModal("menu")} aria-label="Open profile and settings">
               <div style={S.menuAvatar}>{initials}</div>
               <span style={S.menuBars}>≡</span>
@@ -1944,31 +1948,40 @@ export default function App() {
         </div>
 
         {/* ── Level / XP bar ── */}
-        <div style={S.xpWrap}>
-          <div style={S.xpTop}>
-            <span style={{fontWeight:800,fontSize:13,color:BRAND.primary}}>Lv {level} · {tier.name}</span>
-            <span style={{fontSize:11,color:BRAND.muted}}>{xpInfo.into}/{xpInfo.span} XP</span>
+        {!isNewUser && (
+          <div style={S.xpWrap}>
+            <div style={S.xpTop}>
+              <span style={{fontWeight:800,fontSize:13,color:BRAND.primary}}>Lv {level} · {tier.name}</span>
+              <span style={{fontSize:11,color:BRAND.muted}}>{xpInfo.into}/{xpInfo.span} XP</span>
+            </div>
+            <div style={S.xpTrack}><div style={{...S.xpFill,width:`${xpInfo.pct*100}%`}}/></div>
           </div>
-          <div style={S.xpTrack}><div style={{...S.xpFill,width:`${xpInfo.pct*100}%`}}/></div>
-        </div>
+        )}
 
         {/* ── Tabs ── */}
-        <div style={S.nav} className="sg-nav" aria-label="Main navigation">
-          {navItems.map(([id,lbl,icon])=>(
-            <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)} aria-current={tab===id?"page":undefined}>
-              <span className="lm-nav-icon" aria-hidden="true">{icon}</span>{lbl}
-            </button>
-          ))}
-        </div>
+        {!isNewUser && (
+          <div style={S.nav} className="sg-nav" aria-label="Main navigation">
+            {navItems.map(([id,lbl,icon])=>(
+              <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)} aria-current={tab===id?"page":undefined}>
+                <span className="lm-nav-icon" aria-hidden="true">{icon}</span>{lbl}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ════════ FOCUS TAB ════════ */}
         {tab==="focus" && (
           <div style={S.timerView} className="sg-view-anim sg-main" key="view-focus">
             <div className="lm-focus-layout">
               <section className="lm-focus-card" aria-label="Focus session setup">
-                <div className="lm-section-kicker">Focus studio</div>
-                <h1 className="lm-focus-heading">Make this session count.</h1>
-                <p className="lm-focus-copy">Choose what matters, set a clear intention, and let your Lumora grow while you work.</p>
+                <div className="lm-section-kicker">{running?"In focus":"Focus"}</div>
+                <h1 className="lm-focus-heading">
+                  {running ? (paused?"Take a breath.":"Stay with one thing.") : (isNewUser?"Begin with one quiet session.":"What will you focus on?")}
+                </h1>
+                <p className="lm-focus-copy">
+                  {running ? (paused?"Your progress is safe. Resume when you're ready.":"Lumora is growing quietly while you work.") :
+                    (isNewUser?"Choose a subject and a comfortable starting length. Your tiny light will grow with every focused minute.":"Simple defaults first. Open session options only when you need them.")}
+                </p>
 
                 {room && (
                   <div style={S.roomBanner}>
@@ -1983,81 +1996,109 @@ export default function App() {
                 )}
 
                 {!running && <>
-                  <span className="lm-field-label">Session mode</span>
-                  <div style={S.modeRow}>
-                    <button style={{...S.modeBtn,...(mode==="timer"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("timer")}>Timer</button>
-                    <button style={{...S.modeBtn,...(mode==="stopwatch"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("stopwatch")}>Stopwatch</button>
+                  <div className="lm-essential-block">
+                    <span className="lm-field-label" style={{marginTop:0}}>Subject</span>
+                    <div className="lm-choice-row">
+                      {subjects.map(s=>{
+                        const sel = subject===s.id;
+                        return (
+                          <button key={s.id} aria-pressed={sel}
+                            style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"14",color:s.color,fontWeight:750}:{})}}
+                            onClick={()=>setSubject(s.id)}>
+                            <span style={{...S.subjDot,background:s.color}}/>{s.emoji} {s.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div style={S.subjHeader}>
-                    <span className="lm-field-label" style={{margin:0}}>Subject</span>
-                    {subjects.length>1 && (
-                      <button style={{...S.subjEditBtn,...(editMode?S.subjEditBtnActive:{})}} onClick={()=>setEditMode(e=>!e)}>
-                        {editMode?"Done":"Edit"}
-                      </button>
-                    )}
-                  </div>
-                  <div style={S.subjScroll}>
-                    {subjects.map(s=>{
-                      const sel = subject===s.id;
-                      return (
-                        <button key={s.id} aria-pressed={sel}
-                          style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"14",color:s.color,fontWeight:750}:{})}}
-                          onClick={()=> editMode ? (subjects.length>1 && removeSubject(s.id)) : setSubject(s.id)}>
-                          <span style={{...S.subjDot,background:s.color}}/>{s.emoji} {s.label}
-                          {editMode && subjects.length>1 && <span style={S.subjRemoveInline}>Remove</span>}
-                        </button>
-                      );
-                    })}
-                    {!editMode && <button style={S.subjAddPill} onClick={()=>setModal("subject")}>＋ Subject</button>}
-                  </div>
-
-                  {classes.length>0 && (
-                    <div style={S.classPickRow}>
-                      <span style={S.classPickLabel}>Counts toward</span>
-                      <button style={{...S.classPickChip,...(studyClass===null?S.classPickChipActive:{})}} onClick={()=>setStudyClass(null)}>Just me</button>
-                      {classes.map(c=>(
-                        <button key={c.code} style={{...S.classPickChip,...(studyClass===c.code?S.classPickChipActive:{})}} onClick={()=>setStudyClass(c.code)}>{c.name}</button>
-                      ))}
+                  {mode==="timer" && (
+                    <div className="lm-essential-block">
+                      <span className="lm-field-label">Focus length</span>
+                      <div className="lm-choice-row">
+                        {[15,25,45].map(m=>(
+                          <button key={m} aria-pressed={duration===m*60}
+                            style={{...S.durBtn,...(duration===m*60?{...S.durBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}}
+                            onClick={()=>{setDuration(m*60);setElapsed(0);}}>{m} min</button>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  <label className="lm-field-label" htmlFor="focus-intention">One clear intention</label>
-                  <textarea id="focus-intention" className="lm-intention" maxLength={90} rows={2}
-                    value={intention} onChange={e=>setIntention(e.target.value)}
-                    placeholder={`What will you finish in ${subjectObj.label}?`}/>
+                  <details className="lm-session-options">
+                    <summary>Session options</summary>
+                    <div className="lm-session-options-body">
+                      <span className="lm-field-label">Session type</span>
+                      <div style={S.modeRow}>
+                        <button style={{...S.modeBtn,...(mode==="timer"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("timer")}>Countdown</button>
+                        <button style={{...S.modeBtn,...(mode==="stopwatch"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("stopwatch")}>Open-ended</button>
+                      </div>
 
-                  {mode==="timer" && <>
-                    <span className="lm-field-label">Duration</span>
-                    <div style={S.durationRow}>
-                      {[15,25,45,60,90].map(m=>(
-                        <button key={m} aria-pressed={duration===m*60}
-                          style={{...S.durBtn,...(duration===m*60?{...S.durBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}}
-                          onClick={()=>{setDuration(m*60);setElapsed(0);}}>{m}m</button>
-                      ))}
-                      <label className="lm-custom-duration" title="Custom session length">
-                        <input aria-label="Custom duration in minutes" type="number" min="1" max="240"
-                          value={Math.round(duration/60)} onChange={e=>setDuration(Math.max(1,Math.min(240,Number(e.target.value)||1))*60)}/>
-                        <span>min</span>
-                      </label>
+                      <label className="lm-field-label" htmlFor="focus-intention">Focus intention <span style={{textTransform:"none",letterSpacing:0,fontWeight:600}}>· optional</span></label>
+                      <textarea id="focus-intention" className="lm-intention" maxLength={90} rows={2}
+                        value={intention} onChange={e=>setIntention(e.target.value)}
+                        placeholder={`What would you like to finish in ${subjectObj.label}?`}/>
+
+                      {mode==="timer" && <>
+                        <span className="lm-field-label">Custom length</span>
+                        <label className="lm-custom-duration" title="Custom session length">
+                          <input aria-label="Custom duration in minutes" type="number" min="1" max="240"
+                            value={Math.round(duration/60)} onChange={e=>setDuration(Math.max(1,Math.min(240,Number(e.target.value)||1))*60)}/>
+                          <span>min</span>
+                        </label>
+                      </>}
+
+                      <div style={S.subjHeader}>
+                        <span className="lm-field-label">Manage subjects</span>
+                        {subjects.length>1 && <button style={{...S.subjEditBtn,...(editMode?S.subjEditBtnActive:{})}} onClick={()=>setEditMode(e=>!e)}>{editMode?"Done":"Remove"}</button>}
+                      </div>
+                      <div style={S.subjScroll}>
+                        {subjects.map(s=>{
+                          const sel=subject===s.id;
+                          return <button key={s.id} style={{...S.subjPill,...(sel?{borderColor:s.color,color:s.color}:{})}}
+                            onClick={()=>editMode?(subjects.length>1&&removeSubject(s.id)):setSubject(s.id)}>
+                            {s.emoji} {s.label}{editMode&&subjects.length>1?<span style={S.subjRemoveInline}>Remove</span>:null}
+                          </button>;
+                        })}
+                        {!editMode && <button style={S.subjAddPill} onClick={()=>setModal("subject")}>＋ Add subject</button>}
+                      </div>
+
+                      {classes.length>0 && (
+                        <>
+                          <span className="lm-field-label">Counts toward</span>
+                          <div style={S.classPickRow}>
+                            <button style={{...S.classPickChip,...(studyClass===null?S.classPickChipActive:{})}} onClick={()=>setStudyClass(null)}>Just me</button>
+                            {classes.map(c=><button key={c.code} style={{...S.classPickChip,...(studyClass===c.code?S.classPickChipActive:{})}} onClick={()=>setStudyClass(c.code)}>{c.name}</button>)}
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </>}
+                  </details>
+
+                  {isNewUser && (
+                    <div className="lm-first-session-note">
+                      <span aria-hidden="true">✦</span>
+                      <div><strong>Your first Lumora is a New Light.</strong>Complete one focused minute to begin its story and reveal the rest of the app.</div>
+                    </div>
+                  )}
                 </>}
 
                 {running && intention.trim() && (
                   <div className="lm-session-intent"><span>Now focusing on</span><strong>{intention.trim()}</strong></div>
                 )}
 
-                <div className="lm-daily-card">
+                {!isNewUser && !running && <div className="lm-daily-card">
                   <div className="lm-daily-ring" style={{"--lm-goal":`${dailyGoalPct*100}%`}}><span>{Math.round(dailyGoalPct*100)}%</span></div>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:800,color:BRAND.ink}}>Today's light</div>
                     <div style={{fontSize:11,color:BRAND.muted,marginTop:2}}>{fmtMins(todaySecs)} of {fmtMins(dailyGoalSecs)} focused</div>
                   </div>
-                </div>
+                </div>}
 
                 {!running ? (
-                  <button className="sg-plant-btn" style={{...S.plantBtn,background:`linear-gradient(135deg,${subjectObj.color},${BRAND.primary})`,marginTop:16}} onClick={startSession}>Begin focus session</button>
+                  <button className="lm-primary-action sg-plant-btn" style={{background:`linear-gradient(135deg,${subjectObj.color},${BRAND.primary})`}} onClick={startSession}>
+                    {mode==="timer"?`Begin ${Math.round(duration/60)} minute focus`:"Start open-ended focus"}
+                  </button>
                 ) : (
                   <div style={{display:"flex",gap:10,marginTop:16}}>
                     <button style={{...S.plantBtn,flex:1,background:paused?subjectObj.color:BRAND.surfaceRaised,color:paused?"#fff":BRAND.muted,border:`1.5px solid ${BRAND.border}`,boxShadow:"none"}} onClick={togglePause}>{paused?"Resume":"Pause"}</button>
@@ -2072,33 +2113,27 @@ export default function App() {
                   </div>
                 )}
 
-                {!running && (
-                  <div className="lm-quick-actions">
-                    <button style={S.quickBtn} onClick={()=>setModal("shop")}>Customize</button>
-                    <button style={S.quickBtn} onClick={()=>setModal("room")}>Co-op room</button>
-                    <button style={S.quickBtn} onClick={()=>setModal("badges")}>Achievements</button>
-                  </div>
-                )}
               </section>
 
               <section className="lm-stage-card" aria-label="Your Lumora world">
-                <div className="lm-section-kicker" style={{justifyContent:"center"}}>{paused?"World resting":running?"World in focus":"Your living world"}</div>
+                <div className="lm-section-kicker" style={{justifyContent:"center"}}>{paused?"Light resting":running?"Light in focus":"Your Lumora"}</div>
+                <div className="lm-growth-stage"><span className="lm-growth-dot"/><strong>{tier.name}</strong><span>· stage {tierPosition+1} of {EVO_TIERS.length}</span></div>
                 <div className="lm-world-frame">
                   <LivingWorld lifetimeHours={xp/60} streak={worldStreak} seedStr={user}
                     focusing={running&&!paused} weather={todaysWeather}/>
                   <div className="lm-world-avatar">
-                    <AvatarSVG large progress={running?sessionProgress:0.72} tier={tier.id}
+                    <AvatarSVG large progress={running?sessionProgress:(isNewUser ? 0.35 : 0.72)} tier={tier.id}
                       equipped={avatar} color={subjectObj.color} paused={paused} idle={!running} celebrate={celebrating}/>
                   </div>
                   <div className="lm-world-weather">
                     <span aria-hidden="true">{({clear:"☀️",cloudy:"☁️",rain:"🌧️",storm:"⛈️",snow:"❄️",fog:"🌫️"})[todaysWeather.id]}</span>
-                    {WEATHER_LABEL[todaysWeather.id]}
+                    {!isNewUser && WEATHER_LABEL[todaysWeather.id]}
                   </div>
                 </div>
                 <div className="lm-world-progress">
                   <div className="lm-world-progress-top">
-                    <strong>{(xp/60).toFixed(1)} hours of world growth</strong>
-                    <span>{currentWorld.maxed ? "World complete" : `Next: ${WORLD_STAGE_LABEL[currentWorld.next?.id]||"new landmark"}`}</span>
+                    <strong>{isNewUser?"A new light is waiting":`${(xp/60).toFixed(1)} hours of world growth`}</strong>
+                    <span>{isNewUser?"First session → meadow":(currentWorld.maxed ? "World complete" : `Next: ${WORLD_STAGE_LABEL[currentWorld.next?.id]||"new landmark"}`)}</span>
                   </div>
                   <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next world landmark`}>
                     <div className="lm-world-progress-fill" style={{width:`${(currentWorld.maxed?1:currentWorld.toNext)*100}%`}}/>
@@ -2109,7 +2144,7 @@ export default function App() {
                 </div>
                 <div style={S.timerLabel}>
                   {running ? (paused?"Paused — return when you're ready":(mode==="timer"?"Stay with it. Your light is growing.":"Stopwatch running — stay in flow.")) :
-                    `${subjectObj.emoji} ${subjectObj.label} · ${mode==="timer"?"ready when you are":"open-ended focus"}`}
+                    (isNewUser?"Your first focused minute begins the story.":`${subjectObj.emoji} ${subjectObj.label} · ${mode==="timer"?"ready when you are":"open-ended focus"}`)}
                 </div>
               </section>
             </div>
@@ -2223,6 +2258,9 @@ export default function App() {
               <AvatarSVG progress={0.9} tier={tier.id} equipped={avatar} color={subjectObj.color} idle/>
             </div>
             <div style={{textAlign:"center",fontSize:13,color:BRAND.muted,marginBottom:16}}>Level {level} · {tier.name}</div>
+            <button style={S.menuRow} onClick={()=>setModal("shop")}>✦ Customize Lumora</button>
+            <button style={S.menuRow} onClick={()=>setModal("badges")}>◇ Achievements</button>
+            <button style={S.menuRow} onClick={()=>setModal("room")}>◎ Co-op focus room</button>
             <button style={S.menuRow} onClick={()=>{setTheme(theme==="light"?"dark":"light");}}>
               {theme==="light"?"🌙 Dark mode":"☀️ Light mode"}
             </button>
