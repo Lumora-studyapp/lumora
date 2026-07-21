@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { db } from "./firebase.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion,
@@ -23,28 +23,27 @@ const BRAND = {
   name:     "Lumora",
   logo:     "✦",
   tagline:  "Focus, and let your light grow.",
-  // Core palette — aurora violet primary, warm amber accent
-  primary:  "#6C5CEF",   // main brand violet
-  primaryDk:"#5746C9",   // pressed / darker violet
-  primarySoft:"#EEEBFB", // tinted fills, active backgrounds
-  accent:   "#F5A623",   // warm amber glow (coins, highlights)
-  ink:      "#1E1B33",   // near-black indigo text
-  // Surfaces — cool light "dusk"
-  bg:       "#F5F4FC",   // app background
-  bgGrad:   "linear-gradient(165deg,#ECE9FB 0%,#F5F4FC 60%)",
-  surface:  "#FFFFFF",
-  border:   "#E7E4F4",   // soft borders
-  borderHi: "#D8D2EE",   // dashed / accent borders
-  track:    "#ECEAF8",   // progress-bar tracks
-  muted:    "#8B88A6",   // secondary text
-  mutedSoft:"#B4B1CC",   // faint text
-  // Coins keep a warm amber identity
-  coinText: "#B07A12",
-  coinBg:   "#FFF6E5",
-  coinBorder:"#F1D592",
-  // Status
-  live:     "#34C759",   // "focusing now" green dot
-  danger:   "#E0654F",   // give up / remove
+  // CSS variables keep inline styles theme-aware without colour-inverting the UI.
+  primary:  "var(--lm-primary)",
+  primaryDk:"var(--lm-primary-dark)",
+  primarySoft:"var(--lm-primary-soft)",
+  primaryShadow:"var(--lm-primary-shadow)",
+  accent:   "var(--lm-accent)",
+  ink:      "var(--lm-ink)",
+  bg:       "var(--lm-bg)",
+  bgGrad:   "var(--lm-bg-gradient)",
+  surface:  "var(--lm-surface)",
+  surfaceRaised:"var(--lm-surface-raised)",
+  border:   "var(--lm-border)",
+  borderHi: "var(--lm-border-strong)",
+  track:    "var(--lm-track)",
+  muted:    "var(--lm-muted)",
+  mutedSoft:"var(--lm-muted-soft)",
+  coinText: "var(--lm-coin-text)",
+  coinBg:   "var(--lm-coin-bg)",
+  coinBorder:"var(--lm-coin-border)",
+  live:     "var(--lm-live)",
+  danger:   "var(--lm-danger)",
 };
 
 // ── localStorage keys ─────────────────────────────────────────────────────────
@@ -64,6 +63,8 @@ const LS_BADGES   = "ascendu_badges";
 const LS_RECAP    = "ascendu_recap_shown";
 const LS_CLASSES  = "ascendu_classes";      // joined class codes
 const LS_ACTIVE   = "ascendu_active_session";
+const LS_DAILY_GOAL = "ascendu_daily_goal_minutes";
+const LS_INTENTION  = "ascendu_focus_intention";
 
 // ── XP / level system ──────────────────────────────────────────────────────────
 // 1 XP per minute focused. Levels use a gentle curve. Evolution tiers gate on level.
@@ -78,18 +79,15 @@ const xpToNext    = (xp) => {
 };
 
 // Evolution tiers — the avatar's silhouette changes as you climb.
-// 8-tier health & confidence arc. Each tier carries visual "evolution" attributes
-// the avatar reads: build (0→1 healthier/stronger, never bodybuilder), posture
-// (0→1 straighter/prouder), confidence (0→1 warmer expression + stance), glow.
 const EVO_TIERS = [
-  { id:"sprout",  name:"Beginner Student", minLvl:1,  desc:"Just getting started",    build:0.00, posture:0.30, confidence:0.25, glow:0.00 },
-  { id:"learner", name:"Healthy Student",  minLvl:3,  desc:"Finding your rhythm",      build:0.14, posture:0.45, confidence:0.40, glow:0.00 },
-  { id:"scholar", name:"Active Student",   minLvl:6,  desc:"Movement is a habit now",  build:0.28, posture:0.58, confidence:0.55, glow:0.05 },
-  { id:"adept",   name:"Gym Beginner",     minLvl:10, desc:"Building real strength",   build:0.44, posture:0.70, confidence:0.68, glow:0.10 },
-  { id:"sage",    name:"Athlete",          minLvl:16, desc:"Fit, focused, consistent", build:0.60, posture:0.82, confidence:0.80, glow:0.16 },
-  { id:"luminary",name:"Elite Athlete",    minLvl:24, desc:"Peak form in motion",      build:0.74, posture:0.90, confidence:0.90, glow:0.24 },
-  { id:"champion",name:"Champion",         minLvl:36, desc:"Others look up to you",     build:0.86, posture:0.96, confidence:0.96, glow:0.34 },
-  { id:"legend",  name:"Legend",           minLvl:50, desc:"A radiant, unstoppable you",build:1.00, posture:1.00, confidence:1.00, glow:0.48 },
+  { id:"sprout",  name:"Sprout Student", minLvl:1,  desc:"Just getting started" },
+  { id:"learner", name:"Learner",        minLvl:3,  desc:"Finding your rhythm" },
+  { id:"scholar", name:"Scholar",        minLvl:6,  desc:"Focus is a habit now" },
+  { id:"adept",   name:"Adept",          minLvl:10, desc:"Deep work comes easy" },
+  { id:"sage",    name:"Sage",           minLvl:16, desc:"Mastery in motion" },
+  { id:"luminary",name:"Luminary",       minLvl:24, desc:"A steady source of light" },
+  { id:"beacon",  name:"Beacon",         minLvl:36, desc:"Consistency that guides the way" },
+  { id:"astral",  name:"Astral Scholar", minLvl:50, desc:"A whole world shaped by focus" },
 ];
 const tierForLevel = (lvl) => [...EVO_TIERS].reverse().find(t => lvl >= t.minLvl) || EVO_TIERS[0];
 
@@ -207,30 +205,130 @@ const startOfMonth = d => new Date(d.getFullYear(), d.getMonth(), 1);
 const startOfYear  = d => new Date(d.getFullYear(), 0, 1);
 const genClassCode = () => { const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s=""; for(let i=0;i<6;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; };
 
-// ── App-level CSS (motion + dark theme) ───────────────────────────────────────────
+// ── App-level CSS (responsive shell, motion + real dark theme) ────────────────────
 const DARK_CSS = `
-[data-theme="dark"] .sg-shell { filter: invert(0.93) hue-rotate(180deg); background:#ECF1ED; transition:filter 0.25s ease; }
-[data-theme="dark"] .sg-shell .sg-keepcolor { filter: invert(1) hue-rotate(180deg); }
-[data-theme="dark"] .sg-shell img, [data-theme="dark"] .sg-shell svg { filter: invert(1) hue-rotate(180deg); }
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --lm-primary:#6D5DF6;
+  --lm-primary-dark:#5545D8;
+  --lm-primary-soft:#EFEDFF;
+  --lm-primary-shadow:rgba(109,93,246,.24);
+  --lm-accent:#F2A93B;
+  --lm-ink:#1C1933;
+  --lm-bg:#F4F3FA;
+  --lm-bg-gradient:linear-gradient(145deg,#F7F6FC 0%,#EFEDFA 52%,#F7F4F0 100%);
+  --lm-surface:rgba(255,255,255,.78);
+  --lm-surface-raised:#FFFFFF;
+  --lm-border:rgba(77,67,125,.12);
+  --lm-border-strong:rgba(109,93,246,.24);
+  --lm-track:#E9E6F5;
+  --lm-muted:#77738F;
+  --lm-muted-soft:#A7A3B9;
+  --lm-coin-text:#9A6610;
+  --lm-coin-bg:#FFF6DF;
+  --lm-coin-border:#EED18C;
+  --lm-live:#36B978;
+  --lm-danger:#D85E62;
+  --lm-shadow:0 18px 55px rgba(42,34,85,.10);
+  --lm-shadow-soft:0 8px 30px rgba(42,34,85,.07);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --lm-primary:#9C8CFF;
+  --lm-primary-dark:#8170F4;
+  --lm-primary-soft:rgba(136,116,255,.15);
+  --lm-primary-shadow:rgba(124,105,255,.30);
+  --lm-accent:#FFC66D;
+  --lm-ink:#F3F0FF;
+  --lm-bg:#11101A;
+  --lm-bg-gradient:linear-gradient(145deg,#12111C 0%,#181524 52%,#17151C 100%);
+  --lm-surface:rgba(30,27,45,.78);
+  --lm-surface-raised:#211E30;
+  --lm-border:rgba(219,211,255,.12);
+  --lm-border-strong:rgba(156,140,255,.30);
+  --lm-track:#302C43;
+  --lm-muted:#B3AEC7;
+  --lm-muted-soft:#79748E;
+  --lm-coin-text:#FFD489;
+  --lm-coin-bg:rgba(255,190,79,.11);
+  --lm-coin-border:rgba(255,204,113,.25);
+  --lm-live:#62D79B;
+  --lm-danger:#FF888E;
+  --lm-shadow:0 22px 65px rgba(0,0,0,.30);
+  --lm-shadow-soft:0 10px 34px rgba(0,0,0,.22);
+}
 `;
 const APP_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
-:root{
-  --pixel-font:'Press Start 2P', monospace;
-  --pixel-body:'VT323', monospace;
-}
-/* Retro chrome: chunky borders + hard offset shadows, no blur */
-.sg-shell .pixel-font{ font-family:var(--pixel-font); letter-spacing:0; }
-.sg-shell .pixel-body{ font-family:var(--pixel-body); }
-.sg-shell button{ image-rendering:pixelated; }
-.sg-pixel-btn{ font-family:var(--pixel-font) !important; border:3px solid ${'#2A2536'} !important; border-radius:4px !important;
-  box-shadow:3px 3px 0 ${'#2A2536'} !important; text-transform:uppercase; }
-.sg-pixel-btn:active{ transform:translate(2px,2px) !important; box-shadow:1px 1px 0 ${'#2A2536'} !important; }
-.sg-pixel-card{ border:3px solid ${'#2A2536'}; border-radius:6px; box-shadow:4px 4px 0 rgba(42,37,54,0.18); }
+html, body, #root { min-height:100%; margin:0; }
+body { background:var(--lm-bg); }
+* { box-sizing:border-box; }
 @keyframes sgpulse { 0%{box-shadow:0 0 0 0 rgba(52,199,89,0.5);} 70%{box-shadow:0 0 0 7px rgba(52,199,89,0);} 100%{box-shadow:0 0 0 0 rgba(52,199,89,0);} }
 .sg-shell ::-webkit-scrollbar { height:5px; width:5px; }
-.sg-shell ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:8px; }
-.sg-shell button { transition: transform 0.12s steps(2), filter 0.18s ease, box-shadow 0.12s steps(2); -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.sg-shell ::-webkit-scrollbar-thumb { background:var(--lm-border-strong); border-radius:8px; }
+.sg-shell { min-height:100vh; background:var(--lm-bg-gradient); color:var(--lm-ink); position:relative; isolation:isolate; overflow-x:hidden; }
+.sg-shell::before, .sg-shell::after { content:""; position:fixed; width:42vw; height:42vw; border-radius:50%; filter:blur(80px); opacity:.17; pointer-events:none; z-index:-1; }
+.sg-shell::before { background:#7E6BFF; top:-18vw; right:-12vw; }
+.sg-shell::after { background:#F5B85D; bottom:-24vw; left:-16vw; }
+.sg-app { width:min(1120px,100%); margin:0 auto; }
+.sg-header { backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
+.sg-nav { backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+.sg-main { width:100%; }
+.lm-focus-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,390px); gap:18px; align-items:stretch; }
+.lm-focus-card, .lm-stage-card { background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:28px; box-shadow:var(--lm-shadow-soft); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+.lm-focus-card { padding:24px; }
+.lm-stage-card { padding:18px 22px 22px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:530px; }
+.lm-stage-card::before { content:""; position:absolute; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle,var(--lm-primary-shadow),transparent 68%); top:26px; left:50%; transform:translateX(-50%); pointer-events:none; }
+.lm-section-kicker { display:flex; align-items:center; gap:8px; color:var(--lm-primary); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; margin-bottom:7px; }
+.lm-section-kicker::before { content:""; width:18px; height:2px; border-radius:2px; background:linear-gradient(90deg,var(--lm-primary),var(--lm-accent)); }
+.lm-focus-heading { margin:0 0 6px; font-size:clamp(25px,3vw,34px); line-height:1.08; letter-spacing:-.045em; color:var(--lm-ink); }
+.lm-focus-copy { margin:0 0 22px; color:var(--lm-muted); font-size:13px; line-height:1.55; }
+.lm-field-label { display:block; margin:14px 0 7px; color:var(--lm-muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.lm-intention { width:100%; min-height:48px; resize:none; color:var(--lm-ink); background:var(--lm-surface-raised); border:1px solid var(--lm-border); border-radius:14px; padding:13px 14px; font-family:inherit; font-size:13px; font-weight:600; line-height:1.45; outline:none; transition:border-color .2s, box-shadow .2s; }
+.lm-intention:focus { border-color:var(--lm-primary); box-shadow:0 0 0 4px var(--lm-primary-soft); }
+.lm-intention::placeholder { color:var(--lm-muted-soft); }
+.lm-custom-duration { height:36px; display:inline-flex; align-items:center; border:1.5px solid var(--lm-border); border-radius:20px; background:var(--lm-surface-raised); overflow:hidden; color:var(--lm-muted); font-size:11px; font-weight:750; }
+.lm-custom-duration:focus-within { border-color:var(--lm-primary); box-shadow:0 0 0 3px var(--lm-primary-soft); }
+.lm-custom-duration input { width:45px; height:100%; border:0; outline:0; background:transparent; color:var(--lm-ink); text-align:right; font-family:inherit; font-size:12px; font-weight:750; padding:0 3px 0 8px; appearance:textfield; }
+.lm-custom-duration input::-webkit-inner-spin-button { display:none; }
+.lm-custom-duration span { padding-right:9px; }
+.lm-session-intent { margin:14px 0 2px; padding:13px 14px; border-radius:15px; border:1px solid var(--lm-border-strong); background:var(--lm-primary-soft); display:flex; flex-direction:column; gap:4px; }
+.lm-session-intent span { color:var(--lm-muted); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+.lm-session-intent strong { color:var(--lm-ink); font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
+.lm-orb-stage { min-height:270px; display:flex; justify-content:center; align-items:flex-end; position:relative; z-index:1; }
+.lm-orb-stage::after { content:""; position:absolute; width:210px; height:34px; bottom:19px; border-radius:50%; background:radial-gradient(ellipse,rgba(38,30,83,.19),transparent 70%); filter:blur(7px); z-index:-1; }
+.lm-world-frame { position:relative; width:100%; height:270px; margin:10px 0 0; overflow:hidden; border:1px solid rgba(255,255,255,.24); border-radius:22px; background:var(--lm-surface-raised); box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 18px 42px rgba(34,27,77,.14); isolation:isolate; }
+.lm-world-frame::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 -44px 70px rgba(18,20,45,.12); pointer-events:none; z-index:3; }
+.lm-world-avatar { position:absolute; inset:0 0 -18px; z-index:2; display:flex; justify-content:center; align-items:flex-end; pointer-events:none; transform:scale(.77); transform-origin:center bottom; }
+.lm-world-weather { position:absolute; z-index:4; top:12px; left:12px; display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid rgba(255,255,255,.25); border-radius:999px; background:rgba(19,22,48,.45); color:#fff; box-shadow:0 5px 18px rgba(16,20,52,.15); backdrop-filter:blur(10px); font-size:10px; font-weight:800; letter-spacing:.02em; }
+.lm-world-progress { margin:12px 0 2px; padding:11px 12px; border:1px solid var(--lm-border); border-radius:15px; background:var(--lm-surface-raised); }
+.lm-world-progress-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.lm-world-progress-top strong { color:var(--lm-ink); font-size:11px; }
+.lm-world-progress-top span { color:var(--lm-muted); font-size:10px; text-transform:capitalize; }
+.lm-world-progress-track { height:6px; overflow:hidden; border-radius:999px; background:var(--lm-track); }
+.lm-world-progress-fill { height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--lm-primary),var(--lm-accent)); transition:width .6s cubic-bezier(.22,1,.36,1); }
+.lm-progress-halo { position:absolute; width:244px; height:244px; top:13px; border-radius:50%; background:conic-gradient(var(--lm-subject) calc(var(--lm-progress) * 1turn),var(--lm-track) 0); opacity:.72; -webkit-mask:radial-gradient(circle,transparent 67%,#000 68%); mask:radial-gradient(circle,transparent 67%,#000 68%); transform:rotate(-90deg); transition:background .5s ease; }
+.lm-spark { position:absolute; width:6px; height:6px; border-radius:50%; background:var(--lm-accent); box-shadow:0 0 14px var(--lm-accent); animation:lmFloat 4s ease-in-out infinite; }
+.lm-spark-a { left:18%; top:30%; }
+.lm-spark-b { right:17%; top:20%; animation-delay:-1.4s; width:4px; height:4px; }
+.lm-spark-c { right:25%; top:58%; animation-delay:-2.7s; }
+@keyframes lmFloat { 0%,100%{transform:translateY(0) scale(.85);opacity:.45;} 50%{transform:translateY(-14px) scale(1.15);opacity:1;} }
+@keyframes lmCelebrate { 0%,100%{transform:translateY(0) scale(1);} 24%{transform:translateY(-16px) scale(1.03);} 52%{transform:translateY(0) scale(.98);} 72%{transform:translateY(-7px) scale(1.01);} }
+.lm-avatar-svg.is-celebrating { animation:lmCelebrate 1.5s cubic-bezier(.22,1,.36,1); transform-box:fill-box; transform-origin:center bottom; }
+.lm-daily-card { display:flex; align-items:center; gap:12px; margin-top:16px; padding:12px 14px; border:1px solid var(--lm-border); border-radius:15px; background:var(--lm-surface-raised); }
+.lm-daily-ring { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; flex:none; background:conic-gradient(var(--lm-primary) var(--lm-goal),var(--lm-track) 0); position:relative; }
+.lm-daily-ring::after { content:""; width:32px; height:32px; border-radius:50%; background:var(--lm-surface-raised); position:absolute; }
+.lm-daily-ring span { position:relative; z-index:1; font-size:10px; font-weight:900; color:var(--lm-primary); }
+.lm-quick-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:18px; }
+.lm-nav-icon { display:block; font-size:16px; line-height:1; margin-bottom:4px; }
+.lm-modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.lm-modal-close { width:34px; height:34px; border:1px solid var(--lm-border); border-radius:50%; background:var(--lm-bg); color:var(--lm-muted); font-size:20px; line-height:1; cursor:pointer; flex:none; }
+.lm-login-brand { margin-bottom:24px; }
+.lm-login-logo { width:64px; height:64px; margin:0 auto 14px; border-radius:21px; display:grid; place-items:center; color:white; font-size:30px; background:linear-gradient(145deg,var(--lm-primary),#9C73FF); box-shadow:0 14px 36px var(--lm-primary-shadow); }
+.lm-login-features { display:flex; justify-content:center; flex-wrap:wrap; gap:7px; margin:18px 0 2px; }
+.lm-login-feature { padding:6px 10px; border-radius:999px; color:var(--lm-muted); background:var(--lm-bg); border:1px solid var(--lm-border); font-size:10px; font-weight:750; }
+.sg-shell button:focus-visible, .sg-shell input:focus-visible, .sg-shell textarea:focus-visible { outline:3px solid var(--lm-primary-soft); outline-offset:2px; }
+.sg-shell button:disabled { opacity:.48; cursor:not-allowed; }
+.sg-shell button { transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), filter 0.18s ease, box-shadow 0.2s ease; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
 .sg-shell button:active { transform: scale(0.94); filter: brightness(0.97); }
 .sg-plant-btn:active { transform: scale(0.97) translateY(1px); }
 @keyframes sgFadeIn  { from{opacity:0;} to{opacity:1;} }
@@ -243,8 +341,37 @@ const APP_CSS = `
 .sg-card-anim    { animation: sgGrowIn 0.3s cubic-bezier(0.22,1,0.36,1) both; }
 .sg-tap-card { transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease; }
 .sg-tap-card:active { transform: scale(0.97); }
+@media (hover:hover) {
+  .sg-shell button:hover:not(:disabled) { filter:brightness(1.025); }
+  .sg-tap-card:hover { transform:translateY(-2px); box-shadow:var(--lm-shadow-soft); }
+}
+@media (min-width:760px) {
+  .sg-app { padding:18px 24px 46px; }
+  .sg-header { position:sticky; top:14px; z-index:80; border:1px solid var(--lm-border); border-radius:22px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); margin-bottom:14px; }
+  .sg-nav { position:sticky; top:88px; z-index:70; width:max-content; margin:0 auto 20px; padding:5px !important; border:1px solid var(--lm-border) !important; border-radius:16px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); }
+  .sg-nav button { min-width:112px; }
+  .lm-nav-icon { display:inline; margin:0 7px 0 0; }
+  .sg-board-view { width:min(760px,100%); margin:0 auto; }
+}
+@media (max-width:759px) {
+  .sg-app { padding-bottom:94px !important; }
+  .sg-header { background:linear-gradient(180deg,var(--lm-bg) 58%,transparent); }
+  .sg-nav { position:fixed !important; left:12px; right:12px; bottom:10px; z-index:250; padding:6px !important; border:1px solid var(--lm-border) !important; border-radius:21px; background:var(--lm-surface) !important; box-shadow:0 16px 50px rgba(24,20,48,.22); }
+  .sg-nav button { padding:8px 0 !important; }
+  .lm-focus-layout { grid-template-columns:1fr; gap:14px; }
+  .lm-stage-card { min-height:480px; order:-1; }
+  .lm-focus-card { padding:19px 16px; }
+  .lm-quick-actions { gap:7px; }
+}
+@media (max-width:390px) {
+  .lm-stage-card { min-height:450px; padding-inline:14px; }
+  .lm-orb-stage { min-height:245px; transform:scale(.92); margin:-8px 0; }
+  .lm-world-frame { height:238px; }
+  .lm-world-avatar { transform:scale(.68); }
+  .lm-quick-actions { grid-template-columns:1fr; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sg-shell *, .sg-overlay-anim, .sg-pop-anim, .sg-view-anim, .sg-card-anim { animation:none !important; transition:none !important; }
+  .sg-shell *, .sg-shell::before, .sg-shell::after, .sg-overlay-anim, .sg-pop-anim, .sg-view-anim, .sg-card-anim { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 `;
 
@@ -426,7 +553,7 @@ import { auth } from "./firebase.js";
 import { functions } from "./firebase.js";
 import { httpsCallable } from "firebase/functions";
 
-const normUser = (u) => u.trim().toLowerCase();
+const normUser = (u) => (u||"").trim().normalize("NFC").toLowerCase();
 
 // Sign up: reserve username, create auth account, link them.
 async function authSignUp(username, email, password) {
@@ -576,6 +703,11 @@ function weatherFor(date=new Date(), seedStr="lumora") {
 }
 
 const WEATHER_LABEL = { clear:"Clear", cloudy:"Cloudy", rain:"Rain", storm:"Thunderstorm", snow:"Snow", fog:"Fog" };
+const WORLD_STAGE_LABEL = {
+  barren:"First light", sprout:"Meadow", firsttree:"First tree", grove:"Grove",
+  river:"River", forest:"Forest", falls:"Waterfall", hills:"Hills",
+  village:"Village", island:"Sky island", ruins:"Ancient ruins", celestial:"Celestial garden",
+};
 
 const WORLD_CSS = `
 @keyframes lwClouds  { from{transform:translateX(-30px);} to{transform:translateX(330px);} }
@@ -661,7 +793,7 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
   const stars = Array.from({length: showStars?starCount:0}, ()=>({ x:rnd()*W, y:rnd()*H*0.5, r:0.6+rnd()*1.4, d:rnd()*3.5 }));
   const fireCount = (!overcast && (tod.id==="night"||tod.id==="midnight"||tod.id==="sunset")) ? Math.min(3+Math.floor(streak/7),9) : 0;
   const fireflies = Array.from({length:fireCount}, ()=>({ x:40+rnd()*(W-80), y:120+rnd()*60, d:rnd()*6 }));
-  const leafCount = (has("tree1") && wx.id!=="snow") ? (has("forest")?6:3) : 0;
+  const leafCount = (has("tree1") && wx.id!=="snow") ? (has("tree4")?6:3) : 0;
   const leaves = Array.from({length:leafCount}, ()=>({ x:40+rnd()*(W-80), d:rnd()*9, dur:7+rnd()*5 }));
   // Floating particles — ambient dust/pollen by day, soft motes of light by night.
   const particleCount = overcast ? 6 : 14;
@@ -685,11 +817,13 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
   const glowHi = (glowBase*1.15).toFixed(2);
   const skyDim = wx.id==="storm"?0.42 : heavyDim?0.28 : wx.id==="cloudy"?0.16 : wx.id==="fog"?0.18 : 0;
   const tree = (x,by,scale,anim,hue) => (
-    <g className={anim?"lw-tree lw-reveal":"lw-reveal"} style={{transform:`translate(${x}px,${by}px) scale(${scale})`}}>
-      <rect x={-3} y={-2} width={6} height={18} rx={2} fill="#7A5A3C"/>
-      <circle cx={0}  cy={-12} r={15} fill={hue||"#5FAE72"}/>
-      <circle cx={-10} cy={-6} r={11} fill={hue||"#5FAE72"} opacity={0.92}/>
-      <circle cx={10} cy={-6} r={11} fill={hue||"#6FBE82"} opacity={0.92}/>
+    <g transform={`translate(${x} ${by}) scale(${scale})`}>
+      <g className={`${anim?"lw-tree ":""}lw-reveal`}>
+        <rect x={-3} y={-2} width={6} height={18} rx={2} fill="#7A5A3C"/>
+        <circle cx={0}  cy={-12} r={15} fill={hue||"#5FAE72"}/>
+        <circle cx={-10} cy={-6} r={11} fill={hue||"#5FAE72"} opacity={0.92}/>
+        <circle cx={10} cy={-6} r={11} fill={hue||"#6FBE82"} opacity={0.92}/>
+      </g>
     </g>
   );
   return (
@@ -735,10 +869,12 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
         <g className="lw-cloud2" opacity="0.6"><ellipse cx="160" cy="30" rx="22" ry="9" fill="#FFFFFF"/><ellipse cx="178" cy="27" rx="14" ry="7" fill="#FFFFFF"/></g>
         <g className="lw-cloud3" opacity="0.5"><ellipse cx="240" cy="58" rx="20" ry="8" fill="#FFFFFF"/><ellipse cx="256" cy="55" rx="13" ry="6" fill="#FFFFFF"/></g>
         {has("floatingIsland") && (
-          <g className="lw-float lw-reveal" style={{transform:"translate(70px,78px)"}}>
-            <ellipse cx="0" cy="0" rx="26" ry="8" fill="#6B8E5A"/>
-            <path d="M-26,0 L-14,18 L14,18 L26,0 Z" fill="#5A4632"/>
-            {tree(0,-2,0.7,true,"#7CCF8C")}
+          <g transform="translate(70 78)">
+            <g className="lw-float lw-reveal">
+              <ellipse cx="0" cy="0" rx="26" ry="8" fill="#6B8E5A"/>
+              <path d="M-26,0 L-14,18 L14,18 L26,0 Z" fill="#5A4632"/>
+              {tree(0,-2,0.7,true,"#7CCF8C")}
+            </g>
           </g>
         )}
         {(tod.id==="dawn"||tod.id==="day") && (
@@ -746,11 +882,15 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
             <g className="lw-bird" opacity="0.7" style={{animationDelay:"0s"}}>
               <path d="M0,60 q5,-5 10,0 q5,-5 10,0" stroke="#3A3A55" strokeWidth="2" fill="none"/>
             </g>
-            <g className="lw-bird" opacity="0.5" style={{animationDelay:"6s",transform:"translateY(-14px) scale(0.8)"}}>
-              <path d="M0,60 q5,-5 10,0 q5,-5 10,0" stroke="#3A3A55" strokeWidth="2" fill="none"/>
+            <g transform="translate(0 -14) scale(.8)">
+              <g className="lw-bird" opacity="0.5" style={{animationDelay:"6s"}}>
+                <path d="M0,60 q5,-5 10,0 q5,-5 10,0" stroke="#3A3A55" strokeWidth="2" fill="none"/>
+              </g>
             </g>
-            <g className="lw-bird" opacity="0.55" style={{animationDelay:"11s",transform:"translateY(8px) scale(0.7)"}}>
-              <path d="M0,60 q5,-5 10,0 q5,-5 10,0" stroke="#3A3A55" strokeWidth="2" fill="none"/>
+            <g transform="translate(0 8) scale(.7)">
+              <g className="lw-bird" opacity="0.55" style={{animationDelay:"11s"}}>
+                <path d="M0,60 q5,-5 10,0 q5,-5 10,0" stroke="#3A3A55" strokeWidth="2" fill="none"/>
+              </g>
             </g>
           </>
         )}
@@ -782,30 +922,38 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
         {has("tree5") && tree(20,154,0.6,true,"#7CCF8C")}
         {has("bush")  && <ellipse cx={190} cy={156} rx={14} ry={9} fill="#5FAE72" className="lw-reveal"/>}
         {has("house1") && (
-          <g className="lw-reveal" style={{transform:"translate(280px,128px)"}}>
-            <rect x="0" y="6" width="22" height="18" fill="#C98A5E"/>
-            <path d="M-2,6 L11,-4 L24,6 Z" fill="#8A4B36"/>
-            <rect x="8" y="14" width="6" height="10" fill="#5A3A28"/>
-            {(tod.stars>0.3) && <rect x="3" y="10" width="5" height="5" fill="#FFD86B"/>}
+          <g transform="translate(280 128)">
+            <g className="lw-reveal">
+              <rect x="0" y="6" width="22" height="18" fill="#C98A5E"/>
+              <path d="M-2,6 L11,-4 L24,6 Z" fill="#8A4B36"/>
+              <rect x="8" y="14" width="6" height="10" fill="#5A3A28"/>
+              {(tod.stars>0.3) && <rect x="3" y="10" width="5" height="5" fill="#FFD86B"/>}
+            </g>
           </g>
         )}
         {has("house2") && (
-          <g className="lw-reveal" style={{transform:"translate(315px,134px)"}}>
-            <rect x="0" y="4" width="16" height="14" fill="#B8C4D0"/>
-            <path d="M-2,4 L8,-3 L18,4 Z" fill="#6B7785"/>
-            {(tod.stars>0.3) && <rect x="3" y="8" width="4" height="4" fill="#FFD86B"/>}
+          <g transform="translate(315 134)">
+            <g className="lw-reveal">
+              <rect x="0" y="4" width="16" height="14" fill="#B8C4D0"/>
+              <path d="M-2,4 L8,-3 L18,4 Z" fill="#6B7785"/>
+              {(tod.stars>0.3) && <rect x="3" y="8" width="4" height="4" fill="#FFD86B"/>}
+            </g>
           </g>
         )}
         {has("ruins") && (
-          <g className="lw-reveal" opacity="0.9" style={{transform:"translate(135px,132px)"}}>
-            <rect x="0" y="0" width="5" height="20" fill="#C9C2B0"/>
-            <rect x="16" y="0" width="5" height="20" fill="#C9C2B0"/>
-            <rect x="-3" y="-4" width="27" height="5" rx="2" fill="#D8D2C2"/>
+          <g transform="translate(135 132)" opacity="0.9">
+            <g className="lw-reveal">
+              <rect x="0" y="0" width="5" height="20" fill="#C9C2B0"/>
+              <rect x="16" y="0" width="5" height="20" fill="#C9C2B0"/>
+              <rect x="-3" y="-4" width="27" height="5" rx="2" fill="#D8D2C2"/>
+            </g>
           </g>
         )}
         {leaves.map((l,i)=>(
-          <path key={i} className="lw-leaf" d="M0,0 q4,-3 8,0 q-4,3 -8,0 Z" fill="#E0A85C"
-                style={{transform:`translateX(${l.x}px)`,animationDelay:`${l.d}s`,animationDuration:`${l.dur}s`,transformBox:"fill-box"}}/>
+          <g key={i} transform={`translate(${l.x} 0)`}>
+            <path className="lw-leaf" d="M0,0 q4,-3 8,0 q-4,3 -8,0 Z" fill="#E0A85C"
+                  style={{animationDelay:`${l.d}s`,animationDuration:`${l.dur}s`,transformBox:"fill-box"}}/>
+          </g>
         ))}
         {fireflies.map((f,i)=>(
           <circle key={i} className="lw-fire" cx={f.x} cy={f.y} r="2" fill="#FFE89A" style={{animationDelay:`${f.d}s`}}/>
@@ -853,179 +1001,214 @@ function LivingWorld({ lifetimeHours=0, streak=0, seedStr="lumora", focusing=fal
         {/* Faint warm vignette near the horizon for depth (shimmers slowly) */}
         <rect className="lw-shimmer" x="0" y={H-60} width={W} height="60" fill={tod.sun} opacity="0.12"
               style={{mixBlendMode:"soft-light"}}/>
-        {/* Retro pixel-screen overlay — faint grid + scanlines (reads as an 8-bit display) */}
-        <defs>
-          <pattern id="lwPixGrid" width="4" height="4" patternUnits="userSpaceOnUse">
-            <rect width="4" height="4" fill="none"/>
-            <rect width="4" height="1" fill="#000000" opacity="0.05"/>
-            <rect width="1" height="4" fill="#000000" opacity="0.04"/>
-          </pattern>
-        </defs>
-        <rect x="0" y="0" width={W} height={H} fill="url(#lwPixGrid)" style={{pointerEvents:"none"}}/>
       </svg>
     </div>
   );
 }
-
-// ════════════════════════════════════════════════════════════════════════════════
-// PIXEL AVATAR (8-bit)  —  original sprite, drawn on a grid of square cells.
-// Keeps the 8-tier evolution: higher tiers = taller stance, broader shoulders,
-// brighter outfit, and a glow — expressed in blocky pixels, never a bodybuilder.
-// ════════════════════════════════════════════════════════════════════════════════
 function AvatarSVG({ progress=0.5, tier="sprout", equipped={}, color="#5B8DEF", paused=false, large=false, idle=false, celebrate=false }) {
+  const uid = useId().replace(/:/g, "");
   const size = large ? 240 : 160;
-  const GRID = 24;                 // logical sprite is 24×24 cells
-  const view = GRID;               // viewBox units == cells (1 unit per cell)
-  const tierObj = EVO_TIERS.find(t=>t.id===tier) || EVO_TIERS[0];
-  const tierIdx = Math.max(0, EVO_TIERS.findIndex(t=>t.id===tier));
-  const evo = { build:tierObj.build||0, posture:tierObj.posture||0, confidence:tierObj.confidence||0, glow:tierObj.glow||0 };
-  const opacity = paused ? 0.5 : 1;
+  const W = large ? 240 : 160, H = large ? 260 : 190;
+  const cx = W/2;
+  const groundY = H - (large?30:22);
+  // Growth: avatar scales from 0.45→1.0 over the session; idle shows full size.
+  const g = idle ? 1 : (0.45 + progress*0.55);
+  const bodyH = (large?92:64) * g;
+  const headR = (large?30:21) * g;
+  const headCy = groundY - bodyH - headR*0.7;
+  const skin = "#F0C9A0", skinShade = "#E0B088";
+  const tierIdx = EVO_TIERS.findIndex(t=>t.id===tier);
+  // Robe color deepens with tier
+  const robeColors = ["#9DB4C0","#7FA8C9","#6A95C7","#5B8DEF","#7B6FE0","#9B6FE0"];
+  const robe = robeColors[Math.min(tierIdx, robeColors.length-1)];
+  const opacity = paused ? 0.55 : 1;
 
   const hat = cosmeticById(equipped.hat);
   const aura = cosmeticById(equipped.aura);
   const pet = cosmeticById(equipped.pet);
 
-  // ── palette (evolves) ──
-  const SKIN="#F0C9A0", SKIN_SH="#D9A97E", HAIR=["#8A5A2B","#7A4A24","#6B3F1E","#5A3418","#8A6A3A","#A07A3A","#B08A3A","#C9A24E"][Math.min(tierIdx,7)];
-  const OUT=["#8FA9B8","#6E9BC4","#5B8DEF","#4E7FE0","#6E63D8","#8A5FD8","#B14FD0","#D24FC0"][Math.min(tierIdx,7)]; // shirt
-  const OUT_SH=["#6E8797","#587FA3","#4A72C0","#3F66B8","#584FB0","#6E4CB0","#8E3EA8","#A83E98"][Math.min(tierIdx,7)];
-  const PANTS="#4A4A5A", PANTS_SH="#3A3A47", OUTLINE="#2A2536";
+  const baseProps = {
+    viewBox:`0 0 ${W} ${H}`, width:size, height:large?260:190,
+    className:`lm-avatar-svg${celebrate?" is-celebrating":""}`, role:"img", "aria-label":`${tier} focus avatar`,
+    style:{ overflow:"visible", filter:paused?"grayscale(45%)":"drop-shadow(0 16px 20px rgba(48,38,96,.16))", transition:"filter 0.4s" }
+  };
+  const robeGradient = `${uid}-robe`;
+  const skinGradient = `${uid}-skin`;
+  const softGlow = `${uid}-glow`;
 
-  // Pixel helper — one square cell at (x,y).
-  const px=(x,y,fill,key)=> <rect key={key} x={x} y={y} width={1.02} height={1.02} fill={fill}/>;
-  // Draw a filled rect region in cells.
-  const box=(x,y,w,h,fill,key)=> <rect key={key} x={x} y={y} width={w+0.02} height={h+0.02} fill={fill}/>;
+  // ── Aura (behind body) ──
+  let auraEl = null;
+  if (aura && aura.draw === "glow" && !paused) {
+    auraEl = <circle cx={cx} cy={groundY-bodyH*0.55} r={bodyH*0.9+headR} fill={aura.color} opacity={0.16}/>;
+  } else if (aura && aura.draw === "galaxy" && !paused) {
+    auraEl = (
+      <g opacity={0.9}>
+        <circle cx={cx} cy={groundY-bodyH*0.55} r={bodyH*0.95+headR} fill={aura.color} opacity={0.14}/>
+        {[...Array(6)].map((_,i)=>{
+          const a=(i/6)*Math.PI*2 + progress*4;
+          const rr=bodyH*0.8+headR;
+          return <circle key={i} cx={cx+Math.cos(a)*rr} cy={groundY-bodyH*0.55+Math.sin(a)*rr*0.7} r={2.5} fill="#fff" opacity={0.8}/>;
+        })}
+      </g>
+    );
+  }
 
-  // Posture raises the whole sprite slightly; build widens shoulders/arms.
-  const lift = Math.round(evo.posture*2);           // 0..2 cells up
-  const armOut = evo.build>0.5 ? 1 : 0;             // broader at high tiers
-  const shoulderW = 8 + Math.round(evo.build*2);    // 8..10 cells
+  // ── Body silhouette varies by tier ──
+  // Sprout: small rounded robe. Higher tiers: taller, with shoulder structure.
+  const bodyTopW = (large?34:24) * (0.8 + tierIdx*0.04) * g;
+  const bodyBotW = (large?52:36) * (0.85 + tierIdx*0.05) * g;
+  const bodyTopY = headCy + headR*0.8;
+  const body = (
+    <path d={`M${cx-bodyTopW} ${bodyTopY}
+              Q${cx-bodyTopW*1.1} ${groundY-bodyH*0.4} ${cx-bodyBotW} ${groundY}
+              L${cx+bodyBotW} ${groundY}
+              Q${cx+bodyTopW*1.1} ${groundY-bodyH*0.4} ${cx+bodyTopW} ${bodyTopY} Z`}
+          fill={`url(#${robeGradient})`} stroke="rgba(255,255,255,.38)" strokeWidth={large?1.4:1} opacity={opacity}/>
+  );
+  // Collar / trim that appears from "scholar" up
+  const collar = tierIdx>=2 && (
+    <path d={`M${cx-bodyTopW} ${bodyTopY} L${cx} ${bodyTopY+headR*0.5} L${cx+bodyTopW} ${bodyTopY} Z`}
+          fill="#fff" opacity={opacity*0.85}/>
+  );
 
-  // Vertical layout (in cells), shifted up by `lift`
-  const topY = 2 - lift;                            // hair top
-  const cells = [];
-  let k=0;
-  const C=(x,y,f)=>cells.push(px(x,y,f,k++));
-  const R=(x,y,w,h,f)=>cells.push(box(x,y,w,h,f,k++));
-
-  // ── HAIR (rows topY..topY+2) ──
-  R(8, topY,   8,1, HAIR);
-  R(7, topY+1, 10,1, HAIR);
-  R(7, topY+2, 10,1, HAIR);
-  // ── HEAD (skin) rows topY+2..topY+5 ──
-  R(8, topY+3, 8,3, SKIN);
-  R(8, topY+5, 8,1, SKIN_SH);         // jaw shade
-  // ears
-  C(7, topY+4, SKIN); C(16, topY+4, SKIN);
-  // eyes (blink group handled by wrapping <g>)
-  const eyeY=topY+4;
-  const eyes = (
-    <g className={idle && !celebrate ? "av-eyes" : ""} style={{transformOrigin:"center"}}>
-      <rect x={10} y={eyeY} width={1.5} height={1.5} fill={OUTLINE}/>
-      <rect x={13} y={eyeY} width={1.5} height={1.5} fill={OUTLINE}/>
+  // ── Head ──
+  const head = (
+    <g opacity={opacity}>
+      <circle cx={cx} cy={headCy} r={headR} fill={`url(#${skinGradient})`} stroke="rgba(255,255,255,.48)" strokeWidth={large?1.4:1}/>
+      <path d={`M${cx-headR} ${headCy} A${headR} ${headR} 0 0 1 ${cx+headR} ${headCy}`} fill={skinShade} opacity={0.25}/>
+      {/* hair — fuller with tier */}
+      <path d={`M${cx-headR*1.02} ${headCy-headR*0.1}
+                Q${cx} ${headCy-headR*1.5} ${cx+headR*1.02} ${headCy-headR*0.1}
+                Q${cx+headR*0.6} ${headCy-headR*0.6} ${cx} ${headCy-headR*0.55}
+                Q${cx-headR*0.6} ${headCy-headR*0.6} ${cx-headR*1.02} ${headCy-headR*0.1} Z`}
+            fill={["#3A2E25","#4A3B2E","#2E2620","#5A4A3A","#6B5B4A","#7A6A5A"][Math.min(tierIdx,5)]}/>
+      {/* face — eyes + small smile, calm when focusing */}
+      {!paused && <>
+        <circle cx={cx-headR*0.35} cy={headCy+headR*0.05} r={headR*0.09} fill="#3A3A3A"/>
+        <circle cx={cx+headR*0.35} cy={headCy+headR*0.05} r={headR*0.09} fill="#3A3A3A"/>
+        <path d={`M${cx-headR*0.3} ${headCy+headR*0.45} Q${cx} ${headCy+headR*0.65} ${cx+headR*0.3} ${headCy+headR*0.45}`}
+              stroke="#B07050" strokeWidth={large?2:1.5} fill="none" strokeLinecap="round"/>
+      </>}
+      {paused && <>
+        {/* closed/resting eyes */}
+        <line x1={cx-headR*0.5} y1={headCy} x2={cx-headR*0.2} y2={headCy} stroke="#3A3A3A" strokeWidth={1.5} strokeLinecap="round"/>
+        <line x1={cx+headR*0.2} y1={headCy} x2={cx+headR*0.5} y2={headCy} stroke="#3A3A3A" strokeWidth={1.5} strokeLinecap="round"/>
+      </>}
     </g>
   );
-  // mouth — smile widens with confidence
-  const mw = evo.confidence>0.6 ? 4 : (evo.confidence>0.3?3:2);
-  const mx = 12 - Math.floor(mw/2);
-  const mouth = <rect x={mx} y={topY+5.2} width={mw} height={0.9} fill="#B0603E"/>;
-  // rosy cheeks at high confidence
-  const cheeks = evo.confidence>0.75 ? (<g>
-    <rect x={9} y={topY+4.7} width={1.2} height={1} fill="#F2A79A" opacity={0.5}/>
-    <rect x={14.8} y={topY+4.7} width={1.2} height={1} fill="#F2A79A" opacity={0.5}/>
-  </g>) : null;
 
-  // ── TORSO (shirt) rows topY+6..topY+10 ──
-  const shX = 12 - shoulderW/2;
-  const torsoY = topY+6;
-  R(shX, torsoY, shoulderW, 1, OUT);           // shoulders (wider at higher build)
-  R(9, torsoY+1, 6, 4, OUT);                   // chest
-  R(9, torsoY+1, 1, 4, OUT_SH);               // left shade
-  R(14, torsoY+1, 1, 4, OUT_SH);              // right shade
-  // collar hint (mid tiers up)
-  if (tierIdx>=2) R(11, torsoY+1, 2, 1, "#FFFFFF");
-
-  // ── ARMS ── (raised, friendly — nods to the reference pose without copying it)
-  const armY = torsoY;
-  // left arm up
-  R(shX-1-armOut, armY-1, 1, 2, SKIN);
-  R(shX-1-armOut, armY-2, 2, 1, SKIN);
-  // right arm up
-  R(shX+shoulderW+armOut, armY-1, 1, 2, SKIN);
-  R(shX+shoulderW-1+armOut, armY-2, 2, 1, SKIN);
-
-  // ── LEGS (pants) rows torsoY+5..end ──
-  const legY = torsoY+5;
-  R(9, legY, 2, 3, PANTS);
-  R(13, legY, 2, 3, PANTS);
-  R(9, legY, 1, 3, PANTS_SH);
-  R(13, legY, 1, 3, PANTS_SH);
-  // shoes
-  R(9, legY+3, 2, 1, OUTLINE);
-  R(13, legY+3, 2, 1, OUTLINE);
-
-  const groundY = legY+4;
-
-  // ── evolution glow (behind) ──
-  const evoGlow = evo.glow>0 && !paused ? (
-    <rect className="av-glow" x={4} y={topY+1} width={16} height={groundY-topY} rx={2}
-          fill={color} style={{"--av-glow-lo":(evo.glow*0.4).toFixed(2),"--av-glow-hi":(evo.glow*0.85).toFixed(2)}}/>
-  ) : null;
-
-  // ── hat (pixel) ──
-  let hatEl=null;
-  if (hat && hat.draw!=="none"){
-    if (hat.draw==="cap")   hatEl = <g>{[...Array(8)].map((_,i)=><rect key={i} x={8+i} y={topY-0.5} width={1.02} height={1.4} fill={hat.color}/>)}<rect x={15} y={topY+0.6} width={2} height={1} fill={hat.color}/></g>;
-    else if (hat.draw==="beanie") hatEl = <g><rect x={7} y={topY-0.5} width={10} height={2} fill={hat.color}/><rect x={11} y={topY-1.5} width={2} height={1} fill="#fff"/></g>;
-    else if (hat.draw==="grad") hatEl = <g><rect x={6} y={topY} width={12} height={1.4} fill={hat.color}/><rect x={9} y={topY-1} width={6} height={1.4} fill={hat.color}/></g>;
-    else if (hat.draw==="crown") hatEl = <g>{[9,11.5,14].map((xx,i)=><rect key={i} x={xx} y={topY-1.4} width={1.4} height={1.6} fill={hat.color}/>)}<rect x={8.5} y={topY} width={7} height={1.2} fill={hat.color}/></g>;
-    else if (hat.draw==="halo") hatEl = <rect x={9} y={topY-2} width={6} height={1} fill={hat.color} opacity={paused?0.4:0.95}/>;
+  // ── Hat ──
+  let hatEl = null;
+  if (hat && hat.draw !== "none") {
+    const hy = headCy - headR*0.85;
+    if (hat.draw === "cap") hatEl = (
+      <g opacity={opacity}>
+        <path d={`M${cx-headR*0.95} ${hy+headR*0.35} Q${cx} ${hy-headR*0.5} ${cx+headR*0.95} ${hy+headR*0.35} Z`} fill={hat.color}/>
+        <ellipse cx={cx+headR*0.7} cy={hy+headR*0.4} rx={headR*0.55} ry={headR*0.14} fill={hat.color}/>
+      </g>
+    );
+    else if (hat.draw === "beanie") hatEl = (
+      <g opacity={opacity}>
+        <path d={`M${cx-headR} ${hy+headR*0.5} Q${cx} ${hy-headR*0.65} ${cx+headR} ${hy+headR*0.5} Z`} fill={hat.color}/>
+        <rect x={cx-headR} y={hy+headR*0.4} width={headR*2} height={headR*0.28} rx={headR*0.14} fill={hat.color} opacity={0.8}/>
+        <circle cx={cx} cy={hy-headR*0.45} r={headR*0.18} fill="#fff"/>
+      </g>
+    );
+    else if (hat.draw === "grad") hatEl = (
+      <g opacity={opacity}>
+        <rect x={cx-headR*0.7} y={hy} width={headR*1.4} height={headR*0.5} rx={3} fill={hat.color}/>
+        <polygon points={`${cx},${hy-headR*0.35} ${cx-headR*1.25},${hy+headR*0.1} ${cx},${hy+headR*0.55} ${cx+headR*1.25},${hy+headR*0.1}`} fill={hat.color}/>
+        <circle cx={cx+headR*1.1} cy={hy+headR*0.1} r={2.5} fill="#E8B84B"/>
+        <line x1={cx+headR*1.1} y1={hy+headR*0.1} x2={cx+headR*1.1} y2={hy+headR*0.7} stroke="#E8B84B" strokeWidth={1.5}/>
+      </g>
+    );
+    else if (hat.draw === "crown") hatEl = (
+      <g opacity={opacity}>
+        <path d={`M${cx-headR*0.85} ${hy+headR*0.5}
+                  L${cx-headR*0.85} ${hy} L${cx-headR*0.4} ${hy+headR*0.3} L${cx} ${hy-headR*0.2}
+                  L${cx+headR*0.4} ${hy+headR*0.3} L${cx+headR*0.85} ${hy} L${cx+headR*0.85} ${hy+headR*0.5} Z`}
+              fill={hat.color} stroke="#C99A2E" strokeWidth={1}/>
+        <circle cx={cx} cy={hy+headR*0.2} r={2.5} fill="#E0533A"/>
+      </g>
+    );
+    else if (hat.draw === "halo") hatEl = (
+      <ellipse cx={cx} cy={headCy-headR*1.25} rx={headR*0.85} ry={headR*0.28}
+               fill="none" stroke={hat.color} strokeWidth={large?4:3} opacity={paused?0.4:0.95}/>
+    );
   }
 
-  // ── pet (pixel, sits beside) ──
-  let petEl=null;
-  if (pet && pet.draw!=="none"){
-    const pxL=18, pyB=groundY-3;
-    const col=pet.color||"#C9905A";
-    petEl=<g className={idle?"av-breathe":""}><rect x={pxL} y={pyB} width={3} height={3} fill={col}/><rect x={pxL} y={pyB-1.5} width={3} height={1.5} fill={col}/><rect x={pxL} y={pyB-2.5} width={1} height={1} fill={col}/><rect x={pxL+2} y={pyB-2.5} width={1} height={1} fill={col}/><rect x={pxL+0.5} y={pyB-0.6} width={0.7} height={0.7} fill="#000"/><rect x={pxL+1.8} y={pyB-0.6} width={0.7} height={0.7} fill="#000"/></g>;
+  // ── Companion pet (orbits) ──
+  let petEl = null;
+  if (pet && pet.draw !== "none") {
+    const px = cx + (large?64:46);
+    const py = groundY - bodyH*0.35 + Math.sin(progress*8)*4;
+    if (pet.draw === "cat") petEl = (
+      <g opacity={opacity}>
+        <ellipse cx={px} cy={py} rx={11} ry={9} fill={pet.color}/>
+        <circle cx={px} cy={py-9} r={7} fill={pet.color}/>
+        <polygon points={`${px-6},${py-13} ${px-2},${py-9} ${px-8},${py-8}`} fill={pet.color}/>
+        <polygon points={`${px+6},${py-13} ${px+2},${py-9} ${px+8},${py-8}`} fill={pet.color}/>
+        <circle cx={px-2.5} cy={py-9} r={1.3} fill="#000"/><circle cx={px+2.5} cy={py-9} r={1.3} fill="#000"/>
+        <path d={`M${px+10} ${py+2} q8 -2 4 -10`} stroke={pet.color} strokeWidth={3} fill="none" strokeLinecap="round"/>
+      </g>
+    );
+    else if (pet.draw === "owl") petEl = (
+      <g opacity={opacity}>
+        <ellipse cx={px} cy={py} rx={10} ry={12} fill={pet.color}/>
+        <circle cx={px-3.5} cy={py-3} r={3.5} fill="#fff"/><circle cx={px+3.5} cy={py-3} r={3.5} fill="#fff"/>
+        <circle cx={px-3.5} cy={py-3} r={1.5} fill="#000"/><circle cx={px+3.5} cy={py-3} r={1.5} fill="#000"/>
+        <polygon points={`${px},${py-1} ${px-2},${py+2} ${px+2},${py+2}`} fill="#E8A23C"/>
+        <polygon points={`${px-8},${py-9} ${px-4},${py-11} ${px-4},${py-6}`} fill={pet.color}/>
+        <polygon points={`${px+8},${py-9} ${px+4},${py-11} ${px+4},${py-6}`} fill={pet.color}/>
+      </g>
+    );
+    else if (pet.draw === "sprite") petEl = (
+      <g opacity={paused?0.4:0.95}>
+        <circle cx={px} cy={py} r={7} fill={pet.color} opacity={0.5}/>
+        <circle cx={px} cy={py} r={4} fill={pet.color}/>
+        {[...Array(4)].map((_,i)=>{ const a=(i/4)*Math.PI*2+progress*6;
+          return <circle key={i} cx={px+Math.cos(a)*10} cy={py+Math.sin(a)*10} r={1.5} fill="#fff"/>; })}
+      </g>
+    );
   }
 
-  // ── aura ── (kept, pixel-styled ring)
-  let auraEl=null;
-  if (aura && aura.draw==="glow" && !paused) auraEl=<rect x={5} y={topY} width={14} height={groundY-topY} fill={aura.color} opacity={0.14}/>;
-  else if (aura && aura.draw==="galaxy" && !paused) auraEl=<g opacity={0.9}>{[...Array(6)].map((_,i)=>{const a=(i/6)*Math.PI*2+progress*4;return <rect key={i} x={12+Math.cos(a)*9} y={(topY+groundY)/2+Math.sin(a)*8} width={1} height={1} fill="#fff"/>;})}</g>;
-
-  // shadow
-  const shadow=<ellipse cx={12} cy={groundY+0.4} rx={5+evo.build} ry={0.9} fill="rgba(0,0,0,0.18)"/>;
-
-  // confetti (celebration)
-  const confettiColors=["#F5A623","#6C5CEF","#34C759","#F07B8F","#45B7D1"];
-  const confetti = celebrate && <g>{[...Array(10)].map((_,i)=>(<rect key={i} className="av-confetti" x={4+i*1.6} y={topY-1} width={1} height={1.4} fill={confettiColors[i%5]} style={{animationDelay:`${(i%5)*0.05}s`}}/>))}</g>;
-
-  const pauseIcon = paused && <text x={12} y={topY+1} fontSize={3} textAnchor="middle" opacity={0.7}>⏸</text>;
-
-  const bodyAnimClass = celebrate ? "av-celebrate" : (idle ? "av-breathe" : "");
-  const baseProps = {
-    viewBox:`0 0 ${view} ${view}`, width:size, height:large?260:190,
-    shapeRendering:"crispEdges",
-    style:{ overflow:"visible", filter:paused?"grayscale(55%)":"none", transition:"filter 0.4s", imageRendering:"pixelated", opacity }
-  };
+  const shadow = <ellipse cx={cx} cy={groundY+5} rx={bodyBotW*1.22} ry={large?9:6} fill="rgba(40,31,82,0.13)" filter={`url(#${softGlow})`}/>;
+  const sparkle = progress>=1 && !paused && idle===false && (
+    <>
+      <path d={`M ${cx-headR*1.45} ${headCy-headR*.7} l 3 7 7 3 -7 3 -3 7 -3-7 -7-3 7-3z`} fill="#FFD477" opacity=".9"/>
+      <path d={`M ${cx+headR*1.4} ${headCy-headR*1.02} l 2 5 5 2 -5 2 -2 5 -2-5 -5-2 5-2z`} fill="#B8ADFF" opacity=".95"/>
+    </>
+  );
+  const pauseIcon = paused && (
+    <text x={cx} y={headCy-headR*1.8} fontSize={large?26:18} textAnchor="middle" opacity={0.7}>⏸</text>
+  );
 
   return (
     <svg {...baseProps}>
-      <style>{AVATAR_CSS}</style>
-      {evoGlow}
+      <defs>
+        <linearGradient id={robeGradient} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={color}/>
+          <stop offset="54%" stopColor={robe}/>
+          <stop offset="100%" stopColor={BRAND.primary}/>
+        </linearGradient>
+        <radialGradient id={skinGradient} cx="35%" cy="25%" r="80%">
+          <stop offset="0%" stopColor="#FFE6C8"/>
+          <stop offset="70%" stopColor={skin}/>
+          <stop offset="100%" stopColor={skinShade}/>
+        </radialGradient>
+        <filter id={softGlow} x="-50%" y="-100%" width="200%" height="300%">
+          <feGaussianBlur stdDeviation={large?5:3.5}/>
+        </filter>
+      </defs>
+      <circle cx={cx} cy={groundY-bodyH*.58} r={bodyH*.94+headR} fill="none" stroke={color} strokeWidth="1" opacity={paused ? 0.08 : 0.14} strokeDasharray="3 8"/>
       {auraEl}
       {shadow}
-      <g className={bodyAnimClass} style={{transformOrigin:"12px "+groundY+"px"}}>
-        {cells}
-        <g className={idle && !celebrate ? "av-glance" : ""}>
-          {eyes}{mouth}{cheeks}
-          {hatEl}
-        </g>
-      </g>
+      {body}
+      {collar}
       {petEl}
-      {confetti}
+      {head}
+      {hatEl}
+      {sparkle}
       {pauseIcon}
     </svg>
   );
@@ -1045,7 +1228,7 @@ function FocusingNow({ presence, currentUser, scopeLabel }) {
     return (
       <div style={S.presenceEmpty}>
         <span style={{fontSize:13}}>No one's focusing right now{scopeLabel?` in ${scopeLabel}`:""}.</span>
-        <span style={{fontSize:12,color:"#aaa"}}>Start a session to light up the campus.</span>
+        <span style={{fontSize:12,color:BRAND.mutedSoft}}>Start a session to light up the campus.</span>
       </div>
     );
   }
@@ -1059,7 +1242,7 @@ function FocusingNow({ presence, currentUser, scopeLabel }) {
           <div key={p.username} style={{...S.presenceChip, ...(p.username===currentUser?{borderColor:BRAND.primary,background:BRAND.primarySoft}:{})}}>
             <span style={{fontSize:15}}>{p.subjEmoji||"📚"}</span>
             <div style={{display:"flex",flexDirection:"column"}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#333"}}>{p.username}{p.username===currentUser?" (you)":""}</span>
+              <span style={{fontSize:12,fontWeight:700,color:BRAND.ink}}>{p.username}{p.username===currentUser?" (you)":""}</span>
               <span style={{fontSize:10,color:p.subjColor||"#888"}}>{p.subjLabel||"studying"}</span>
             </div>
           </div>
@@ -1087,8 +1270,8 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, title }) {
         <div key={r.username} style={{...S.boardRow,...(r.username===currentUser?S.boardRowMe:{})}} className="sg-card-anim" >
           <div style={S.boardRank}>{medal(i)}</div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:14,color:"#333"}}>{r.username}{r.username===currentUser?" (you)":""}</div>
-            <div style={{fontSize:11,color:"#999"}}>{r.sessions||0} sessions</div>
+            <div style={{fontWeight:700,fontSize:14,color:BRAND.ink}}>{r.username}{r.username===currentUser?" (you)":""}</div>
+            <div style={{fontSize:11,color:BRAND.muted}}>{r.sessions||0} sessions</div>
           </div>
           <div style={{fontWeight:800,fontSize:15,color:BRAND.primary}}>{fmtMins(r.totalSecs||0)}</div>
         </div>
@@ -1109,7 +1292,7 @@ function ClassCampus({ cls, presence, board, currentUser, onLeave, loading }) {
       <div style={S.campusHeader}>
         <div>
           <div style={{fontSize:18,fontWeight:800,color:BRAND.primary}}>{cls.name}</div>
-          <div style={{fontSize:12,color:"#888"}}>Code <b style={{letterSpacing:1}}>{cls.code}</b> · {members.length} members</div>
+          <div style={{fontSize:12,color:BRAND.muted}}>Code <b style={{letterSpacing:1}}>{cls.code}</b> · {members.length} members</div>
         </div>
         <button style={S.smallGhostBtn} onClick={onLeave}>Leave</button>
       </div>
@@ -1123,11 +1306,11 @@ function ClassCampus({ cls, presence, board, currentUser, onLeave, loading }) {
           const lvl = levelFromXp(Math.floor(secs/60)); // rough display level from class focus
           const tier = tierForLevel(lvl).id;
           return (
-            <div key={u} style={{...S.campusTile,...(live?{borderColor:BRAND.primary,boxShadow:`0 0 0 3px ${BRAND.primary}26`}:{})}} className="sg-card-anim">
+            <div key={u} style={{...S.campusTile,...(live?{borderColor:BRAND.primary,boxShadow:`0 0 0 3px ${BRAND.primarySoft}`}:{})}} className="sg-card-anim">
               {live && <div style={S.campusLive}><span style={S.liveDot}/>focusing</div>}
               <AvatarSVG progress={live?0.8:0.55} tier={tier} idle={!live} color="#5B8DEF"/>
-              <div style={{fontSize:13,fontWeight:700,color:"#333",marginTop:-6}}>{u}{u===currentUser?" (you)":""}</div>
-              <div style={{fontSize:11,color:"#888"}}>{fmtMins(secs)} this week</div>
+              <div style={{fontSize:13,fontWeight:700,color:BRAND.ink,marginTop:-6}}>{u}{u===currentUser?" (you)":""}</div>
+              <div style={{fontSize:11,color:BRAND.muted}}>{fmtMins(secs)} this week</div>
             </div>
           );
         })}
@@ -1212,8 +1395,8 @@ function AnalyticsPanel({ user, subjects, targets }) {
         {subjArr.map(s=>(
           <div key={s.id} style={{marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-              <span style={{fontWeight:600,color:"#555"}}>{s.emoji} {s.label}</span>
-              <span style={{color:"#888"}}>{fmtMins(s.secs)}</span>
+              <span style={{fontWeight:600,color:BRAND.ink}}>{s.emoji} {s.label}</span>
+              <span style={{color:BRAND.muted}}>{fmtMins(s.secs)}</span>
             </div>
             <div style={S.targetTrack}><div style={{...S.targetFill,width:`${(s.secs/maxSubj)*100}%`,background:s.color}}/></div>
           </div>
@@ -1225,10 +1408,18 @@ function AnalyticsPanel({ user, subjects, targets }) {
 
 // ── Generic modal shell ───────────────────────────────────────────────────────────
 function Modal({ children, onClose, title }) {
+  useEffect(()=>{
+    const closeOnEscape = e => { if(e.key === "Escape") onClose?.(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return ()=>window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
   return (
-    <div style={S.overlay} className="sg-overlay-anim" onClick={onClose}>
-      <div style={S.modal} className="sg-pop-anim" onClick={e=>e.stopPropagation()}>
-        {title && <div style={S.modalTitle}>{title}</div>}
+    <div style={S.overlay} className="sg-overlay-anim" onClick={onClose} role="presentation">
+      <div style={S.modal} className="sg-pop-anim" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title||"Dialog"}>
+        <div className="lm-modal-head" style={!title?{justifyContent:"flex-end"}:undefined}>
+          {title && <div style={S.modalTitle}>{title}</div>}
+          <button className="lm-modal-close" aria-label="Close dialog" onClick={onClose}>×</button>
+        </div>
         {children}
       </div>
     </div>
@@ -1281,9 +1472,16 @@ function Login({ onAuth }) {
   return (
     <div style={S.loginWrap}>
       <div style={S.loginCard}>
-        <div style={{fontSize:42,marginBottom:4,color:BRAND.primary}}>{BRAND.logo}</div>
-        <div style={S.loginTitle}>{BRAND.name}</div>
-        <div style={S.loginSub}>{BRAND.tagline}</div>
+        <div className="lm-login-brand">
+          <div className="lm-login-logo">{BRAND.logo}</div>
+          <div style={S.loginTitle}>{BRAND.name}</div>
+          <div style={S.loginSub}>{BRAND.tagline}</div>
+          <div className="lm-login-features" aria-label="Lumora features">
+            <span className="lm-login-feature">Focus sessions</span>
+            <span className="lm-login-feature">Study together</span>
+            <span className="lm-login-feature">Grow your light</span>
+          </div>
+        </div>
 
         {mode==="signin" && <>
           <input style={S.input} placeholder="Username or email" value={username}
@@ -1346,6 +1544,9 @@ export default function App() {
   const [classes, setClasses]   = useState(() => lsGet(LS_CLASSES, [])); // [{code,name}]
   const [theme, setTheme]       = useState(() => lsRaw(LS_THEME, "light"));
   const [streakStakes, setStreakStakes] = useState(() => lsRaw(LS_STAKES, "off") === "on");
+  const [dailyGoal, setDailyGoal] = useState(() => Math.max(15, Number(lsRaw(LS_DAILY_GOAL, "120")) || 120));
+  const [intention, setIntention] = useState(() => lsRaw(LS_INTENTION, ""));
+  const [todaySecs, setTodaySecs] = useState(0);
   const [studyClass, setStudyClass] = useState(null); // class code this session counts toward (null = none)
 
   // ── UI state ──
@@ -1364,8 +1565,8 @@ export default function App() {
   const [room, setRoom] = useState(null); // active co-op room {code, ...}
   const [modal, setModal] = useState(null); // 'subject' | 'shop' | 'badges' | 'class' | 'room' | 'menu' | 'levelup'
   const [levelUpInfo, setLevelUpInfo] = useState(null);
-  const [celebrating, setCelebrating] = useState(false); // avatar victory jump after a session
-  const [worldStreak, setWorldStreak] = useState(0); // lifetime day-streak, drives world ambience
+  const [celebrating, setCelebrating] = useState(false);
+  const [worldStreak, setWorldStreak] = useState(0);
   const [toastNode, toast] = useToast();
 
   const tickRef = useRef(null);
@@ -1385,6 +1586,8 @@ export default function App() {
   useEffect(()=>{ lsSet(LS_CLASSES, classes); }, [classes]);
   useEffect(()=>{ lsSetR(LS_THEME, theme); document.documentElement.setAttribute("data-theme", theme); }, [theme]);
   useEffect(()=>{ lsSetR(LS_STAKES, streakStakes?"on":"off"); }, [streakStakes]);
+  useEffect(()=>{ lsSetR(LS_DAILY_GOAL, String(dailyGoal)); }, [dailyGoal]);
+  useEffect(()=>{ lsSetR(LS_INTENTION, intention); }, [intention]);
 
   // ── Confirm the real auth session (survives reloads, handles sign-out elsewhere) ──
   useEffect(()=>{
@@ -1416,24 +1619,43 @@ export default function App() {
         if(p.badges) setBadges(p.badges);
         if(p.classes) setClasses(p.classes);
         if(typeof p.streakStakes==="boolean") setStreakStakes(p.streakStakes);
+        if(typeof p.dailyGoal==="number") setDailyGoal(Math.max(15, Math.min(720, p.dailyGoal)));
       }
     })();
   }, [user]);
 
-  // ── Lifetime day-streak for the Living World ambience ──
-  // Loaded from history; recomputed whenever xp changes (i.e. after a session).
+  // Daily progress is visible on the focus screen without opening analytics.
   useEffect(()=>{
     if(!user) return;
-    let on=true;
-    fbLoadHistory(user).then(h=>{
-      if(!on || !Array.isArray(h)) return;
-      const days = new Set(h.map(s=>startOfDay(new Date(s.ts)).getTime()));
-      let st=0, cur=startOfDay(new Date()).getTime();
-      while(days.has(cur)){ st++; cur-=86400000; }
-      if(st===0){ let c=startOfDay(new Date()).getTime()-86400000; while(days.has(c)){st++; c-=86400000;} }
-      setWorldStreak(st);
+    let live = true;
+    fbLoadHistory(user).then(history=>{
+      if(!live) return;
+      const today = startOfDay(new Date()).getTime();
+      const total = history
+        .filter(s=>startOfDay(new Date(s.ts)).getTime()===today)
+        .reduce((sum,s)=>sum+(s.secs||0),0);
+      setTodaySecs(total);
     });
-    return ()=>{on=false;};
+    return ()=>{ live=false; };
+  }, [user]);
+
+  // Streak adds subtle ambience to the Living World and refreshes after sessions.
+  useEffect(()=>{
+    if(!user) return;
+    let live = true;
+    fbLoadHistory(user).then(history=>{
+      if(!live || !Array.isArray(history)) return;
+      const days = new Set(history.map(s=>startOfDay(new Date(s.ts)).getTime()));
+      let streak = 0;
+      let cursor = startOfDay(new Date()).getTime();
+      while(days.has(cursor)){ streak++; cursor -= 86400000; }
+      if(streak===0){
+        cursor = startOfDay(new Date()).getTime() - 86400000;
+        while(days.has(cursor)){ streak++; cursor -= 86400000; }
+      }
+      setWorldStreak(streak);
+    });
+    return ()=>{ live=false; };
   }, [user, xp]);
 
   // ── Derived ──
@@ -1442,8 +1664,8 @@ export default function App() {
   const level = xpInfo.lvl;
   const tier = tierForLevel(level);
   const sessionProgress = mode==="timer" ? Math.min(1, elapsed/duration) : Math.min(1, elapsed/(45*60));
-  // Today's weather — computed once per user per day (memoized so it's stable across renders).
-  const todaysWeather = useMemo(()=> weatherFor(new Date(), user||"lumora"), [user]);
+  const todaysWeather = useMemo(()=>weatherFor(new Date(), user||"lumora"), [user]);
+  const currentWorld = worldState(xp/60);
 
   // ── Leaderboard + presence polling ──
   const refreshBoard = useCallback(async ()=>{
@@ -1554,9 +1776,9 @@ export default function App() {
     const newXp = xp + gainedXp;
     const prevLevel = levelFromXp(xp);
     const newLevel = levelFromXp(newXp);
-    setCoins(newCoins); setXp(newXp); setElapsed(0);
-    // Celebrate: avatar jumps + confetti (clears after the ~1.5s animation).
-    setCelebrating(true); setTimeout(()=>setCelebrating(false), 1600);
+    setCoins(newCoins); setXp(newXp); setElapsed(0); setTodaySecs(v=>v+secs);
+    setCelebrating(true);
+    window.setTimeout(()=>setCelebrating(false), 1600);
 
     if(user){
       await fbSaveSession(user, subject, secs, { coop: !!room, classCode: studyClass || null, startedAt: startedAtRef.current });
@@ -1694,19 +1916,27 @@ export default function App() {
 
   // ── Today's focus for current subject (from leaderboard weekly subjects is coarse; use elapsed live) ──
   const initials = user.slice(0,2).toUpperCase();
+  const dailyGoalSecs = Math.max(15, dailyGoal) * 60;
+  const dailyGoalPct = Math.min(1, todaySecs / dailyGoalSecs);
+  const navItems = [
+    ["focus","Focus","◉"],
+    ["classes","Classes","♧"],
+    ["board","Ranks","◇"],
+    ["stats","Stats","↗"],
+  ];
 
   return (
     <div className="sg-shell" data-theme={theme}>
       <style>{APP_CSS+DARK_CSS}</style>
-      <div style={S.app}>
+      <div style={S.app} className="sg-app">
         {toastNode}
 
         {/* ── Header ── */}
-        <div style={S.header}>
+        <div style={S.header} className="sg-header">
           <div style={S.logo}>{BRAND.logo} {BRAND.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <div style={S.coinChip}>🪙 {coins}</div>
-            <button style={S.menuBtn} onClick={()=>setModal("menu")}>
+            <button style={S.menuBtn} onClick={()=>setModal("menu")} aria-label="Open profile and settings">
               <div style={S.menuAvatar}>{initials}</div>
               <span style={S.menuBars}>≡</span>
             </button>
@@ -1717,168 +1947,178 @@ export default function App() {
         <div style={S.xpWrap}>
           <div style={S.xpTop}>
             <span style={{fontWeight:800,fontSize:13,color:BRAND.primary}}>Lv {level} · {tier.name}</span>
-            <span style={{fontSize:11,color:"#999"}}>{xpInfo.into}/{xpInfo.span} XP</span>
+            <span style={{fontSize:11,color:BRAND.muted}}>{xpInfo.into}/{xpInfo.span} XP</span>
           </div>
           <div style={S.xpTrack}><div style={{...S.xpFill,width:`${xpInfo.pct*100}%`}}/></div>
         </div>
 
         {/* ── Tabs ── */}
-        <div style={S.nav}>
-          {[["focus","Focus"],["classes","Classes"],["board","Ranks"],["stats","Stats"]].map(([id,lbl])=>(
-            <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)}>{lbl}</button>
+        <div style={S.nav} className="sg-nav" aria-label="Main navigation">
+          {navItems.map(([id,lbl,icon])=>(
+            <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)} aria-current={tab===id?"page":undefined}>
+              <span className="lm-nav-icon" aria-hidden="true">{icon}</span>{lbl}
+            </button>
           ))}
         </div>
 
         {/* ════════ FOCUS TAB ════════ */}
         {tab==="focus" && (
-          <div style={S.timerView} className="sg-view-anim" key="view-focus">
-            {/* Co-op room banner */}
-            {room && (
-              <div style={S.roomBanner}>
-                <div>
-                  <div style={{fontSize:12,fontWeight:800,color:BRAND.primary}}>🤝 Co-op room {room.code}</div>
-                  <div style={{fontSize:11,color:"#888"}}>
-                    {Object.values(room.participants||{}).filter(p=>p.focusing).length} focusing · {Object.keys(room.participants||{}).length} here
+          <div style={S.timerView} className="sg-view-anim sg-main" key="view-focus">
+            <div className="lm-focus-layout">
+              <section className="lm-focus-card" aria-label="Focus session setup">
+                <div className="lm-section-kicker">Focus studio</div>
+                <h1 className="lm-focus-heading">Make this session count.</h1>
+                <p className="lm-focus-copy">Choose what matters, set a clear intention, and let your Lumora grow while you work.</p>
+
+                {room && (
+                  <div style={S.roomBanner}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:800,color:BRAND.primary}}>Co-op room · {room.code}</div>
+                      <div style={{fontSize:11,color:BRAND.muted}}>
+                        {Object.values(room.participants||{}).filter(p=>p.focusing).length} focusing · {Object.keys(room.participants||{}).length} here
+                      </div>
+                    </div>
+                    <button style={S.smallGhostBtn} onClick={leaveRoom}>Leave</button>
                   </div>
-                </div>
-                <button style={S.smallGhostBtn} onClick={leaveRoom}>Leave</button>
-              </div>
-            )}
-
-            {/* Mode toggle */}
-            {!running && (
-              <div style={S.modeRow}>
-                <button style={{...S.modeBtn,...(mode==="timer"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color}:{})}} onClick={()=>setMode("timer")}>⏱ Timer</button>
-                <button style={{...S.modeBtn,...(mode==="stopwatch"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color}:{})}} onClick={()=>setMode("stopwatch")}>⏲ Stopwatch</button>
-              </div>
-            )}
-
-            {/* Subject picker */}
-            {!running && (
-              <>
-                <div style={S.subjHeader}>
-                  <span style={S.subjHeaderLabel}>Subject</span>
-                  {subjects.length>1 && (
-                    <button
-                      style={{...S.subjEditBtn,...(editMode?S.subjEditBtnActive:{})}}
-                      onClick={()=>setEditMode(e=>!e)}>
-                      {editMode?"Done":"Edit"}
-                    </button>
-                  )}
-                </div>
-                <div style={S.subjScroll}>
-                  {subjects.map(s=>{
-                    const sel = subject===s.id;
-                    return (
-                      <button key={s.id}
-                        style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"14",color:s.color,fontWeight:700}:{})}}
-                        onClick={()=> editMode ? (subjects.length>1 && removeSubject(s.id)) : setSubject(s.id)}>
-                        <span style={{...S.subjDot,background:s.color}}/>{s.emoji} {s.label}
-                        {editMode && subjects.length>1 && <span style={S.subjRemoveInline}>Remove</span>}
-                      </button>
-                    );
-                  })}
-                  {!editMode && <button style={S.subjAddPill} onClick={()=>setModal("subject")}>＋ Subject</button>}
-                </div>
-              </>
-            )}
-
-            {/* Per-session class attribution — only when you belong to classes */}
-            {!running && classes.length>0 && (
-              <div style={S.classPickRow}>
-                <span style={S.classPickLabel}>Counts toward:</span>
-                <button style={{...S.classPickChip,...(studyClass===null?S.classPickChipActive:{})}} onClick={()=>setStudyClass(null)}>
-                  Just me
-                </button>
-                {classes.map(c=>(
-                  <button key={c.code} style={{...S.classPickChip,...(studyClass===c.code?S.classPickChipActive:{})}} onClick={()=>setStudyClass(c.code)}>
-                    🏫 {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Living World + Avatar */}
-            <div style={S.worldStage}>
-              <LivingWorld lifetimeHours={xp/60} streak={worldStreak} seedStr={user}
-                           focusing={running&&!paused} weather={todaysWeather}/>
-              <div style={S.worldAvatar}>
-                <AvatarSVG large progress={running?sessionProgress:0.5} tier={tier.id}
-                           equipped={avatar} color={subjectObj.color} paused={paused}
-                           idle={!running} celebrate={celebrating}/>
-              </div>
-              {/* Minimal, non-interactive weather badge (top-left of world) */}
-              <div style={S.wxBadge}>
-                {({clear:"☀️",cloudy:"☁️",rain:"🌧️",storm:"⛈️",snow:"❄️",fog:"🌫️"})[todaysWeather.id]} {WEATHER_LABEL[todaysWeather.id]}
-              </div>
-            </div>
-            {/* World growth hint */}
-            {(()=> {
-              const ws = worldState(xp/60);
-              return (
-                <div style={S.worldHint}>
-                  <div style={S.worldHintTop}>
-                    <span style={S.worldHintLabel}>🌍 Your world · {(xp/60).toFixed(1)}h grown</span>
-                    <span style={S.worldHintNext}>
-                      {ws.maxed ? "Fully grown ✦" : `Next: ${WORLD_STAGES[ws.stageIdx+1].id}`}
-                    </span>
-                  </div>
-                  <div style={S.worldHintTrack}>
-                    <div style={{...S.worldHintFill,width:`${(ws.maxed?1:ws.toNext)*100}%`}}/>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div style={{...S.timerDisplay,color:subjectObj.color}}>
-              {running ? fmt(mode==="timer"?duration-elapsed:elapsed) : (mode==="timer"?fmt(duration):"00:00")}
-            </div>
-            <div style={S.timerLabel}>
-              {running ? (paused?"Paused — your focus is on hold":(mode==="timer"?"Stay with it — you're growing":"Counting up — focus on")) :
-               (mode==="timer"?"Set a length and start focusing":"Tap start — stopwatch counts up")}
-            </div>
-
-            {!running && mode==="timer" && (
-              <div style={S.durationRow}>
-                {[15,25,45,60,90].map(m=>(
-                  <button key={m} style={{...S.durBtn,...(duration===m*60?{...S.durBtnActive,borderColor:subjectObj.color,color:subjectObj.color}:{})}}
-                          onClick={()=>{setDuration(m*60);setElapsed(0);}}>{m}m</button>
-                ))}
-              </div>
-            )}
-
-            {!running ? (
-              <button className="sg-plant-btn sg-pixel-btn" style={{...S.plantBtn,background:subjectObj.color}} onClick={startSession}>Start focusing</button>
-            ) : (
-              <div style={{display:"flex",gap:10}}>
-                <button style={{...S.plantBtn,flex:1,background:paused?subjectObj.color:"#fff",color:paused?"#fff":"#888",border:paused?"none":"1.5px solid #E0E8DC",boxShadow:"none"}} onClick={togglePause}>
-                  {paused?"Resume":"Pause"}
-                </button>
-                {mode==="stopwatch" ? (
-                  <button style={{...S.plantBtn,flex:1,background:subjectObj.color}} onClick={()=>finishSession(elapsed)}>Finish</button>
-                ) : (
-                  <button style={{...S.plantBtn,flex:1,background:"#fff",color:BRAND.danger,border:"1.5px solid #F0C9BC",boxShadow:"none"}}
-                    onClick={()=>{ if(streakStakes && elapsed>=60){ if(window.confirm("Give up now? With streak stakes on, you'll lose some XP and your avatar shrinks back.")) cancelSession(); } else cancelSession(); }}>
-                    {streakStakes ? "Give up ⚠️" : "Give up"}
-                  </button>
                 )}
-              </div>
-            )}
 
-            {/* Quick actions */}
-            {!running && (
-              <div style={S.quickRow}>
-                <button style={S.quickBtn} onClick={()=>setModal("shop")}>🎨 Customize</button>
-                <button style={S.quickBtn} onClick={()=>setModal("room")}>🤝 Co-op room</button>
-                <button style={S.quickBtn} onClick={()=>setModal("badges")}>🏅 Badges</button>
-              </div>
-            )}
+                {!running && <>
+                  <span className="lm-field-label">Session mode</span>
+                  <div style={S.modeRow}>
+                    <button style={{...S.modeBtn,...(mode==="timer"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("timer")}>Timer</button>
+                    <button style={{...S.modeBtn,...(mode==="stopwatch"?{...S.modeBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}} onClick={()=>setMode("stopwatch")}>Stopwatch</button>
+                  </div>
+
+                  <div style={S.subjHeader}>
+                    <span className="lm-field-label" style={{margin:0}}>Subject</span>
+                    {subjects.length>1 && (
+                      <button style={{...S.subjEditBtn,...(editMode?S.subjEditBtnActive:{})}} onClick={()=>setEditMode(e=>!e)}>
+                        {editMode?"Done":"Edit"}
+                      </button>
+                    )}
+                  </div>
+                  <div style={S.subjScroll}>
+                    {subjects.map(s=>{
+                      const sel = subject===s.id;
+                      return (
+                        <button key={s.id} aria-pressed={sel}
+                          style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"14",color:s.color,fontWeight:750}:{})}}
+                          onClick={()=> editMode ? (subjects.length>1 && removeSubject(s.id)) : setSubject(s.id)}>
+                          <span style={{...S.subjDot,background:s.color}}/>{s.emoji} {s.label}
+                          {editMode && subjects.length>1 && <span style={S.subjRemoveInline}>Remove</span>}
+                        </button>
+                      );
+                    })}
+                    {!editMode && <button style={S.subjAddPill} onClick={()=>setModal("subject")}>＋ Subject</button>}
+                  </div>
+
+                  {classes.length>0 && (
+                    <div style={S.classPickRow}>
+                      <span style={S.classPickLabel}>Counts toward</span>
+                      <button style={{...S.classPickChip,...(studyClass===null?S.classPickChipActive:{})}} onClick={()=>setStudyClass(null)}>Just me</button>
+                      {classes.map(c=>(
+                        <button key={c.code} style={{...S.classPickChip,...(studyClass===c.code?S.classPickChipActive:{})}} onClick={()=>setStudyClass(c.code)}>{c.name}</button>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="lm-field-label" htmlFor="focus-intention">One clear intention</label>
+                  <textarea id="focus-intention" className="lm-intention" maxLength={90} rows={2}
+                    value={intention} onChange={e=>setIntention(e.target.value)}
+                    placeholder={`What will you finish in ${subjectObj.label}?`}/>
+
+                  {mode==="timer" && <>
+                    <span className="lm-field-label">Duration</span>
+                    <div style={S.durationRow}>
+                      {[15,25,45,60,90].map(m=>(
+                        <button key={m} aria-pressed={duration===m*60}
+                          style={{...S.durBtn,...(duration===m*60?{...S.durBtnActive,borderColor:subjectObj.color,color:subjectObj.color,background:subjectObj.color+"12"}:{})}}
+                          onClick={()=>{setDuration(m*60);setElapsed(0);}}>{m}m</button>
+                      ))}
+                      <label className="lm-custom-duration" title="Custom session length">
+                        <input aria-label="Custom duration in minutes" type="number" min="1" max="240"
+                          value={Math.round(duration/60)} onChange={e=>setDuration(Math.max(1,Math.min(240,Number(e.target.value)||1))*60)}/>
+                        <span>min</span>
+                      </label>
+                    </div>
+                  </>}
+                </>}
+
+                {running && intention.trim() && (
+                  <div className="lm-session-intent"><span>Now focusing on</span><strong>{intention.trim()}</strong></div>
+                )}
+
+                <div className="lm-daily-card">
+                  <div className="lm-daily-ring" style={{"--lm-goal":`${dailyGoalPct*100}%`}}><span>{Math.round(dailyGoalPct*100)}%</span></div>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:800,color:BRAND.ink}}>Today's light</div>
+                    <div style={{fontSize:11,color:BRAND.muted,marginTop:2}}>{fmtMins(todaySecs)} of {fmtMins(dailyGoalSecs)} focused</div>
+                  </div>
+                </div>
+
+                {!running ? (
+                  <button className="sg-plant-btn" style={{...S.plantBtn,background:`linear-gradient(135deg,${subjectObj.color},${BRAND.primary})`,marginTop:16}} onClick={startSession}>Begin focus session</button>
+                ) : (
+                  <div style={{display:"flex",gap:10,marginTop:16}}>
+                    <button style={{...S.plantBtn,flex:1,background:paused?subjectObj.color:BRAND.surfaceRaised,color:paused?"#fff":BRAND.muted,border:`1.5px solid ${BRAND.border}`,boxShadow:"none"}} onClick={togglePause}>{paused?"Resume":"Pause"}</button>
+                    {mode==="stopwatch" ? (
+                      <button style={{...S.plantBtn,flex:1,background:subjectObj.color}} onClick={()=>finishSession(elapsed)}>Finish</button>
+                    ) : (
+                      <button style={{...S.plantBtn,flex:1,background:BRAND.surfaceRaised,color:BRAND.danger,border:`1.5px solid ${BRAND.border}`,boxShadow:"none"}}
+                        onClick={()=>{ if(streakStakes && elapsed>=60){ if(window.confirm("End this session? With streak stakes on, some XP will be lost.")) cancelSession(); } else cancelSession(); }}>
+                        End session
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {!running && (
+                  <div className="lm-quick-actions">
+                    <button style={S.quickBtn} onClick={()=>setModal("shop")}>Customize</button>
+                    <button style={S.quickBtn} onClick={()=>setModal("room")}>Co-op room</button>
+                    <button style={S.quickBtn} onClick={()=>setModal("badges")}>Achievements</button>
+                  </div>
+                )}
+              </section>
+
+              <section className="lm-stage-card" aria-label="Your Lumora world">
+                <div className="lm-section-kicker" style={{justifyContent:"center"}}>{paused?"World resting":running?"World in focus":"Your living world"}</div>
+                <div className="lm-world-frame">
+                  <LivingWorld lifetimeHours={xp/60} streak={worldStreak} seedStr={user}
+                    focusing={running&&!paused} weather={todaysWeather}/>
+                  <div className="lm-world-avatar">
+                    <AvatarSVG large progress={running?sessionProgress:0.72} tier={tier.id}
+                      equipped={avatar} color={subjectObj.color} paused={paused} idle={!running} celebrate={celebrating}/>
+                  </div>
+                  <div className="lm-world-weather">
+                    <span aria-hidden="true">{({clear:"☀️",cloudy:"☁️",rain:"🌧️",storm:"⛈️",snow:"❄️",fog:"🌫️"})[todaysWeather.id]}</span>
+                    {WEATHER_LABEL[todaysWeather.id]}
+                  </div>
+                </div>
+                <div className="lm-world-progress">
+                  <div className="lm-world-progress-top">
+                    <strong>{(xp/60).toFixed(1)} hours of world growth</strong>
+                    <span>{currentWorld.maxed ? "World complete" : `Next: ${WORLD_STAGE_LABEL[currentWorld.next?.id]||"new landmark"}`}</span>
+                  </div>
+                  <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next world landmark`}>
+                    <div className="lm-world-progress-fill" style={{width:`${(currentWorld.maxed?1:currentWorld.toNext)*100}%`}}/>
+                  </div>
+                </div>
+                <div style={{...S.timerDisplay,color:subjectObj.color}} aria-live="polite">
+                  {running ? fmt(mode==="timer"?Math.max(0,duration-elapsed):elapsed) : (mode==="timer"?fmt(duration):"00:00")}
+                </div>
+                <div style={S.timerLabel}>
+                  {running ? (paused?"Paused — return when you're ready":(mode==="timer"?"Stay with it. Your light is growing.":"Stopwatch running — stay in flow.")) :
+                    `${subjectObj.emoji} ${subjectObj.label} · ${mode==="timer"?"ready when you are":"open-ended focus"}`}
+                </div>
+              </section>
+            </div>
           </div>
         )}
 
         {/* ════════ CLASSES TAB ════════ */}
         {tab==="classes" && (
-          <div style={S.boardView} className="sg-view-anim" key="view-classes">
+          <div style={S.boardView} className="sg-view-anim sg-board-view" key="view-classes">
             {!activeClass ? (
               <>
                 <div style={S.sectionTitle}>Your classes</div>
@@ -1886,10 +2126,10 @@ export default function App() {
                 {classes.map(c=>(
                   <button key={c.code} style={S.classCard} onClick={()=>setActiveClass({code:c.code,name:c.name,members:[]})}>
                     <div>
-                      <div style={{fontSize:15,fontWeight:700,color:"#333"}}>{c.name}</div>
-                      <div style={{fontSize:12,color:"#999"}}>Code {c.code}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:BRAND.ink}}>{c.name}</div>
+                      <div style={{fontSize:12,color:BRAND.muted}}>Code {c.code}</div>
                     </div>
-                    <span style={{fontSize:18,color:"#ccc"}}>›</span>
+                    <span style={{fontSize:18,color:BRAND.mutedSoft}}>›</span>
                   </button>
                 ))}
                 <button style={{...S.plantBtn,background:BRAND.primary,marginTop:14}} onClick={()=>setModal("class")}>＋ Join or create a class</button>
@@ -1903,7 +2143,7 @@ export default function App() {
 
         {/* ════════ RANKS TAB ════════ */}
         {tab==="board" && (
-          <div style={S.boardView} className="sg-view-anim" key="view-board">
+          <div style={S.boardView} className="sg-view-anim sg-board-view" key="view-board">
             <FocusingNow presence={presence} currentUser={user}/>
             <div style={{height:14}}/>
             <LeaderboardPanel data={lb} currentUser={user} loading={lbLoading} subjects={subjects} title="Global ranks"/>
@@ -1912,7 +2152,7 @@ export default function App() {
 
         {/* ════════ STATS TAB ════════ */}
         {tab==="stats" && (
-          <div style={S.boardView} className="sg-view-anim" key="view-stats">
+          <div style={S.boardView} className="sg-view-anim sg-board-view" key="view-stats">
             <AnalyticsPanel user={user} subjects={subjects} targets={targets}/>
           </div>
         )}
@@ -1927,7 +2167,7 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"center",marginBottom:8}}>
               <AvatarSVG progress={0.9} tier={tier.id} equipped={avatar} color={subjectObj.color} idle/>
             </div>
-            <div style={{fontSize:12,color:"#888",textAlign:"center",marginBottom:14}}>Lv {level} · {tier.name} · 🪙 {coins}</div>
+            <div style={{fontSize:12,color:BRAND.muted,textAlign:"center",marginBottom:14}}>Lv {level} · {tier.name} · 🪙 {coins}</div>
             {SLOTS.map(slot=>(
               <div key={slot.id} style={{marginBottom:16}}>
                 <div style={S.shopSlotTitle}>{slot.emoji} {slot.label}</div>
@@ -1939,10 +2179,10 @@ export default function App() {
                       <button key={c.id} className="sg-tap-card"
                         style={{...S.shopCard,...(isEquipped?{borderColor:BRAND.primary,background:BRAND.primarySoft}:{})}}
                         onClick={()=>buyCosmetic(c)}>
-                        <div style={{fontSize:11,fontWeight:700,color:"#444",marginBottom:2}}>{c.name}</div>
+                        <div style={{fontSize:11,fontWeight:700,color:BRAND.ink,marginBottom:2}}>{c.name}</div>
                         {isEquipped ? <div style={S.shopTag}>Equipped</div> :
-                         isOwned ? <div style={{...S.shopTag,background:"#EEF2EC",color:"#888"}}>Equip</div> :
-                         <div style={{...S.shopTag,background:"#FFF8E7",color:"#B8860B"}}>🪙 {c.cost}</div>}
+                         isOwned ? <div style={{...S.shopTag,background:BRAND.bg,color:BRAND.muted}}>Equip</div> :
+                         <div style={{...S.shopTag,background:BRAND.coinBg,color:BRAND.coinText}}>🪙 {c.cost}</div>}
                       </button>
                     );
                   })}
@@ -1960,8 +2200,8 @@ export default function App() {
                 return (
                   <div key={b.id} style={{...S.badgeCard,opacity:got?1:0.5}}>
                     <div style={{fontSize:28}}>{got?b.emoji:"🔒"}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:"#333",textAlign:"center"}}>{b.name}</div>
-                    <div style={{fontSize:10,color:"#999",textAlign:"center"}}>{b.desc}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:BRAND.ink,textAlign:"center"}}>{b.name}</div>
+                    <div style={{fontSize:10,color:BRAND.muted,textAlign:"center"}}>{b.desc}</div>
                   </div>
                 );
               })}
@@ -1982,13 +2222,25 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"center",marginBottom:10}}>
               <AvatarSVG progress={0.9} tier={tier.id} equipped={avatar} color={subjectObj.color} idle/>
             </div>
-            <div style={{textAlign:"center",fontSize:13,color:"#888",marginBottom:16}}>Level {level} · {tier.name}</div>
+            <div style={{textAlign:"center",fontSize:13,color:BRAND.muted,marginBottom:16}}>Level {level} · {tier.name}</div>
             <button style={S.menuRow} onClick={()=>{setTheme(theme==="light"?"dark":"light");}}>
               {theme==="light"?"🌙 Dark mode":"☀️ Light mode"}
             </button>
             <button style={S.menuRow} onClick={()=>{setModal("targets");}}>🎯 Weekly targets</button>
+            <div style={{...S.menuRow,cursor:"default"}}>
+              <label htmlFor="daily-goal" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <span>☀️ Daily focus goal</span>
+                <span style={{display:"flex",alignItems:"center",gap:5,color:BRAND.muted,fontSize:12}}>
+                  <input id="daily-goal" type="number" min="15" max="720" step="15" value={dailyGoal}
+                    onChange={e=>setDailyGoal(Math.max(15,Math.min(720,Number(e.target.value)||15)))}
+                    onBlur={()=>user&&fbSavePrefs(user,{dailyGoal})}
+                    style={{width:62,padding:"7px 8px",background:BRAND.surfaceRaised,color:BRAND.ink,border:`1px solid ${BRAND.border}`,borderRadius:9,textAlign:"right"}}/>
+                  min
+                </span>
+              </label>
+            </div>
             <button style={S.menuRow} onClick={()=>{ const v=!streakStakes; setStreakStakes(v); if(user) fbSavePrefs(user,{streakStakes:v}); }}>
-              {streakStakes ? "🔥 Streak stakes: ON — giving up costs XP" : "🛡️ Streak stakes: OFF — no penalty"}
+              {streakStakes ? "🔥 Streak stakes: ON — ending early costs XP" : "🛡️ Streak stakes: OFF — no penalty"}
             </button>
             <button style={{...S.menuRow,color:BRAND.danger}} onClick={logout}>↩ Sign out</button>
           </Modal>
@@ -2000,7 +2252,7 @@ export default function App() {
               <div key={s.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                 <span style={{fontSize:14,fontWeight:600}}>{s.emoji} {s.label}</span>
                 <input type="number" min="0" step="0.5" value={targets[s.id]||""} placeholder="0"
-                  style={{width:70,padding:"8px",border:"1.5px solid #E0E8DC",borderRadius:10,fontSize:14,textAlign:"center"}}
+                  style={{width:70,padding:"8px",background:BRAND.surfaceRaised,color:BRAND.ink,border:`1.5px solid ${BRAND.border}`,borderRadius:10,fontSize:14,textAlign:"center"}}
                   onChange={e=>setTarget(s.id, Number(e.target.value))}/>
               </div>
             ))}
@@ -2034,13 +2286,13 @@ function SubjectModal({ onClose, onAdd }) {
   return (
     <Modal title="New subject" onClose={onClose}>
       <input style={S.input} placeholder="Subject name" value={label} onChange={e=>setLabel(e.target.value)} autoFocus/>
-      <div style={{fontSize:12,fontWeight:600,color:"#888",margin:"8px 0 6px"}}>Icon</div>
+      <div style={{fontSize:12,fontWeight:600,color:BRAND.muted,margin:"8px 0 6px"}}>Icon</div>
       <div style={S.pickGrid}>
         {EMOJI_OPTIONS.map(e=>(
           <button key={e} style={{...S.pickEmoji,...(emoji===e?{borderColor:color,background:"#F0FBF6"}:{})}} onClick={()=>setEmoji(e)}>{e}</button>
         ))}
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:"#888",margin:"10px 0 6px"}}>Color</div>
+      <div style={{fontSize:12,fontWeight:600,color:BRAND.muted,margin:"10px 0 6px"}}>Color</div>
       <div style={S.pickGrid}>
         {COLOR_OPTIONS.map(c=>(
           <button key={c} style={{...S.pickColor,background:c,...(color===c?{outline:`3px solid ${BRAND.primary}`,outlineOffset:2}:{})}} onClick={()=>setColor(c)}/>
@@ -2081,8 +2333,8 @@ function RoomModal({ room, onClose, onCreate, onJoin, onLeave }) {
     <Modal title={`Co-op room ${room.code}`} onClose={onClose}>
       <div style={S.recHint}>Share this code so classmates can focus alongside you. You'll see who's live on the Focus screen.</div>
       <div style={{textAlign:"center",fontSize:28,fontWeight:900,letterSpacing:4,color:BRAND.primary,margin:"6px 0"}}>{room.code}</div>
-      <div style={{fontSize:12,color:"#888",textAlign:"center",marginBottom:12}}>{Object.keys(room.participants||{}).length} people here</div>
-      <button style={{...S.plantBtn,background:"#fff",color:BRAND.danger,border:"1.5px solid #F0C9BC",boxShadow:"none"}} onClick={()=>{onLeave();onClose();}}>Leave room</button>
+      <div style={{fontSize:12,color:BRAND.muted,textAlign:"center",marginBottom:12}}>{Object.keys(room.participants||{}).length} people here</div>
+      <button style={{...S.plantBtn,background:BRAND.surfaceRaised,color:BRAND.danger,border:`1.5px solid ${BRAND.border}`,boxShadow:"none"}} onClick={()=>{onLeave();onClose();}}>Leave room</button>
     </Modal>
   );
   return (
@@ -2111,12 +2363,12 @@ function RoomModal({ room, onClose, onCreate, onJoin, onLeave }) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────────
 const S = {
-  app:{minHeight:"100vh",background:BRAND.bg,fontFamily:"'Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:30},
-  header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 16px 0"},
-  logo:{fontFamily:"var(--pixel-font)",fontSize:13,fontWeight:400,color:BRAND.primary,letterSpacing:"0",display:"flex",alignItems:"center",gap:6,textShadow:`2px 2px 0 ${BRAND.primary}22`},
-  coinChip:{fontFamily:"var(--pixel-font)",fontSize:9,color:BRAND.coinText,background:BRAND.coinBg,border:"3px solid #2A2536",borderRadius:4,padding:"5px 9px",fontWeight:400,boxShadow:"2px 2px 0 #2A2536"},
+  app:{minHeight:"100vh",background:"transparent",color:BRAND.ink,fontFamily:"Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",maxWidth:"none",margin:"0 auto",position:"relative",paddingBottom:30},
+  header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"15px 18px"},
+  logo:{fontSize:20,fontWeight:850,color:BRAND.primary,letterSpacing:"-0.5px",display:"flex",alignItems:"center",gap:7},
+  coinChip:{fontSize:12,color:BRAND.coinText,background:BRAND.coinBg,border:`1px solid ${BRAND.coinBorder}`,borderRadius:20,padding:"5px 11px",fontWeight:700},
   menuBtn:{display:"flex",alignItems:"center",gap:6,background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:20,padding:"3px 9px 3px 3px",cursor:"pointer"},
-  menuAvatar:{width:24,height:24,borderRadius:"50%",background:BRAND.primary,color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
+  menuAvatar:{width:28,height:28,borderRadius:"50%",background:`linear-gradient(145deg,${BRAND.primary},#9C73FF)`,color:"#fff",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"},
   menuBars:{fontSize:14,color:BRAND.muted,lineHeight:1},
 
   xpWrap:{padding:"14px 16px 0"},
@@ -2125,10 +2377,10 @@ const S = {
   xpFill:{height:"100%",borderRadius:8,background:`linear-gradient(90deg,${BRAND.accent},${BRAND.primary})`,transition:"width 0.6s cubic-bezier(0.22,1,0.36,1)"},
 
   nav:{display:"flex",gap:4,padding:"14px 12px 12px",borderBottom:`1px solid ${BRAND.border}`},
-  navBtn:{flex:1,padding:"9px 0",border:"2px solid transparent",background:"transparent",borderRadius:4,fontSize:11,fontWeight:700,color:BRAND.muted,cursor:"pointer",fontFamily:"var(--pixel-font)"},
-  navBtnActive:{background:BRAND.primary,color:"#fff",fontWeight:800,border:"2px solid #2A2536",boxShadow:"2px 2px 0 #2A2536",borderRadius:4},
+  navBtn:{flex:1,padding:"9px 0",border:"none",background:"transparent",borderRadius:11,fontSize:12,fontWeight:600,color:BRAND.muted,cursor:"pointer"},
+  navBtnActive:{background:BRAND.surfaceRaised,color:BRAND.primary,fontWeight:800,boxShadow:`0 3px 14px ${BRAND.primaryShadow}`},
 
-  timerView:{padding:"16px 16px 40px"},
+  timerView:{padding:"2px 16px 40px"},
   modeRow:{display:"flex",gap:8,marginBottom:14},
   modeBtn:{flex:1,padding:"10px 0",border:`1.5px solid ${BRAND.border}`,background:BRAND.surface,borderRadius:20,fontSize:13,fontWeight:600,color:BRAND.muted,cursor:"pointer"},
   modeBtnActive:{fontWeight:700},
@@ -2136,7 +2388,7 @@ const S = {
   subjHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   subjHeaderLabel:{fontSize:11,fontWeight:800,color:BRAND.muted,textTransform:"uppercase",letterSpacing:"0.6px"},
   subjEditBtn:{fontSize:11,fontWeight:700,color:BRAND.muted,background:BRAND.surface,border:`1.5px solid ${BRAND.border}`,borderRadius:16,padding:"4px 12px",cursor:"pointer"},
-  subjEditBtnActive:{color:BRAND.danger,borderColor:BRAND.danger,background:"#FCEEEA"},
+  subjEditBtnActive:{color:BRAND.danger,borderColor:BRAND.danger,background:BRAND.primarySoft},
   subjScroll:{display:"flex",gap:8,overflowX:"auto",paddingBottom:6,marginBottom:10,WebkitOverflowScrolling:"touch"},
   classPickRow:{display:"flex",alignItems:"center",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:8,WebkitOverflowScrolling:"touch"},
   classPickLabel:{fontSize:11,fontWeight:700,color:BRAND.mutedSoft,whiteSpace:"nowrap",flexShrink:0,textTransform:"uppercase",letterSpacing:"0.5px"},
@@ -2148,23 +2400,12 @@ const S = {
   subjAddPill:{display:"flex",alignItems:"center",padding:"10px 15px",border:`1.5px dashed ${BRAND.borderHi}`,background:"transparent",borderRadius:22,cursor:"pointer",color:BRAND.primary,fontWeight:700,whiteSpace:"nowrap",flexShrink:0},
 
   avatarWrap:{display:"flex",justifyContent:"center",alignItems:"flex-end",minHeight:260,margin:"6px 0"},
-  worldStage:{position:"relative",width:"100%",height:260,borderRadius:6,overflow:"hidden",margin:"6px 0 0",border:"4px solid #2A2536",boxShadow:"5px 5px 0 rgba(42,37,54,0.2)"},
-  worldAvatar:{position:"absolute",left:0,right:0,bottom:0,display:"flex",justifyContent:"center",alignItems:"flex-end",pointerEvents:"none"},
-  worldHint:{background:BRAND.surface,borderRadius:14,padding:"10px 13px",margin:"10px 0 4px",boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
-  worldHintTop:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7},
-  worldHintLabel:{fontSize:12,fontWeight:800,color:BRAND.ink},
-  wxBadge:{position:"absolute",top:10,left:10,fontSize:11,fontWeight:700,color:"#fff",
-           background:"rgba(30,27,51,0.34)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",
-           padding:"3px 9px",borderRadius:14,pointerEvents:"none",letterSpacing:"0.2px"},
-  worldHintNext:{fontSize:11,fontWeight:700,color:BRAND.muted,textTransform:"capitalize"},
-  worldHintTrack:{height:6,background:BRAND.track,borderRadius:8,overflow:"hidden"},
-  worldHintFill:{height:"100%",borderRadius:8,background:`linear-gradient(90deg,${BRAND.accent},${BRAND.primary})`,transition:"width 0.6s cubic-bezier(0.22,1,0.36,1)"},
-  timerDisplay:{textAlign:"center",fontFamily:"var(--pixel-font)",fontSize:34,fontWeight:400,letterSpacing:"0",margin:"6px 0 6px"},
+  timerDisplay:{textAlign:"center",fontSize:54,fontWeight:850,letterSpacing:"-3px",margin:"2px 0 5px",fontVariantNumeric:"tabular-nums"},
   timerLabel:{textAlign:"center",fontSize:13,color:BRAND.muted,marginBottom:14,minHeight:18},
   durationRow:{display:"flex",gap:6,justifyContent:"center",marginBottom:14,flexWrap:"wrap"},
   durBtn:{padding:"7px 13px",border:`1.5px solid ${BRAND.border}`,background:BRAND.surface,borderRadius:20,fontSize:13,fontWeight:600,cursor:"pointer",color:BRAND.muted},
   durBtnActive:{fontWeight:700},
-  plantBtn:{display:"block",width:"100%",padding:"16px 0",border:"3px solid #2A2536",borderRadius:4,fontFamily:"var(--pixel-font)",fontSize:13,fontWeight:400,color:"#fff",cursor:"pointer",boxShadow:"4px 4px 0 #2A2536",textTransform:"uppercase"},
+  plantBtn:{display:"block",width:"100%",padding:"16px 0",border:"none",borderRadius:16,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:`0 10px 28px ${BRAND.primaryShadow}`,letterSpacing:"-0.3px"},
   quickRow:{display:"flex",gap:8,marginTop:16},
   quickBtn:{flex:1,padding:"12px 0",border:`1.5px solid ${BRAND.border}`,background:BRAND.surface,borderRadius:12,fontSize:12,fontWeight:700,color:BRAND.muted,cursor:"pointer"},
 
@@ -2176,14 +2417,14 @@ const S = {
   toggleRow:{display:"flex",gap:8,marginBottom:14},
   toggleBtn:{flex:1,padding:"10px 0",border:`1.5px solid ${BRAND.border}`,background:BRAND.surface,borderRadius:11,fontSize:13,fontWeight:600,color:BRAND.muted,cursor:"pointer"},
   toggleBtnActive:{background:BRAND.primary,color:"#fff",border:`1.5px solid ${BRAND.primary}`,fontWeight:700},
-  boardRow:{display:"flex",alignItems:"center",gap:8,background:BRAND.surface,borderRadius:14,padding:"13px 15px",marginBottom:8,boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
+  boardRow:{display:"flex",alignItems:"center",gap:8,background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:14,padding:"13px 15px",marginBottom:8,boxShadow:"var(--lm-shadow-soft)"},
   boardRowMe:{border:`2px solid ${BRAND.primary}`,background:BRAND.primarySoft},
   boardRank:{width:30,fontSize:17,textAlign:"center"},
   empty:{textAlign:"center",color:BRAND.mutedSoft,fontSize:14,marginTop:30,marginBottom:20,lineHeight:1.5},
 
   // presence
-  presenceWrap:{background:BRAND.surface,borderRadius:16,padding:"13px 15px",boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
-  presenceEmpty:{display:"flex",flexDirection:"column",gap:4,background:BRAND.surface,borderRadius:16,padding:"16px 14px",textAlign:"center",color:BRAND.muted,boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
+  presenceWrap:{background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:16,padding:"13px 15px",boxShadow:"var(--lm-shadow-soft)"},
+  presenceEmpty:{display:"flex",flexDirection:"column",gap:4,background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:16,padding:"16px 14px",textAlign:"center",color:BRAND.muted,boxShadow:"var(--lm-shadow-soft)"},
   presenceTitle:{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:BRAND.primary,marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"},
   presenceRow:{display:"flex",gap:8,overflowX:"auto",paddingBottom:4},
   presenceChip:{display:"flex",alignItems:"center",gap:8,background:BRAND.bg,border:`1.5px solid ${BRAND.border}`,borderRadius:14,padding:"8px 12px",flexShrink:0},
@@ -2192,16 +2433,16 @@ const S = {
   // class campus
   campusHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16},
   campusGrid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10},
-  campusTile:{display:"flex",flexDirection:"column",alignItems:"center",background:BRAND.surface,borderRadius:16,padding:"10px 8px 12px",border:`2px solid ${BRAND.border}`,position:"relative",boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
+  campusTile:{display:"flex",flexDirection:"column",alignItems:"center",background:BRAND.surface,borderRadius:16,padding:"10px 8px 12px",border:`2px solid ${BRAND.border}`,position:"relative",boxShadow:"var(--lm-shadow-soft)"},
   campusLive:{position:"absolute",top:8,left:8,display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:BRAND.live},
   classCard:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:BRAND.surface,border:`1.5px solid ${BRAND.border}`,borderRadius:14,padding:"14px 16px",marginBottom:8,cursor:"pointer"},
 
   // analytics
   statCardRow:{display:"flex",gap:8,marginBottom:14},
-  statCard:{flex:1,background:BRAND.surface,borderRadius:16,padding:"14px 8px",textAlign:"center",boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
+  statCard:{flex:1,background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:16,padding:"14px 8px",textAlign:"center",boxShadow:"var(--lm-shadow-soft)"},
   statNum:{fontSize:20,fontWeight:900,color:BRAND.primary},
   statLbl:{fontSize:11,color:BRAND.muted,marginTop:2},
-  panel:{background:BRAND.surface,borderRadius:18,padding:"15px",marginBottom:14,boxShadow:"0 1px 4px rgba(30,27,51,0.05)"},
+  panel:{background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:18,padding:"15px",marginBottom:14,boxShadow:"var(--lm-shadow-soft)"},
   panelTitle:{fontSize:13,fontWeight:700,color:BRAND.ink,marginBottom:12},
   barRow:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",height:110,gap:6},
   barCol:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%"},
@@ -2212,9 +2453,9 @@ const S = {
   targetFill:{height:"100%",borderRadius:8,transition:"width 0.5s ease"},
 
   // modal
-  overlay:{position:"fixed",inset:0,background:"rgba(30,27,51,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:18,zIndex:300},
-  modal:{background:BRAND.surface,borderRadius:24,padding:"24px 20px",width:"100%",maxWidth:380,maxHeight:"86vh",overflowY:"auto",boxShadow:"0 16px 48px rgba(30,27,51,0.25)"},
-  modalTitle:{fontSize:18,fontWeight:800,color:BRAND.primary,marginBottom:16,textAlign:"center"},
+  overlay:{position:"fixed",inset:0,background:"rgba(17,14,31,0.58)",display:"flex",alignItems:"center",justifyContent:"center",padding:18,zIndex:300,backdropFilter:"blur(7px)"},
+  modal:{background:BRAND.surfaceRaised,color:BRAND.ink,border:`1px solid ${BRAND.border}`,borderRadius:26,padding:"20px",width:"100%",maxWidth:410,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(16,12,38,0.28)"},
+  modalTitle:{fontSize:18,fontWeight:850,color:BRAND.ink,margin:0,textAlign:"left",letterSpacing:"-0.3px"},
   menuRow:{display:"block",width:"100%",textAlign:"left",background:BRAND.bg,border:`1.5px solid ${BRAND.border}`,borderRadius:12,padding:"13px 16px",fontSize:14,fontWeight:600,color:BRAND.ink,cursor:"pointer",marginBottom:8},
 
   // shop
@@ -2233,12 +2474,12 @@ const S = {
   pickColor:{width:34,height:34,border:"none",borderRadius:"50%",cursor:"pointer"},
 
   // login
-  loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:BRAND.bgGrad,padding:20},
-  loginCard:{background:BRAND.surface,borderRadius:26,padding:"40px 30px",width:"100%",maxWidth:340,boxShadow:`0 10px 40px ${BRAND.primary}1F`,textAlign:"center"},
-  loginTitle:{fontFamily:"var(--pixel-font)",fontSize:22,fontWeight:400,color:BRAND.primary,margin:"6px 0 10px",letterSpacing:"0"},
-  loginSub:{fontSize:14,color:BRAND.muted,margin:"0 0 24px"},
+  loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:BRAND.bgGrad,padding:20,fontFamily:"Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"},
+  loginCard:{background:BRAND.surface,border:`1px solid ${BRAND.border}`,borderRadius:30,padding:"34px 30px",width:"100%",maxWidth:400,boxShadow:"var(--lm-shadow)",backdropFilter:"blur(20px)",textAlign:"center"},
+  loginTitle:{fontSize:30,fontWeight:900,color:BRAND.primary,margin:"0 0 4px",letterSpacing:"-0.5px"},
+  loginSub:{fontSize:14,color:BRAND.muted,margin:0},
   loginHint:{fontSize:11,color:BRAND.mutedSoft,margin:"12px 0 0",lineHeight:1.6},
-  input:{display:"block",width:"100%",padding:"12px 14px",border:`1.5px solid ${BRAND.border}`,borderRadius:12,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:8},
+  input:{display:"block",width:"100%",padding:"12px 14px",border:`1.5px solid ${BRAND.border}`,background:BRAND.surfaceRaised,color:BRAND.ink,borderRadius:12,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:8},
   errText:{color:BRAND.danger,fontSize:12,margin:"0 0 8px",textAlign:"left"},
   primaryBtn:{display:"block",width:"100%",padding:"14px 0",background:BRAND.primary,color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8},
   linkBtn:{display:"block",width:"100%",background:"none",border:"none",color:BRAND.primary,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12,padding:"4px 0"},
