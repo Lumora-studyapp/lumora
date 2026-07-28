@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { db } from "./firebase.js";
+import LumoraShell from "./components/LumoraShell.jsx";
+import ClassroomScene from "./components/ClassroomScene.jsx";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion,
   collection, getDocs, query, where, increment
@@ -7,7 +9,7 @@ import {
 
 /* ════════════════════════════════════════════════════════════════════════
    LUMORA — a focus app where your light grows as you study.
-   Built on AscendU's mechanics (timer, subjects, coins, leaderboards,
+   Built on Lumora's established mechanics (timer, subjects, coins, leaderboards,
    presence, badges, targets, weekly recap, an evolving avatar, class codes
    and co-op focus rooms). Lumora gives it its own identity: an aurora
    indigo→violet palette with a warm amber glow on a cool "dusk" surface,
@@ -733,10 +735,10 @@ function weatherFor(date=new Date(), seedStr="lumora") {
 }
 
 const WEATHER_LABEL = { clear:"Clear", cloudy:"Cloudy", rain:"Rain", storm:"Thunderstorm", snow:"Snow", fog:"Fog" };
-const WORLD_STAGE_LABEL = {
-  barren:"First light", sprout:"Meadow", firsttree:"First tree", grove:"Grove",
-  river:"River", forest:"Forest", falls:"Waterfall", hills:"Hills",
-  village:"Village", island:"Sky island", ruins:"Ancient ruins", celestial:"Celestial garden",
+const CLASSROOM_STAGE_LABEL = {
+  barren:"Quiet desk", sprout:"Reading corner", firsttree:"Shared table", grove:"Class bookshelf",
+  river:"Creative wall", forest:"Study lounge", falls:"Science station", hills:"Community board",
+  village:"Full classroom", island:"Studio loft", ruins:"Archive room", celestial:"Lumora academy",
 };
 
 const WORLD_CSS = `
@@ -1568,7 +1570,6 @@ export default function App() {
   const [modal, setModal] = useState(null); // 'subject' | 'shop' | 'badges' | 'class' | 'room' | 'menu' | 'levelup'
   const [levelUpInfo, setLevelUpInfo] = useState(null);
   const [celebrating, setCelebrating] = useState(false);
-  const [worldStreak, setWorldStreak] = useState(0);
   const [toastNode, toast] = useToast();
 
   const tickRef = useRef(null);
@@ -1640,25 +1641,6 @@ export default function App() {
     });
     return ()=>{ live=false; };
   }, [user]);
-
-  // Streak adds subtle ambience to the Living World and refreshes after sessions.
-  useEffect(()=>{
-    if(!user) return;
-    let live = true;
-    fbLoadHistory(user).then(history=>{
-      if(!live || !Array.isArray(history)) return;
-      const days = new Set(history.map(s=>startOfDay(new Date(s.ts)).getTime()));
-      let streak = 0;
-      let cursor = startOfDay(new Date()).getTime();
-      while(days.has(cursor)){ streak++; cursor -= 86400000; }
-      if(streak===0){
-        cursor = startOfDay(new Date()).getTime() - 86400000;
-        while(days.has(cursor)){ streak++; cursor -= 86400000; }
-      }
-      setWorldStreak(streak);
-    });
-    return ()=>{ live=false; };
-  }, [user, xp]);
 
   // ── Derived ──
   const subjectObj = subjects.find(s=>s.id===subject) || subjects[0] || DEFAULT_SUBJECTS[0];
@@ -1923,51 +1905,30 @@ export default function App() {
   const isNewUser = xp < 1;
   const tierPosition = Math.max(0, EVO_TIERS.findIndex(t=>t.id===tier.id));
   const navItems = [
-    ["focus","Focus","◉"],
-    ["classes","Classes","♧"],
-    ["board","Ranks","◇"],
-    ["stats","Stats","↗"],
+    { id:"focus", label:"Focus", icon:"◉" },
+    { id:"classes", label:"Classroom", icon:"♧" },
+    { id:"board", label:"Ranks", icon:"◇" },
+    { id:"stats", label:"Progress", icon:"↗" },
   ];
 
   return (
     <div className="sg-shell" data-theme={theme}>
       <style>{APP_CSS+DARK_CSS}</style>
-      <div style={S.app} className="sg-app">
-        {toastNode}
-
-        {/* ── Header ── */}
-        <div style={S.header} className="sg-header">
-          <div style={S.logo}>{BRAND.logo} {BRAND.name}</div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {!isNewUser && <div style={S.coinChip}>🪙 {coins}</div>}
-            <button style={S.menuBtn} onClick={()=>setModal("menu")} aria-label="Open profile and settings">
-              <div style={S.menuAvatar}>{initials}</div>
-              <span style={S.menuBars}>≡</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Level / XP bar ── */}
-        {!isNewUser && (
-          <div style={S.xpWrap}>
-            <div style={S.xpTop}>
-              <span style={{fontWeight:800,fontSize:13,color:BRAND.primary}}>Lv {level} · {tier.name}</span>
-              <span style={{fontSize:11,color:BRAND.muted}}>{xpInfo.into}/{xpInfo.span} XP</span>
-            </div>
-            <div style={S.xpTrack}><div style={{...S.xpFill,width:`${xpInfo.pct*100}%`}}/></div>
-          </div>
-        )}
-
-        {/* ── Tabs ── */}
-        {!isNewUser && (
-          <div style={S.nav} className="sg-nav" aria-label="Main navigation">
-            {navItems.map(([id,lbl,icon])=>(
-              <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)} aria-current={tab===id?"page":undefined}>
-                <span className="lm-nav-icon" aria-hidden="true">{icon}</span>{lbl}
-              </button>
-            ))}
-          </div>
-        )}
+      <LumoraShell
+        navItems={navItems}
+        activeNav={tab}
+        onNavigate={setTab}
+        onOpenMenu={()=>setModal("menu")}
+        initials={initials}
+        coins={coins}
+        level={level}
+        tierName={tier.name}
+        xpLabel={`${xpInfo.into}/${xpInfo.span} XP`}
+        xpPercent={xpInfo.pct*100}
+        compact={isNewUser}
+      >
+        <div style={S.app} className="sg-app">
+          {toastNode}
 
         {/* ════════ FOCUS TAB ════════ */}
         {tab==="focus" && (
@@ -2115,16 +2076,15 @@ export default function App() {
 
               </section>
 
-              <section className="lm-stage-card" aria-label="Your Lumora world">
+              <section className="lm-stage-card" aria-label="Your Lumora classroom">
                 <div className="lm-section-kicker" style={{justifyContent:"center"}}>{paused?"Light resting":running?"Light in focus":"Your Lumora"}</div>
                 <div className="lm-growth-stage"><span className="lm-growth-dot"/><strong>{tier.name}</strong><span>· stage {tierPosition+1} of {EVO_TIERS.length}</span></div>
-                <div className="lm-world-frame">
-                  <LivingWorld lifetimeHours={xp/60} streak={worldStreak} seedStr={user}
-                    focusing={running&&!paused} weather={todaysWeather}/>
-                  <div className="lm-world-avatar">
+                <div className="lm-world-frame lm-classroom-frame">
+                  <ClassroomScene peers={presence} currentUser={user} stage={tierPosition}
+                    weather={todaysWeather.id} focusing={running&&!paused}>
                     <AvatarSVG large progress={running?sessionProgress:(isNewUser ? 0.35 : 0.72)} tier={tier.id}
                       equipped={avatar} color={subjectObj.color} paused={paused} idle={!running} celebrate={celebrating}/>
-                  </div>
+                  </ClassroomScene>
                   <div className="lm-world-weather">
                     <span aria-hidden="true">{({clear:"☀️",cloudy:"☁️",rain:"🌧️",storm:"⛈️",snow:"❄️",fog:"🌫️"})[todaysWeather.id]}</span>
                     {!isNewUser && WEATHER_LABEL[todaysWeather.id]}
@@ -2132,10 +2092,10 @@ export default function App() {
                 </div>
                 <div className="lm-world-progress">
                   <div className="lm-world-progress-top">
-                    <strong>{isNewUser?"A new light is waiting":`${(xp/60).toFixed(1)} hours of world growth`}</strong>
-                    <span>{isNewUser?"First session → meadow":(currentWorld.maxed ? "World complete" : `Next: ${WORLD_STAGE_LABEL[currentWorld.next?.id]||"new landmark"}`)}</span>
+                    <strong>{isNewUser?"A new light is waiting":`${(xp/60).toFixed(1)} hours of classroom growth`}</strong>
+                    <span>{isNewUser?"First session → quiet desk":(currentWorld.maxed ? "Classroom complete" : `Next: ${CLASSROOM_STAGE_LABEL[currentWorld.next?.id]||"new classroom detail"}`)}</span>
                   </div>
-                  <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next world landmark`}>
+                  <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next classroom milestone`}>
                     <div className="lm-world-progress-fill" style={{width:`${(currentWorld.maxed?1:currentWorld.toNext)*100}%`}}/>
                   </div>
                 </div>
@@ -2313,7 +2273,8 @@ export default function App() {
           </Modal>
         )}
 
-      </div>
+        </div>
+      </LumoraShell>
     </div>
   );
 }
