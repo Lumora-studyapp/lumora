@@ -1,13 +1,13 @@
-# AscendU
+# Lumora
 
-A focus app where you grow an **avatar of yourself** instead of a tree. Run a
-timer, your Scholar grows and evolves through tiers, you earn XP and coins, climb
-weekly and all-time leaderboards, join classes with a code, and focus together in
-real-time co-op rooms.
+A focus app where a growing **character of yourself** learns in a living classroom.
+Run a timer, grow through learning stages, earn XP and coins, climb weekly and
+all-time leaderboards, join classes with a code, and focus together in real-time
+co-op rooms.
 
-Built as a fork of the StudyGrove mechanics with a new growth metaphor and three
-headline features (class codes, live campus, co-op rooms), on a Vite + React +
-Firebase stack that's ready to wrap for the App Store.
+Lumora keeps its established class codes, live presence, co-op rooms, and Firebase
+data model while using a responsive classroom shell adapted from StudyGrove's
+proven interaction patterns.
 
 ---
 
@@ -121,7 +121,7 @@ built site with **Capacitor**:
 
 ```bash
 npm install @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android
-npx cap init AscendU com.yourname.ascendu --web-dir=dist
+npx cap init Lumora com.yourname.lumora --web-dir=dist
 npm run build && npx cap sync
 npx cap open ios        # opens Xcode; archive & submit
 npx cap open android    # opens Android Studio

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { db } from "./firebase.js";
+import LumoraShell from "./components/LumoraShell.jsx";
+import ClassroomScene from "./components/ClassroomScene.jsx";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion,
   collection, getDocs, query, where, increment
@@ -7,7 +9,7 @@ import {
 
 /* ════════════════════════════════════════════════════════════════════════
    LUMORA — a focus app where your light grows as you study.
-   Built on AscendU's mechanics (timer, subjects, coins, leaderboards,
+   Built on Lumora's established mechanics (timer, subjects, coins, leaderboards,
    presence, badges, targets, weekly recap, an evolving avatar, class codes
    and co-op focus rooms). Lumora gives it its own identity: an aurora
    indigo→violet palette with a warm amber glow on a cool "dusk" surface,
@@ -270,14 +272,14 @@ body { background:var(--lm-bg); }
 .sg-shell::before, .sg-shell::after { content:""; position:fixed; width:42vw; height:42vw; border-radius:50%; filter:blur(80px); opacity:.17; pointer-events:none; z-index:-1; }
 .sg-shell::before { background:#7E6BFF; top:-18vw; right:-12vw; }
 .sg-shell::after { background:#F5B85D; bottom:-24vw; left:-16vw; }
-.sg-app { width:min(1120px,100%); margin:0 auto; }
+.sg-app { width:100%; margin:0 auto; }
 .sg-header { backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
 .sg-nav { backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 .sg-main { width:100%; }
-.lm-focus-layout { display:grid; grid-template-columns:minmax(390px,1.12fr) minmax(320px,.88fr); gap:18px; align-items:stretch; }
-.lm-focus-card, .lm-stage-card { background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:28px; box-shadow:var(--lm-shadow-soft); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-.lm-focus-card { grid-column:2; grid-row:1; padding:28px; }
-.lm-stage-card { grid-column:1; grid-row:1; padding:20px 24px 24px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:560px; }
+.lm-focus-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-items:stretch; }
+.lm-focus-card, .lm-stage-card { min-width:0; background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:18px; box-shadow:0 1px 4px rgba(35,28,75,.07); }
+.lm-focus-card { width:100%; padding:19px 16px; }
+.lm-stage-card { padding:16px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; }
 .lm-stage-card::before { content:""; position:absolute; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle,var(--lm-primary-shadow),transparent 68%); top:26px; left:50%; transform:translateX(-50%); pointer-events:none; }
 .lm-section-kicker { display:flex; align-items:center; gap:8px; color:var(--lm-primary); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; margin-bottom:7px; }
 .lm-section-kicker::before { content:""; width:18px; height:2px; border-radius:2px; background:linear-gradient(90deg,var(--lm-primary),var(--lm-accent)); }
@@ -375,7 +377,7 @@ body { background:var(--lm-bg); }
   .sg-tap-card:hover { transform:translateY(-2px); box-shadow:var(--lm-shadow-soft); }
 }
 @media (min-width:760px) {
-  .sg-app { padding:18px 24px 46px; }
+  .sg-app { padding:0 0 30px; }
   .sg-header { position:sticky; top:14px; z-index:80; border:1px solid var(--lm-border); border-radius:22px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); margin-bottom:14px; }
   .sg-nav { position:sticky; top:88px; z-index:70; width:max-content; margin:0 auto 20px; padding:5px !important; border:1px solid var(--lm-border) !important; border-radius:16px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); }
   .sg-nav button { min-width:112px; }
@@ -383,18 +385,18 @@ body { background:var(--lm-bg); }
   .sg-board-view { width:min(760px,100%); margin:0 auto; }
 }
 @media (max-width:759px) {
-  .sg-app { padding-bottom:94px !important; }
+  .sg-app { padding-bottom:30px !important; }
   .sg-header { background:linear-gradient(180deg,var(--lm-bg) 58%,transparent); }
   .sg-nav { position:fixed !important; left:12px; right:12px; bottom:10px; z-index:250; padding:6px !important; border:1px solid var(--lm-border) !important; border-radius:21px; background:var(--lm-surface) !important; box-shadow:0 16px 50px rgba(24,20,48,.22); }
   .sg-nav button { padding:8px 0 !important; }
   .lm-focus-layout { grid-template-columns:1fr; gap:14px; }
   .lm-focus-card, .lm-stage-card { grid-column:auto; grid-row:auto; }
-  .lm-stage-card { min-height:500px; order:-1; }
+  .lm-stage-card { min-height:0; }
   .lm-focus-card { padding:19px 16px; }
   .lm-quick-actions { gap:7px; }
 }
 @media (max-width:390px) {
-  .lm-stage-card { min-height:450px; padding-inline:14px; }
+  .lm-stage-card { min-height:0; padding-inline:14px; }
   .lm-orb-stage { min-height:245px; transform:scale(.92); margin:-8px 0; }
   .lm-world-frame { height:238px; }
   .lm-world-avatar { transform:scale(.76); }
@@ -733,10 +735,10 @@ function weatherFor(date=new Date(), seedStr="lumora") {
 }
 
 const WEATHER_LABEL = { clear:"Clear", cloudy:"Cloudy", rain:"Rain", storm:"Thunderstorm", snow:"Snow", fog:"Fog" };
-const WORLD_STAGE_LABEL = {
-  barren:"First light", sprout:"Meadow", firsttree:"First tree", grove:"Grove",
-  river:"River", forest:"Forest", falls:"Waterfall", hills:"Hills",
-  village:"Village", island:"Sky island", ruins:"Ancient ruins", celestial:"Celestial garden",
+const CLASSROOM_STAGE_LABEL = {
+  barren:"Quiet desk", sprout:"Reading corner", firsttree:"Shared table", grove:"Class bookshelf",
+  river:"Creative wall", forest:"Study lounge", falls:"Science station", hills:"Community board",
+  village:"Full classroom", island:"Studio loft", ruins:"Archive room", celestial:"Lumora academy",
 };
 
 const WORLD_CSS = `
@@ -1568,7 +1570,6 @@ export default function App() {
   const [modal, setModal] = useState(null); // 'subject' | 'shop' | 'badges' | 'class' | 'room' | 'menu' | 'levelup'
   const [levelUpInfo, setLevelUpInfo] = useState(null);
   const [celebrating, setCelebrating] = useState(false);
-  const [worldStreak, setWorldStreak] = useState(0);
   const [toastNode, toast] = useToast();
 
   const tickRef = useRef(null);
@@ -1640,25 +1641,6 @@ export default function App() {
     });
     return ()=>{ live=false; };
   }, [user]);
-
-  // Streak adds subtle ambience to the Living World and refreshes after sessions.
-  useEffect(()=>{
-    if(!user) return;
-    let live = true;
-    fbLoadHistory(user).then(history=>{
-      if(!live || !Array.isArray(history)) return;
-      const days = new Set(history.map(s=>startOfDay(new Date(s.ts)).getTime()));
-      let streak = 0;
-      let cursor = startOfDay(new Date()).getTime();
-      while(days.has(cursor)){ streak++; cursor -= 86400000; }
-      if(streak===0){
-        cursor = startOfDay(new Date()).getTime() - 86400000;
-        while(days.has(cursor)){ streak++; cursor -= 86400000; }
-      }
-      setWorldStreak(streak);
-    });
-    return ()=>{ live=false; };
-  }, [user, xp]);
 
   // ── Derived ──
   const subjectObj = subjects.find(s=>s.id===subject) || subjects[0] || DEFAULT_SUBJECTS[0];
@@ -1923,51 +1905,30 @@ export default function App() {
   const isNewUser = xp < 1;
   const tierPosition = Math.max(0, EVO_TIERS.findIndex(t=>t.id===tier.id));
   const navItems = [
-    ["focus","Focus","◉"],
-    ["classes","Classes","♧"],
-    ["board","Ranks","◇"],
-    ["stats","Stats","↗"],
+    { id:"focus", label:"Focus", icon:"◉" },
+    { id:"classes", label:"Classroom", icon:"♧" },
+    { id:"board", label:"Ranks", icon:"◇" },
+    { id:"stats", label:"Progress", icon:"↗" },
   ];
 
   return (
     <div className="sg-shell" data-theme={theme}>
       <style>{APP_CSS+DARK_CSS}</style>
-      <div style={S.app} className="sg-app">
-        {toastNode}
-
-        {/* ── Header ── */}
-        <div style={S.header} className="sg-header">
-          <div style={S.logo}>{BRAND.logo} {BRAND.name}</div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {!isNewUser && <div style={S.coinChip}>🪙 {coins}</div>}
-            <button style={S.menuBtn} onClick={()=>setModal("menu")} aria-label="Open profile and settings">
-              <div style={S.menuAvatar}>{initials}</div>
-              <span style={S.menuBars}>≡</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Level / XP bar ── */}
-        {!isNewUser && (
-          <div style={S.xpWrap}>
-            <div style={S.xpTop}>
-              <span style={{fontWeight:800,fontSize:13,color:BRAND.primary}}>Lv {level} · {tier.name}</span>
-              <span style={{fontSize:11,color:BRAND.muted}}>{xpInfo.into}/{xpInfo.span} XP</span>
-            </div>
-            <div style={S.xpTrack}><div style={{...S.xpFill,width:`${xpInfo.pct*100}%`}}/></div>
-          </div>
-        )}
-
-        {/* ── Tabs ── */}
-        {!isNewUser && (
-          <div style={S.nav} className="sg-nav" aria-label="Main navigation">
-            {navItems.map(([id,lbl,icon])=>(
-              <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}} onClick={()=>setTab(id)} aria-current={tab===id?"page":undefined}>
-                <span className="lm-nav-icon" aria-hidden="true">{icon}</span>{lbl}
-              </button>
-            ))}
-          </div>
-        )}
+      <LumoraShell
+        navItems={navItems}
+        activeNav={tab}
+        onNavigate={setTab}
+        onOpenMenu={()=>setModal("menu")}
+        initials={initials}
+        coins={coins}
+        level={level}
+        tierName={tier.name}
+        xpLabel={`${xpInfo.into}/${xpInfo.span} XP`}
+        xpPercent={xpInfo.pct*100}
+        compact={isNewUser}
+      >
+        <div style={S.app} className="sg-app">
+          {toastNode}
 
         {/* ════════ FOCUS TAB ════════ */}
         {tab==="focus" && (
@@ -2115,16 +2076,15 @@ export default function App() {
 
               </section>
 
-              <section className="lm-stage-card" aria-label="Your Lumora world">
+              <section className="lm-stage-card" aria-label="Your Lumora classroom">
                 <div className="lm-section-kicker" style={{justifyContent:"center"}}>{paused?"Light resting":running?"Light in focus":"Your Lumora"}</div>
                 <div className="lm-growth-stage"><span className="lm-growth-dot"/><strong>{tier.name}</strong><span>· stage {tierPosition+1} of {EVO_TIERS.length}</span></div>
-                <div className="lm-world-frame">
-                  <LivingWorld lifetimeHours={xp/60} streak={worldStreak} seedStr={user}
-                    focusing={running&&!paused} weather={todaysWeather}/>
-                  <div className="lm-world-avatar">
+                <div className="lm-world-frame lm-classroom-frame">
+                  <ClassroomScene peers={presence} currentUser={user} stage={tierPosition}
+                    weather={todaysWeather.id} focusing={running&&!paused}>
                     <AvatarSVG large progress={running?sessionProgress:(isNewUser ? 0.35 : 0.72)} tier={tier.id}
                       equipped={avatar} color={subjectObj.color} paused={paused} idle={!running} celebrate={celebrating}/>
-                  </div>
+                  </ClassroomScene>
                   <div className="lm-world-weather">
                     <span aria-hidden="true">{({clear:"☀️",cloudy:"☁️",rain:"🌧️",storm:"⛈️",snow:"❄️",fog:"🌫️"})[todaysWeather.id]}</span>
                     {!isNewUser && WEATHER_LABEL[todaysWeather.id]}
@@ -2132,10 +2092,10 @@ export default function App() {
                 </div>
                 <div className="lm-world-progress">
                   <div className="lm-world-progress-top">
-                    <strong>{isNewUser?"A new light is waiting":`${(xp/60).toFixed(1)} hours of world growth`}</strong>
-                    <span>{isNewUser?"First session → meadow":(currentWorld.maxed ? "World complete" : `Next: ${WORLD_STAGE_LABEL[currentWorld.next?.id]||"new landmark"}`)}</span>
+                    <strong>{isNewUser?"A new light is waiting":`${(xp/60).toFixed(1)} hours of classroom growth`}</strong>
+                    <span>{isNewUser?"First session → quiet desk":(currentWorld.maxed ? "Classroom complete" : `Next: ${CLASSROOM_STAGE_LABEL[currentWorld.next?.id]||"new classroom detail"}`)}</span>
                   </div>
-                  <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next world landmark`}>
+                  <div className="lm-world-progress-track" aria-label={`${Math.round((currentWorld.maxed?1:currentWorld.toNext)*100)}% to the next classroom milestone`}>
                     <div className="lm-world-progress-fill" style={{width:`${(currentWorld.maxed?1:currentWorld.toNext)*100}%`}}/>
                   </div>
                 </div>
@@ -2313,7 +2273,8 @@ export default function App() {
           </Modal>
         )}
 
-      </div>
+        </div>
+      </LumoraShell>
     </div>
   );
 }
