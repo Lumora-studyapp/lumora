@@ -278,7 +278,7 @@ body { background:var(--lm-bg); }
 .sg-main { width:100%; }
 .lm-focus-layout { display:grid; grid-template-columns:minmax(390px,1.12fr) minmax(320px,.88fr); gap:18px; align-items:stretch; }
 .lm-focus-card, .lm-stage-card { background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:28px; box-shadow:var(--lm-shadow-soft); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-.lm-focus-card { grid-column:2; grid-row:1; padding:28px; }
+.lm-focus-card { grid-column:2; grid-row:1; width:100%; min-width:0; padding:28px; }
 .lm-stage-card { grid-column:1; grid-row:1; padding:20px 24px 24px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:560px; }
 .lm-stage-card::before { content:""; position:absolute; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle,var(--lm-primary-shadow),transparent 68%); top:26px; left:50%; transform:translateX(-50%); pointer-events:none; }
 .lm-section-kicker { display:flex; align-items:center; gap:8px; color:var(--lm-primary); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; margin-bottom:7px; }
