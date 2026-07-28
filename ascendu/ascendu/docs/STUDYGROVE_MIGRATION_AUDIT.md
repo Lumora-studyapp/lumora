@@ -11,12 +11,12 @@
 
 ## Migrated interaction patterns
 
-- Compact branded application shell
-- Persistent desktop navigation rail
-- Safe-area-aware mobile bottom navigation
-- Compact account and currency actions
-- Progress visibility without taking space from the focus workflow
-- Card, sheet, and responsive spacing conventions
+- StudyGrove's centered `440px` application workspace on larger screens
+- StudyGrove's compact top brand, currency, and account-actions row
+- StudyGrove's full-width tab strip directly below the header
+- The same vertically stacked content flow on desktop and mobile
+- Compact progress visibility adapted for Lumora's XP model
+- Card, sheet, button, and responsive spacing conventions
 - Transform/opacity-only ambient motion with reduced-motion support
 
 ## Lumora adaptations

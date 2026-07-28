@@ -272,14 +272,14 @@ body { background:var(--lm-bg); }
 .sg-shell::before, .sg-shell::after { content:""; position:fixed; width:42vw; height:42vw; border-radius:50%; filter:blur(80px); opacity:.17; pointer-events:none; z-index:-1; }
 .sg-shell::before { background:#7E6BFF; top:-18vw; right:-12vw; }
 .sg-shell::after { background:#F5B85D; bottom:-24vw; left:-16vw; }
-.sg-app { width:min(1120px,100%); margin:0 auto; }
+.sg-app { width:100%; margin:0 auto; }
 .sg-header { backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
 .sg-nav { backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
 .sg-main { width:100%; }
-.lm-focus-layout { display:grid; grid-template-columns:minmax(390px,1.12fr) minmax(320px,.88fr); gap:18px; align-items:stretch; }
-.lm-focus-card, .lm-stage-card { background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:28px; box-shadow:var(--lm-shadow-soft); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-.lm-focus-card { grid-column:2; grid-row:1; width:100%; min-width:0; padding:28px; }
-.lm-stage-card { grid-column:1; grid-row:1; padding:20px 24px 24px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; min-height:560px; }
+.lm-focus-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-items:stretch; }
+.lm-focus-card, .lm-stage-card { min-width:0; background:var(--lm-surface); border:1px solid var(--lm-border); border-radius:18px; box-shadow:0 1px 4px rgba(35,28,75,.07); }
+.lm-focus-card { width:100%; padding:19px 16px; }
+.lm-stage-card { padding:16px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; }
 .lm-stage-card::before { content:""; position:absolute; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle,var(--lm-primary-shadow),transparent 68%); top:26px; left:50%; transform:translateX(-50%); pointer-events:none; }
 .lm-section-kicker { display:flex; align-items:center; gap:8px; color:var(--lm-primary); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; margin-bottom:7px; }
 .lm-section-kicker::before { content:""; width:18px; height:2px; border-radius:2px; background:linear-gradient(90deg,var(--lm-primary),var(--lm-accent)); }
@@ -377,7 +377,7 @@ body { background:var(--lm-bg); }
   .sg-tap-card:hover { transform:translateY(-2px); box-shadow:var(--lm-shadow-soft); }
 }
 @media (min-width:760px) {
-  .sg-app { padding:18px 24px 46px; }
+  .sg-app { padding:0 0 30px; }
   .sg-header { position:sticky; top:14px; z-index:80; border:1px solid var(--lm-border); border-radius:22px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); margin-bottom:14px; }
   .sg-nav { position:sticky; top:88px; z-index:70; width:max-content; margin:0 auto 20px; padding:5px !important; border:1px solid var(--lm-border) !important; border-radius:16px; background:var(--lm-surface); box-shadow:var(--lm-shadow-soft); }
   .sg-nav button { min-width:112px; }
@@ -385,18 +385,18 @@ body { background:var(--lm-bg); }
   .sg-board-view { width:min(760px,100%); margin:0 auto; }
 }
 @media (max-width:759px) {
-  .sg-app { padding-bottom:94px !important; }
+  .sg-app { padding-bottom:30px !important; }
   .sg-header { background:linear-gradient(180deg,var(--lm-bg) 58%,transparent); }
   .sg-nav { position:fixed !important; left:12px; right:12px; bottom:10px; z-index:250; padding:6px !important; border:1px solid var(--lm-border) !important; border-radius:21px; background:var(--lm-surface) !important; box-shadow:0 16px 50px rgba(24,20,48,.22); }
   .sg-nav button { padding:8px 0 !important; }
   .lm-focus-layout { grid-template-columns:1fr; gap:14px; }
   .lm-focus-card, .lm-stage-card { grid-column:auto; grid-row:auto; }
-  .lm-stage-card { min-height:500px; order:-1; }
+  .lm-stage-card { min-height:0; }
   .lm-focus-card { padding:19px 16px; }
   .lm-quick-actions { gap:7px; }
 }
 @media (max-width:390px) {
-  .lm-stage-card { min-height:450px; padding-inline:14px; }
+  .lm-stage-card { min-height:0; padding-inline:14px; }
   .lm-orb-stage { min-height:245px; transform:scale(.92); margin:-8px 0; }
   .lm-world-frame { height:238px; }
   .lm-world-avatar { transform:scale(.76); }
