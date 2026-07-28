@@ -1,4 +1,4 @@
-// Firebase initialization for AscendU.
+// Firebase initialization for Lumora.
 // Config is read from Vite env vars (see .env.example). Fill in .env.local with
 // your project's values from the Firebase console → Project settings → Your apps.
 

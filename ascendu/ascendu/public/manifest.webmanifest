@@ -1,11 +1,11 @@
 {
-  "name": "AscendU",
-  "short_name": "AscendU",
-  "description": "Focus, grow your avatar, and climb the leaderboard with your class.",
+  "name": "Lumora",
+  "short_name": "Lumora",
+  "description": "Focus with a growing character in a living classroom.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F5F7F2",
-  "theme_color": "#2D6A4F",
+  "background_color": "#F4F3FA",
+  "theme_color": "#6D5DF6",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
