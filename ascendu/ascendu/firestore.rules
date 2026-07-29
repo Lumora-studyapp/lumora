@@ -1,80 +1,121 @@
 rules_version = '2';
 
-// AscendU Firestore security rules.
-//
-// Identity model: the app's public key is a *username*, mapped to a Firebase
-// Auth uid via the `usernames/{username}` document. Most collections are keyed
-// by username. Because rules can't cheaply reverse username→uid on every write,
-// these rules require the caller to be signed in and apply per-document checks
-// where ownership is provable. Tighten further before a public launch — see the
-// notes inline.
-//
-// Deploy: `firebase deploy --only firestore:rules`
-
+// Lumora Firestore rules for the independent StudyGrove migration.
+// Deploy manually after reviewing the migration preview:
+//   firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    function signedIn() { return request.auth != null; }
+    function ownsUsername(username) {
+      return signedIn()
+        && get(/databases/$(database)/documents/usernames/$(username)).data.uid == request.auth.uid;
+    }
 
-    // Username reservations: anyone signed in can read (to resolve names), but a
-    // username doc can only be created by its owner and never reassigned.
+    // Administrators are configured in Firestore rather than copied from a
+    // StudyGrove username. Create roles/{firebaseUid} with { admin: true }.
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.admin == true;
+    }
+
+    match /roles/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     match /usernames/{username} {
       allow read: if signedIn();
       allow create: if signedIn()
-                    && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if signedIn()
-                    && resource.data.uid == request.auth.uid;
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if ownsUsername(username);
     }
 
-    // Per-user preferences. We store the owner uid on the doc and check it.
-    // (App writes prefs under the username id; the `ownerUid` field is the guard.)
     match /prefs/{username} {
       allow read: if signedIn();
-      allow write: if signedIn()
-                   && (!('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid)
-                   && (!('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid);
+      allow write: if ownsUsername(username)
+        && (!('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid)
+        && (!('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid);
     }
 
-    // Personal session history.
     match /history/{username} {
       allow read: if signedIn();
-      allow write: if signedIn();
+      allow write: if ownsUsername(username) || isAdmin();
     }
 
-    // Leaderboards & class boards: readable by all signed-in users.
-    //
-    // The client has a dev fallback that writes these directly, but the trusted
-    // path is the `recordSession` Cloud Function (runs as admin, bypasses rules).
-    // ONCE THE FUNCTION IS DEPLOYED, change the write rule below to `if false`
-    // so only the function can write totals — this is what stops score tampering.
-    match /leaderboard_weekly/{doc} {
-      allow read: if signedIn();
-      allow write: if signedIn();   // → change to `if false` after deploying functions
-    }
-    match /leaderboard_alltime/{doc} {
-      allow read: if signedIn();
-      allow write: if signedIn();   // → change to `if false` after deploying functions
-    }
-    match /class_boards/{doc} {
-      allow read: if signedIn();
-      allow write: if signedIn();   // → change to `if false` after deploying functions
+    match /tasks/{username}/items/{taskId} {
+      allow read, write: if ownsUsername(username);
     }
 
-    // Live presence: readable by all signed-in users; each person writes their
-    // own presence doc (id == their username).
     match /presence/{username} {
       allow read: if signedIn();
+      allow write: if ownsUsername(username);
+    }
+
+    // StudyGrove-compatible aggregate boards are retained. Client-side
+    // transactions require signed-in writes until all mutations are moved to
+    // trusted functions; this is called out as a compatibility risk in the PR.
+    match /leaderboard_weekly/{documentId} {
+      allow read, write: if signedIn();
+    }
+    match /leaderboard_alltime/{documentId} {
+      allow read, write: if signedIn();
+    }
+    match /leaderboard_reward_claims/{documentId} {
+      allow read, write: if signedIn();
+    }
+
+    match /leaderboard_groups/{groupId} {
+      allow read, write: if signedIn();
+    }
+    match /leaderboard_group_memberships/{username} {
+      allow read: if signedIn();
       allow write: if signedIn();
     }
-
-    // Classes: signed-in users can read, create, and join (members arrayUnion).
-    match /classes/{code} {
-      allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if signedIn() && resource.data.owner != null;
+    match /leaderboard_group_invites/{inviteId} {
+      allow read, write: if signedIn();
+    }
+    match /leaderboard_group_invite_inboxes/{username} {
+      allow read, write: if signedIn();
     }
 
-    // Co-op rooms: ephemeral; signed-in users can read/write while a room lives.
+    match /announcementSystem/{documentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /replies/{replyId} {
+        allow read: if signedIn();
+        allow create, update, delete: if signedIn();
+
+        match /reactions/{reactionId} {
+          allow read, write: if signedIn();
+        }
+      }
+
+      match /reactions/{reactionId} {
+        allow read, write: if signedIn();
+      }
+    }
+
+    match /adminLog/{documentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Existing Lumora collections remain available so no previous data is
+    // removed by this UI migration.
+    match /class_boards/{documentId} {
+      allow read, write: if signedIn();
+    }
+    match /classes/{code} {
+      allow read, create, update: if signedIn();
+      allow delete: if signedIn() && resource.data.owner != null;
+    }
     match /rooms/{code} {
       allow read, write: if signedIn();
     }

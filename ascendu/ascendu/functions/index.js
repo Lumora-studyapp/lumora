@@ -13,10 +13,200 @@
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
+const { getFirestore } = require("firebase-admin/firestore");
+const crypto = require("node:crypto");
 
 initializeApp();
 const db = getFirestore();
+
+const RECOVERY_QUESTIONS = new Set([
+  "What was the name of your first pet?",
+  "What primary school did you go to?",
+  "What's your favourite subject?",
+  "What city were you born in?",
+  "What's your mother's maiden name?",
+]);
+
+function normalizeUsername(value) {
+  return String(value || "").trim().normalize("NFC").toLowerCase();
+}
+
+function validateUsername(value) {
+  const username = normalizeUsername(value);
+  if (username.length < 2 || username.length > 20 || !/^[a-z0-9_]+$/.test(username)) {
+    throw new HttpsError("invalid-argument", "Usernames use 2-20 letters, numbers, or underscores.");
+  }
+  return username;
+}
+
+function validatePassword(value) {
+  const password = String(value || "");
+  if (password.length < 6 || password.length > 128) {
+    throw new HttpsError("invalid-argument", "Password must be 6-128 characters.");
+  }
+  return password;
+}
+
+function recoveryHash(uid, username, answer) {
+  return crypto.scryptSync(
+    String(answer || "").trim().normalize("NFC").toLowerCase(),
+    `lumora:${uid}:${username}`,
+    32,
+  ).toString("hex");
+}
+
+function safeHashEqual(left, right) {
+  const a = Buffer.from(String(left || ""), "hex");
+  const b = Buffer.from(String(right || ""), "hex");
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
+async function verifyFirebasePassword(email, password, apiKey) {
+  if (!apiKey || typeof apiKey !== "string" || apiKey.length > 256) {
+    throw new HttpsError("failed-precondition", "Lumora's Firebase API key is not configured.");
+  }
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.localId) {
+    throw new HttpsError("unauthenticated", "Wrong username or password.");
+  }
+  return result.localId;
+}
+
+/**
+ * Username-first authentication bridge.
+ *
+ * StudyGrove's screen doubles as sign-in and account creation. Lumora keeps
+ * that UX, but credentials live exclusively in Firebase Authentication. This
+ * callable verifies existing email-backed Lumora accounts, creates independent
+ * username-only Lumora accounts when needed, and returns a short-lived custom
+ * token for the client.
+ */
+exports.authenticateUsername = onCall(async (request) => {
+  const username = validateUsername(request.data?.username);
+  const password = validatePassword(request.data?.password);
+  const usernameRef = db.collection("usernames").doc(username);
+  const recoveryRef = db.collection("accountRecovery").doc(username);
+  const usernameSnap = await usernameRef.get();
+
+  if (usernameSnap.exists) {
+    const account = usernameSnap.data() || {};
+    if (!account.uid || !account.email) {
+      throw new HttpsError("failed-precondition", "This Lumora account needs an administrator to repair its login mapping.");
+    }
+    const verifiedUid = await verifyFirebasePassword(account.email, password, request.data?.firebaseApiKey);
+    if (verifiedUid !== account.uid) {
+      throw new HttpsError("permission-denied", "The username mapping does not match this account.");
+    }
+    return { ok: true, created: false, customToken: await getAuth().createCustomToken(account.uid) };
+  }
+
+  const email = `${username}@accounts.lumora.invalid`;
+  let account;
+  try {
+    account = await getAuth().createUser({ email, password, displayName: username });
+  } catch (error) {
+    if (error?.code !== "auth/email-already-exists") throw error;
+    account = await getAuth().getUserByEmail(email);
+  }
+
+  const recovery = request.data?.recovery;
+  const accountData = {
+    uid: account.uid,
+    email,
+    displayName: username,
+    createdAt: Date.now(),
+    authModel: "firebase-auth",
+  };
+  let recoveryData = null;
+  if (recovery?.question && recovery?.answer) {
+    if (!RECOVERY_QUESTIONS.has(recovery.question)) {
+      throw new HttpsError("invalid-argument", "Invalid recovery question.");
+    }
+    recoveryData = {
+      uid: account.uid,
+      question: recovery.question,
+      answerHash: recoveryHash(account.uid, username, recovery.answer),
+      updatedAt: Date.now(),
+    };
+  }
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const current = await tx.get(usernameRef);
+      if (current.exists && current.data()?.uid !== account.uid) {
+        throw new HttpsError("already-exists", "That username is already taken.");
+      }
+      tx.set(usernameRef, accountData, { merge: true });
+      if (recoveryData) tx.set(recoveryRef, recoveryData, { merge: true });
+    });
+  } catch (error) {
+    if (!usernameSnap.exists) await getAuth().deleteUser(account.uid).catch(() => {});
+    throw error;
+  }
+
+  return { ok: true, created: true, customToken: await getAuth().createCustomToken(account.uid) };
+});
+
+exports.getRecoveryQuestion = onCall(async (request) => {
+  const username = validateUsername(request.data?.username);
+  const usernameSnap = await db.collection("usernames").doc(username).get();
+  if (!usernameSnap.exists) throw new HttpsError("not-found", "No account with that username.");
+  const recoverySnap = await db.collection("accountRecovery").doc(username).get();
+  const question = recoverySnap.data()?.question;
+  if (!question) {
+    throw new HttpsError("failed-precondition", "This account has no recovery question set. Existing email-based accounts should use Firebase's email reset flow.");
+  }
+  return { ok: true, question };
+});
+
+exports.resetUsernamePassword = onCall(async (request) => {
+  const username = validateUsername(request.data?.username);
+  const newPassword = validatePassword(request.data?.newPassword);
+  const answer = String(request.data?.answer || "").trim();
+  if (answer.length < 2 || answer.length > 120) throw new HttpsError("invalid-argument", "Enter your recovery answer.");
+  const [usernameSnap, recoverySnap] = await Promise.all([
+    db.collection("usernames").doc(username).get(),
+    db.collection("accountRecovery").doc(username).get(),
+  ]);
+  if (!usernameSnap.exists) throw new HttpsError("not-found", "No account with that username.");
+  const account = usernameSnap.data() || {};
+  const recovery = recoverySnap.data() || {};
+  const suppliedHash = recoveryHash(account.uid, username, answer);
+  if (!safeHashEqual(recovery.answerHash, suppliedHash) || recovery.uid !== account.uid) {
+    throw new HttpsError("permission-denied", "That answer doesn't match.");
+  }
+  await getAuth().updateUser(account.uid, { password: newPassword });
+  return { ok: true, customToken: await getAuth().createCustomToken(account.uid) };
+});
+
+exports.setRecoveryQuestion = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in to update recovery settings.");
+  const username = validateUsername(request.data?.username);
+  const question = String(request.data?.question || "");
+  const answer = String(request.data?.answer || "").trim();
+  if (!RECOVERY_QUESTIONS.has(question) || answer.length < 2 || answer.length > 120) {
+    throw new HttpsError("invalid-argument", "Choose a recovery question and provide an answer.");
+  }
+  const ref = db.collection("usernames").doc(username);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.uid !== uid) {
+    throw new HttpsError("permission-denied", "The signed-in account does not own this username.");
+  }
+  await db.collection("accountRecovery").doc(username).set({
+    uid,
+    question,
+    answerHash: recoveryHash(uid, username, answer),
+    updatedAt: Date.now(),
+  }, { merge: true });
+  return { ok: true };
+});
 
 // Same ISO-week key the client uses, computed server-side.
 function getWeekKey(d = new Date()) {
