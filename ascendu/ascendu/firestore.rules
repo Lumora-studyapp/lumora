@@ -27,7 +27,10 @@ service cloud.firestore {
     }
 
     match /usernames/{username} {
-      allow read: if signedIn();
+      // Username sign-in needs a single mapping lookup before Firebase Auth is
+      // established. Prevent collection enumeration while allowing that get.
+      allow get: if true;
+      allow list: if signedIn();
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid;
       allow update, delete: if ownsUsername(username);

@@ -43,13 +43,21 @@ Preview and Production environments:
 Lumora usernames allowed to see the admin interface. Firestore additionally
 requires `roles/{firebaseUid}` with `{ admin: true }` for privileged writes.
 
+`VITE_LUMORA_AUTH_FUNCTIONS` defaults to `false`. Leave it disabled while
+LUMORA uses Firebase's Spark plan. Set it to `true` only after the callable
+authentication and recovery functions have been deployed successfully.
+
 Never use StudyGrove's Firebase values in Lumora.
 
 ## Firebase identity and compatibility
 
 Lumora continues to use Firebase Authentication and the existing
-`usernames/{username}` mapping. The copied username-first login screen calls
-Lumora Cloud Functions which:
+`usernames/{username}` mapping. On the Firebase Spark plan, the username-first
+login screen uses LUMORA's enabled Email/Password provider directly and creates
+a deterministic, non-routable Firebase email for new username-only accounts.
+Existing Lumora mappings that contain a real login email remain compatible.
+
+An optional callable-functions mode can later:
 
 - verify existing Lumora email/password accounts;
 - create independent username-only Firebase Auth accounts when a username does
@@ -68,18 +76,25 @@ copied experience are added lazily with merge writes and safe defaults.
 
 ## Firebase deployment
 
-Review and deploy the migration's functions and rules to Lumora's Firebase
-project before testing authenticated features:
+The committed `.firebaserc` pins Firebase CLI operations to the LUMORA project
+`lumora-c8437`. Do not replace it with StudyGrove's project ID.
+
+Direct account creation works without Cloud Functions. Review and deploy the
+rules and indexes when Firebase CLI access is available:
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+If LUMORA is upgraded to a plan that supports Cloud Functions, deploy the
+optional recovery backend and then set `VITE_LUMORA_AUTH_FUNCTIONS=true`:
 
 ```bash
 cd functions
 npm install
 cd ..
-firebase use YOUR_LUMORA_PROJECT_ID
-firebase deploy --only functions,firestore:rules,firestore:indexes
+firebase deploy --only functions
 ```
-
-Cloud Functions require a Firebase project plan that supports deployments.
 
 ## Vercel
 

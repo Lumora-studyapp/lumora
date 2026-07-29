@@ -19,8 +19,10 @@ import {
   query, where, orderBy, limit, startAfter, serverTimestamp
 } from "firebase/firestore";
 import {
-  EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential,
-  signInWithCustomToken, signOut as firebaseSignOut, updatePassword,
+  createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
+  onAuthStateChanged, reauthenticateWithCredential,
+  signInWithEmailAndPassword, signInWithCustomToken,
+  signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 
@@ -33,6 +35,7 @@ const LS_MODE     = "studygrove_mode";
 const LS_COINS    = "studygrove_coins";
 const ADMIN_USERS = (import.meta.env.VITE_LUMORA_ADMIN_USERNAMES || "")
   .split(",").map(canon => canon.trim().normalize("NFC").toLowerCase()).filter(Boolean);
+const AUTH_FUNCTIONS_ENABLED = import.meta.env.VITE_LUMORA_AUTH_FUNCTIONS === "true";
 const ANNOUNCEMENT_ADMIN = ADMIN_USERS[0] || "";
 const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
 const LS_EXAMS    = "studygrove_exams";
@@ -2188,7 +2191,92 @@ const callableError = (error, fallback) => {
   return message||fallback;
 };
 
+const usernameAuthEmail = username => `${canonUsername(username)}@users.lumora.invalid`;
+
+const directAuthError = error => {
+  const code=String(error?.code||"");
+  if(code.includes("invalid-credential")||code.includes("wrong-password"))return "That password isn't correct.";
+  if(code.includes("too-many-requests"))return "Too many attempts. Wait a moment and try again.";
+  if(code.includes("weak-password"))return "Password must be at least 6 characters.";
+  if(code.includes("operation-not-allowed"))return "Lumora email/password sign-in is not enabled in Firebase.";
+  if(code.includes("network-request-failed"))return "Couldn't reach Firebase. Check your connection and try again.";
+  return `Couldn't sign in: ${code||error?.message||"unknown Firebase error"}`;
+};
+
+// The LUMORA Firebase project currently uses the Spark plan, so Cloud
+// Functions are unavailable. Authenticate directly with Firebase Auth while
+// retaining the same username-first StudyGrove UI and Lumora username mapping.
+async function authenticateUsernameDirect(username,password){
+  const displayName=String(username||"").trim();
+  const key=canonUsername(displayName);
+  if(key.length<2)return {ok:false,error:"Username needs at least 2 characters."};
+  if(key.length>20)return {ok:false,error:"Username can be at most 20 characters."};
+  if(!/^[a-z0-9_]+$/.test(key))return {ok:false,error:"Username can use letters, numbers, and underscores only."};
+  const usernameRef=doc(db,"usernames",key);
+  let usernameSnap;
+  try{
+    usernameSnap=await getDoc(usernameRef);
+  }catch(error){
+    return {ok:false,error:"Couldn't read the LUMORA username directory. Check Firestore permissions."};
+  }
+
+  if(usernameSnap.exists()){
+    const account=usernameSnap.data()||{};
+    const email=String(account.email||usernameAuthEmail(key));
+    try{
+      const credential=await signInWithEmailAndPassword(auth,email,password);
+      if(account.uid&&account.uid!==credential.user.uid){
+        await firebaseSignOut(auth);
+        return {ok:false,error:"That username belongs to a different Lumora account."};
+      }
+      if(!account.uid||!account.email||!account.displayName){
+        await setDoc(usernameRef,{
+          uid:credential.user.uid,email,
+          displayName:account.displayName||displayName,
+        },{merge:true});
+      }
+      return {ok:true,created:false,username:account.displayName||displayName};
+    }catch(error){
+      return {ok:false,error:directAuthError(error)};
+    }
+  }
+
+  const email=usernameAuthEmail(key);
+  let credential;
+  let created=false;
+  try{
+    credential=await createUserWithEmailAndPassword(auth,email,password);
+    created=true;
+  }catch(error){
+    if(!String(error?.code||"").includes("email-already-in-use")){
+      return {ok:false,error:directAuthError(error)};
+    }
+    try{
+      credential=await signInWithEmailAndPassword(auth,email,password);
+    }catch(signInError){
+      return {ok:false,error:directAuthError(signInError)};
+    }
+  }
+
+  try{
+    const latest=await getDoc(usernameRef);
+    if(latest.exists()&&latest.data()?.uid!==credential.user.uid){
+      if(created)await deleteUser(credential.user).catch(()=>{});
+      else await firebaseSignOut(auth).catch(()=>{});
+      return {ok:false,error:"That username is already taken."};
+    }
+    await setDoc(usernameRef,{
+      uid:credential.user.uid,email,displayName,createdAt:Date.now(),authVersion:2,
+    },{merge:true});
+    return {ok:true,created,username:displayName};
+  }catch(error){
+    if(created)await deleteUser(credential.user).catch(()=>{});
+    return {ok:false,error:"Firebase created the login but couldn't connect its Lumora data. Please try again."};
+  }
+}
+
 async function fbSavePassword(username, password, recovery) {
+  if(!AUTH_FUNCTIONS_ENABLED)return authenticateUsernameDirect(username,password);
   try{
     const response=await authenticateUsername({
       username:canonUsername(username),password,recovery,
@@ -2205,6 +2293,7 @@ async function fbSavePassword(username, password, recovery) {
 
 // Fetch the recovery question for a username (for the forgot-password flow)
 async function fbGetRecoveryQuestion(username) {
+  if(!AUTH_FUNCTIONS_ENABLED)return {ok:false,error:"Password recovery requires Lumora Cloud Functions, which are not enabled yet."};
   try {
     const response=await getRecoveryQuestion({username:canonUsername(username)});
     return response.data||{ok:false,error:"Recovery isn't available for this account."};
@@ -2215,6 +2304,7 @@ async function fbGetRecoveryQuestion(username) {
 
 // Verify the recovery answer and set a new password
 async function fbResetPassword(username, answer, newPassword) {
+  if(!AUTH_FUNCTIONS_ENABLED)return {ok:false,error:"Password recovery requires Lumora Cloud Functions, which are not enabled yet."};
   try {
     const response=await resetUsernamePassword({
       username:canonUsername(username),answer,newPassword,
@@ -2231,6 +2321,7 @@ async function fbResetPassword(username, answer, newPassword) {
 // ── Account management (logged-in user) ──
 // Read which recovery question (if any) is set on the account.
 async function fbGetAccountInfo(username) {
+  if(!AUTH_FUNCTIONS_ENABLED)return {ok:true,recoveryQuestion:null,recoveryAvailable:false};
   try {
     const response=await getRecoveryQuestion({username:canonUsername(username)});
     const result=response.data||{};
@@ -2257,6 +2348,7 @@ async function fbChangePassword(username, currentPassword, newPassword) {
 
 // Set or update the recovery question + hashed answer.
 async function fbSetRecovery(username, question, answer) {
+  if(!AUTH_FUNCTIONS_ENABLED)return {ok:false,error:"Password recovery requires Lumora Cloud Functions, which are not enabled yet."};
   try {
     const response=await setRecoveryQuestion({username:canonUsername(username),question,answer});
     return response.data||{ok:false,error:"Something went wrong, try again"};
@@ -6396,7 +6488,7 @@ function AccountPanel({ user, admin, onClose, onBack }) {
         ) : (
           <>
             {/* No-recovery warning nudge */}
-            {!recQ && (
+            {AUTH_FUNCTIONS_ENABLED && !recQ && (
               <div style={ap.warn}>
                 <span style={{fontSize:16}}>⚠️</span>
                 <span>No recovery question set — you won't be able to reset your password if you forget it.</span>
@@ -6419,7 +6511,7 @@ function AccountPanel({ user, admin, onClose, onBack }) {
             </div>
 
             {/* Recovery question */}
-            <div style={ap.section}>
+            {AUTH_FUNCTIONS_ENABLED ? <div style={ap.section}>
               <div style={ap.secTitle}>Recovery question</div>
               {recQ && <div style={ap.current}>Current: <b>{recQ}</b></div>}
               <select style={ap.select} value={selQ} onChange={e=>setSelQ(e.target.value)}>
@@ -6431,7 +6523,12 @@ function AccountPanel({ user, admin, onClose, onBack }) {
               <button style={{...ap.saveBtn,opacity:recBusy?0.6:1}} disabled={recBusy} onClick={saveRecovery}>
                 {recBusy?"Saving…":(recQ?"Update recovery question":"Set recovery question")}
               </button>
-            </div>
+            </div> : <div style={ap.section}>
+              <div style={ap.secTitle}>Recovery question</div>
+              <div style={{fontSize:12.5,color:"#777",lineHeight:1.5}}>
+                Recovery questions will be available after Lumora Cloud Functions are enabled.
+              </div>
+            </div>}
           </>
         )}
 
@@ -8189,8 +8286,8 @@ function LoginScreen({ onLogin }) {
           value={pass} onChange={e=>{setPass(e.target.value);setErr("");}}
           onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>
 
-        {/* Optional recovery setup for new accounts */}
-        {showRecovery ? (
+        {/* Recovery questions require the optional callable-functions backend. */}
+        {AUTH_FUNCTIONS_ENABLED && (showRecovery ? (
           <div style={S.recBox}>
             <p style={S.recHint}>If you're making a new account, set this so you can reset your password later:</p>
             <select style={S.recSelect} value={recQ} onChange={e=>setRecQ(e.target.value)}>
@@ -8201,14 +8298,14 @@ function LoginScreen({ onLogin }) {
           </div>
         ) : (
           <button style={S.linkBtn} onClick={()=>setShowRecovery(true)}>＋ Set a recovery question (new accounts)</button>
-        )}
+        ))}
 
         {err&&<p style={S.errText}>{err}</p>}
         <p style={S.loginHint}>New user? Just pick a username and password.<br/>Returning? Use the same ones to log back in.</p>
         <button style={{...S.primaryBtn,opacity:loading?0.6:1}} onClick={go} disabled={loading}>
           {loading?"Checking...":"Enter Grove"}
         </button>
-        <button style={S.linkBtn} onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>
+        {AUTH_FUNCTIONS_ENABLED && <button style={S.linkBtn} onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
       </div>
     </div>
   );
