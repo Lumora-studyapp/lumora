@@ -1,25 +1,49 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#2D6A4F" />
-    <meta name="description" content="AscendU — focus app where you grow an avatar of yourself, climb leaderboards, and study with your class." />
-
-    <!-- iOS web-app / home-screen support -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="AscendU" />
-
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-
-    <!-- Inter from Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-
-    <title>AscendU</title>
+    <meta name="apple-mobile-web-app-title" content="Lumora" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Lumora</title>
+    <script>
+      // Paint the cached account background colour before React starts so
+      // returning users do not see a white flash. Firestore still replaces
+      // this cache with the account preference during app hydration.
+      try {
+        const owner = (localStorage.getItem("studygrove_username") || "").trim().normalize("NFC").toLowerCase();
+        const id = localStorage.getItem(owner ? `studygrove_background:${owner}` : "studygrove_background:guest") || "classic-grove";
+        const theme = localStorage.getItem("studygrove_theme") === "dark" ? "dark" : "light";
+        const colours = {
+          light: {
+            "classic-grove":"#F5F7F2","midnight-minimal":"#0B1112","forest-dawn":"#DDEDD7",
+            "cloud-classroom":"#DCEEF5","cherry-blossom-sky":"#F7DFE6","rainy-window":"#B8CAD3",
+            "golden-sunset":"#F4CDA8","library-study":"#B99D78","moonlit-grove":"#17263D",
+            "aurora-night":"#101D38","celestial-garden":"#181934"
+          },
+          dark: {
+            "classic-grove":"#101A16","midnight-minimal":"#050809","forest-dawn":"#102318",
+            "cloud-classroom":"#101D2A","cherry-blossom-sky":"#24131D","rainy-window":"#0F1A22",
+            "golden-sunset":"#281721","library-study":"#1A120D","moonlit-grove":"#090F1B",
+            "aurora-night":"#060C19","celestial-garden":"#090916"
+          }
+        };
+        const colour = colours[theme][id] || colours[theme]["classic-grove"];
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.setProperty("--sg-boot-bg", colour);
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", colour);
+      } catch {}
+    </script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #root { width: 100%; max-width: 100%; min-height: 100%; overflow-x: hidden; }
+      html, body { background: var(--sg-boot-bg, #F5F7F2); }
+    </style>
   </head>
   <body>
     <div id="root"></div>

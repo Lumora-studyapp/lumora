@@ -1,9 +1,9 @@
-// Firebase initialization for AscendU.
+// Firebase initialization for Lumora.
 // Config is read from Vite env vars (see .env.example). Fill in .env.local with
 // your project's values from the Firebase console → Project settings → Your apps.
 
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
 
@@ -16,15 +16,19 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// A friendly nudge if env vars are missing, so the app fails loudly, not silently.
-if (!firebaseConfig.apiKey) {
-  console.error(
-    "Firebase config is missing. Copy .env.example to .env.local and fill in your " +
-    "project values from the Firebase console."
-  );
+const missingFirebaseKeys = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingFirebaseKeys.length) {
+  console.error(`Lumora Firebase configuration is missing: ${missingFirebaseKeys.join(", ")}`);
 }
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Preserve StudyGrove's mobile-network reliability optimisation while using
+// Lumora's independent Firestore project.
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
