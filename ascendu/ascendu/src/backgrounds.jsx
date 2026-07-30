@@ -6,7 +6,7 @@ export const DEFAULT_BACKGROUND_ID = "classic-grove";
 export const BACKGROUND_CATALOGUE = Object.freeze([
   {
     id: DEFAULT_BACKGROUND_ID,
-    name: "Classic Grove",
+    name: "Classic Classroom",
     cost: 0,
     rarity: "Default",
     art: "classic",
@@ -37,7 +37,7 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     art: "midnight",
     tone: "dark",
     motion: "none",
-    description: "A near-black, distraction-free canvas with a quiet grove tint.",
+    description: "A near-black, distraction-free canvas with a quiet classroom tint.",
     baseColor: "#0B1112",
     gradient: "linear-gradient(155deg,#111918 0%,#0B1112 52%,#080D0F 100%)",
     shellSurface: "linear-gradient(180deg,rgba(244,248,245,.72),rgba(230,237,232,.63))",
@@ -56,13 +56,13 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "forest-dawn",
-    name: "Forest Dawn",
+    name: "Classroom Dawn",
     cost: 260,
     rarity: "Common",
     art: "forest",
     tone: "light",
     motion: "low",
-    description: "Pale woodland layers warmed by first light.",
+    description: "A calm classroom warmed by first light.",
     baseColor: "#DDEDD7",
     gradient: "linear-gradient(160deg,#FFF3D1 0%,#DDEFD8 48%,#A9CDA9 100%)",
     shellSurface: "linear-gradient(180deg,rgba(248,251,243,.62),rgba(235,245,233,.52))",
@@ -206,13 +206,13 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "moonlit-grove",
-    name: "Moonlit Grove",
+    name: "Moonlit Classroom",
     cost: 780,
     rarity: "Epic",
     art: "moonlit",
     tone: "dark",
     motion: "low",
-    description: "Deep navy woods beneath a restrained moon glow.",
+    description: "A deep navy study space beneath a restrained moon glow.",
     baseColor: "#17263D",
     gradient: "linear-gradient(160deg,#293C5C 0%,#17263D 56%,#0E1828 100%)",
     shellSurface: "linear-gradient(180deg,rgba(245,249,250,.72),rgba(229,238,243,.63))",
@@ -256,13 +256,13 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "celestial-garden",
-    name: "Celestial Garden",
+    name: "Celestial Classroom",
     cost: 1400,
     rarity: "Mythical",
     art: "celestial",
     tone: "dark",
     motion: "medium",
-    description: "Indigo gardens, orbiting motifs and quiet starlight.",
+    description: "An indigo classroom with orbiting motifs and quiet starlight.",
     baseColor: "#181934",
     gradient: "linear-gradient(155deg,#34345F 0%,#181934 58%,#0E1027 100%)",
     shellSurface: "linear-gradient(180deg,rgba(246,247,251,.72),rgba(230,231,242,.63))",
@@ -495,8 +495,8 @@ export function BackgroundLayer({ backgroundId, theme = "light", focusMode = fal
 
 export function ShopCategoryTabs({ active, onTrees, onDecorations, onBackgrounds }) {
   const items = [
-    ["trees", "🌿", "Tree Skins", onTrees],
-    ["decorations", "🏡", "Decorations", onDecorations],
+    ["trees", "🧑‍🎓", "Character Styles", onTrees],
+    ["decorations", "🏫", "Classroom Decor", onDecorations],
     ["backgrounds", "◫", "Backgrounds", onBackgrounds],
   ];
   return <div className="sg-shop-category-tabs" role="tablist" aria-label="Shop categories">

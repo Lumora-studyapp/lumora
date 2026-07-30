@@ -808,7 +808,7 @@ const TREE_SKINS = [
   { id:"kingsoak", name:"King's Oak", cost:1750, shape:"round", trunk:"#765332", canopy:"#356F45", desc:"The royal oak of an ancient kingdom 👑", collection:"premium", flagship:true, premiumTheme:"king", isNew:true,
     enhanceTiers:[
       { tier:1, name:"Flourish", icon:"👑", blurb:"Gold detailing, a royal banner and a polished stone root platform establish the oak's noble identity." },
-      { tier:2, name:"Living", icon:"🏰", blurb:"Lanterns, marble statues, a stone path, golden acorns, climbing ivy and royal flags complete the palace garden." },
+      { tier:2, name:"Living", icon:"🏰", blurb:"Lanterns, marble statues, a stone path, golden acorns, climbing ivy and royal flags complete the palace classroom." },
       { tier:3, name:"Radiant", icon:"✨", blurb:"The jeweled crown rests above the canopy while a marble fountain, royal benches, doves, fencing and golden sparkles complete the royal centrepiece." },
     ] },
   { id:"diamondtree", name:"Diamond Tree", cost:2200, shape:"round", trunk:"#BFE7F2", canopy:"#DDF7FF", desc:"The rarest crystal collectible 💎", collection:"premium", flagship:true, premiumTheme:"diamond", isNew:true,
@@ -817,7 +817,7 @@ const TREE_SKINS = [
       { tier:2, name:"Living", icon:"❄️", blurb:"Hanging shards, root diamonds, crystal flowers, floating gems, crystal bushes and frost sparkles emerge." },
       { tier:3, name:"Radiant", icon:"🌈", blurb:"A giant diamond finial locks into the canopy above crystal arches and an elevated platform while fragments orbit through rainbow refractions." },
     ] },
-  { id:"liontree", name:"Lion Tree", cost:2800, shape:"round", trunk:"#623726", canopy:"#B62F3A", desc:"An awakened lion guarding a festival grove 🦁", collection:"premium", flagship:true, premiumTheme:"lion", isNew:true,
+  { id:"liontree", name:"Lion Tree", cost:2800, shape:"round", trunk:"#623726", canopy:"#B62F3A", desc:"An awakened lion guarding a festival classroom 🦁", collection:"premium", flagship:true, premiumTheme:"lion", isNew:true,
     enhanceTiers:[
       { tier:1, name:"Flourish", icon:"🧧", blurb:"Gold brocade curls, knotted tassels and jade accents dress the awakened lion in an auspicious festival mantle." },
       { tier:2, name:"Living", icon:"🥁", blurb:"Lanterns glow beside an ornamental firecracker garland, ceremonial drum, oranges, prosperity greens and a cluster of red packets." },
@@ -836,7 +836,7 @@ const TREE_SKINS = [
   { id:"bananatree",name:"Banana Tree",   cost:780,  shape:"banana",  trunk:"#9BB06E", canopy:"#3E8F4F", desc:"Broad leaves over a ripening bunch 🍌", collection:"tropical", isNew:true },
   { id:"coconutpalm",name:"Coconut Palm", cost:900,  shape:"palm",    trunk:"#B08A5A", canopy:"#4CAE72", desc:"Leans into the breeze, coconuts and all 🥥", collection:"tropical", isNew:true },
   // ── Food items (premium, playful) ──
-  { id:"muffin",   name:"Blueberry Muffin",cost:1000, shape:"muffin",  trunk:"#B6885B", canopy:"#6B4E9E", desc:"A treat in your grove 🧁", collection:"treats" },
+  { id:"muffin",   name:"Blueberry Muffin",cost:1000, shape:"muffin",  trunk:"#B6885B", canopy:"#6B4E9E", desc:"A treat in your classroom 🧁", collection:"treats" },
   { id:"cupcake",  name:"Strawberry Cupcake",cost:1200,shape:"cupcake",trunk:"#E8B4C8", canopy:"#F25C8A", desc:"Sweet & frosted 🍓", collection:"treats" },
   { id:"cake",     name:"Layer Cake",     cost:1800, shape:"cake",    trunk:"#D9B38C", canopy:"#7EC9E0", desc:"The ultimate flex 🎂", collection:"treats" },
 ];
@@ -1333,7 +1333,7 @@ const MONTH_LABELS  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oc
 // per-account via prefs/{username}.decorations.
 const DECORATIONS = [
   { id:"bench",   name:"Wooden Bench",  cost:250, kind:"bench",   emoji:"🪑", desc:"A spot to rest your eyes" },
-  { id:"pond",    name:"Koi Pond",      cost:400, kind:"pond",    emoji:"⛲", desc:"Calm water for the grove" },
+  { id:"pond",    name:"Koi Pond",      cost:400, kind:"pond",    emoji:"⛲", desc:"Calm water for the classroom" },
   { id:"path",    name:"Stone Path",    cost:300, kind:"path",    emoji:"🪨", desc:"Winding stepping stones" },
   { id:"fence",   name:"Picket Fence",  cost:350, kind:"fence",   emoji:"🚧", desc:"Frame your little forest" },
   { id:"lamp",    name:"Lamp Post",     cost:450, kind:"lamp",    emoji:"🏮", desc:"A warm glow at dusk" },
@@ -1342,7 +1342,7 @@ const DECORATIONS = [
   { id:"lantern", name:"Stone Lantern", cost:500, kind:"lantern", emoji:"🪨", desc:"A serene zen marker" },
   { id:"festivaldrum", name:"Festival Drum", cost:520, kind:"festivaldrum", emoji:"🥁", desc:"A warm ceremonial rhythm" },
   { id:"cloudstone", name:"Cloud Stone", cost:420, kind:"cloudstone", emoji:"☁️", desc:"A carved auspicious cloud" },
-  { id:"runestone", name:"Storm Rune", cost:540, kind:"runestone", emoji:"⚡", desc:"A quiet conductor for the grove" },
+  { id:"runestone", name:"Storm Rune", cost:540, kind:"runestone", emoji:"⚡", desc:"A quiet conductor for the classroom" },
 ];
 
 // ── Achievements / badges ─────────────────────────────────────────────────────
@@ -2192,6 +2192,7 @@ const callableError = (error, fallback) => {
 };
 
 const usernameAuthEmail = username => `${canonUsername(username)}@users.lumora.invalid`;
+const isEmailLogin = value => String(value||"").trim().includes("@");
 
 const directAuthError = error => {
   const code=String(error?.code||"");
@@ -2275,11 +2276,41 @@ async function authenticateUsernameDirect(username,password){
   }
 }
 
-async function fbSavePassword(username, password, recovery) {
-  if(!AUTH_FUNCTIONS_ENABLED)return authenticateUsernameDirect(username,password);
+async function authenticateEmailDirect(email,password){
+  const normalizedEmail=String(email||"").trim().toLowerCase();
+  if(!normalizedEmail||normalizedEmail.length>254||!/^\S+@\S+\.\S+$/.test(normalizedEmail)){
+    return {ok:false,error:"Enter a valid email address."};
+  }
+  let credential;
+  try{
+    credential=await signInWithEmailAndPassword(auth,normalizedEmail,password);
+  }catch(error){
+    const code=String(error?.code||"");
+    if(code.includes("invalid-email"))return {ok:false,error:"Enter a valid email address."};
+    if(code.includes("invalid-credential")||code.includes("wrong-password")||code.includes("user-not-found")){
+      return {ok:false,error:"That email or password isn't correct."};
+    }
+    return {ok:false,error:directAuthError(error)};
+  }
+  try{
+    const username=await usernameForUid(credential.user.uid);
+    if(!username){
+      await firebaseSignOut(auth).catch(()=>{});
+      return {ok:false,error:"That Firebase account isn't connected to a Lumora username yet."};
+    }
+    return {ok:true,created:false,username};
+  }catch(error){
+    await firebaseSignOut(auth).catch(()=>{});
+    return {ok:false,error:"Signed in, but Lumora couldn't connect that email to its username data."};
+  }
+}
+
+async function fbSavePassword(usernameOrEmail, password, recovery) {
+  if(isEmailLogin(usernameOrEmail))return authenticateEmailDirect(usernameOrEmail,password);
+  if(!AUTH_FUNCTIONS_ENABLED)return authenticateUsernameDirect(usernameOrEmail,password);
   try{
     const response=await authenticateUsername({
-      username:canonUsername(username),password,recovery,
+      username:canonUsername(usernameOrEmail),password,recovery,
       firebaseApiKey:import.meta.env.VITE_FIREBASE_API_KEY,
     });
     const result=response.data||{};
@@ -5328,9 +5359,9 @@ function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, ti
           <span key={c.k} className="sg-confetti"
             style={{left:`${c.left}%`,background:c.color,animationDelay:`${c.delay}s`}}/>
         ))}
-        <div style={{fontSize:60,marginBottom:8}} className="sg-bounce-in">🌳</div>
-        <h2 style={cs.title}>Tree Planted!</h2>
-        <p style={cs.sub}>Your {subject.label} session is saved to your forest.</p>
+        <div style={{fontSize:60,marginBottom:8}} className="sg-bounce-in">✨</div>
+        <h2 style={cs.title}>Growth saved!</h2>
+        <p style={cs.sub}>Your {subject.label} session helped your learner grow.</p>
         <div style={{...cs.stat,color:subject.color}}>{fmtMins(secs)}</div>
         {timerMode==="pomodoro"&&pomodoro&&<div style={cs.pomodoroSummary}>
           {pomodoro.completedRounds} of {pomodoro.plannedRounds} focus rounds completed
@@ -5346,7 +5377,7 @@ function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, ti
           <div style={cs.taskCopy}>Task · {task.title}</div>
           <button style={cs.taskButton} onClick={onCompleteTask}>Mark complete</button>
         </div>}
-        <button style={{...cs.btn,background:subject.color}} onClick={onDismiss}>Back to Grove</button>
+        <button style={{...cs.btn,background:subject.color}} onClick={onDismiss}>Back to Classroom</button>
       </div>
     </div>
   );
@@ -5493,8 +5524,8 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {onBack && <button style={sh.backBtn} onClick={onBack} title="Back">←</button>}
             <div>
-              <h3 style={sh.title}>🌿 Tree Shop</h3>
-              <div style={sh.subtitle}>{ownedSkins.length} of {TREE_SKINS.length} collected</div>
+              <h3 style={sh.title}>🧑‍🎓 Character Styles</h3>
+              <div style={sh.subtitle}>{ownedSkins.length} of {TREE_SKINS.length} unlocked</div>
             </div>
           </div>
           <span style={sh.coinBal}><AnimatedNumber value={coins} prefix="🪙 "/></span>
@@ -5782,7 +5813,7 @@ function GardenShop({ coins, owned, removed = [], onBuy, onRestore,
         <div style={gs.header}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {onBack && <button style={gs.backBtn} onClick={onBack} title="Back">←</button>}
-            <h3 style={gs.title}>🏡 Garden Shop</h3>
+            <h3 style={gs.title}>🏫 Classroom Decor</h3>
           </div>
           <span style={gs.coinBal}><AnimatedNumber value={coins} prefix="🪙 "/></span>
         </div>
@@ -5792,7 +5823,7 @@ function GardenShop({ coins, owned, removed = [], onBuy, onRestore,
           onDecorations={()=>{}}
           onBackgrounds={onOpenBackgrounds}
         />
-        <p style={gs.sub}>Add decor to your grove, then place it exactly where you want from the garden editor.</p>
+        <p style={gs.sub}>Add decor to your classroom, then place it exactly where you want from the layout editor.</p>
         {toast && <div style={gs.toast}>{toast}</div>}
         <div style={gs.grid}>
           {DECORATIONS.map((d,idx)=>{
@@ -5809,11 +5840,11 @@ function GardenShop({ coins, owned, removed = [], onBuy, onRestore,
                 <div style={gs.dName}>{d.name}</div>
                 <div style={gs.dDesc}>{d.desc}</div>
                 {isOwned && !isRemoved
-                  ? <div style={gs.ownedBadge}>✓ In your garden</div>
+                  ? <div style={gs.ownedBadge}>✓ In your classroom</div>
                   : isRemoved
-                    ? <button style={gs.restoreBtn} onClick={()=>{onRestore(d.id);showT(`${d.name} added back`);}}>Add to garden</button>
+                    ? <button style={gs.restoreBtn} onClick={()=>{onRestore(d.id);showT(`${d.name} added back`);}}>Add to classroom</button>
                     : <button style={{...gs.buyBtn,...(!canBuy?gs.buyBtnDisabled:{})}}
-                        onClick={async()=>{ if(!canBuy){showT("Not enough coins");return;} const ok=await onBuy(d.id,d.cost); showT(ok?`${d.name} added to your garden`:"Purchase couldn't be completed"); }}
+                        onClick={async()=>{ if(!canBuy){showT("Not enough coins");return;} const ok=await onBuy(d.id,d.cost); showT(ok?`${d.name} added to your classroom`:"Purchase couldn't be completed"); }}
                         disabled={!canBuy}>
                         🪙 {d.cost}
                       </button>
@@ -6108,7 +6139,7 @@ function AdminPanel({ admin, onClose, onBack }) {
         <div style={{...ap.section,border:"1.5px solid #F0C9C9"}}>
           <div style={{...ap.secTitle,color:"#C0392B"}}>Danger zone</div>
           <div style={{fontSize:11.5,color:"#999",marginBottom:9,lineHeight:1.4}}>
-            Wipes all sessions — resets their streak, garden and stats. Cannot be undone.
+            Wipes all sessions — resets their streak, classroom and stats. Cannot be undone.
           </div>
           <button style={{...ap.saveBtn,marginTop:0,background:confirmReset?"#C0392B":"#E08A7C"}} disabled={busy} onClick={doReset}>
             {confirmReset ? "Tap again to confirm wipe" : "Reset history"}
@@ -6237,7 +6268,7 @@ function MySessionsPanel({ user, history, subjects, onEdit, onClose, onBack }) {
                       <button style={ms.removeBtn} disabled={busy} onClick={()=>remove(s)}>
                         Remove this session entirely
                       </button>
-                      <div style={ms.removeNote}>Removing it also takes its tree out of your garden.</div>
+                      <div style={ms.removeNote}>Removing it also takes its growth marker out of your classroom.</div>
                     </div>
                   )}
                 </div>
@@ -6397,7 +6428,7 @@ function AdminSessionEditor({ admin, username, onClose, onBack }) {
                         <button style={ms.removeBtn} disabled={busy} onClick={()=>remove(s)}>
                           Remove this session entirely
                         </button>
-                        <div style={ms.removeNote}>Removing it also takes its tree out of their garden.</div>
+                        <div style={ms.removeNote}>Removing it also takes its growth marker out of their classroom.</div>
                       </div>
                     )}
                   </div>
@@ -7111,8 +7142,8 @@ const announceStyles = {
 
 function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onAdmin, onToggleTheme, onLogout, onClose }) {
   const items = [
-    { icon:"🌿", label:"Lumora Shop", sub:"Trees, decor & backgrounds", onClick:onTreeShop },
-    { icon:"🏡", label:"Garden Shop",   sub:"Benches, ponds & more", onClick:onGardenShop },
+    { icon:"🧑‍🎓", label:"Character Styles", sub:"Growth looks and unlocks", onClick:onTreeShop },
+    { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, onClick:onBadges },
     { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
@@ -8195,8 +8226,10 @@ function LoginScreen({ onLogin }) {
 
   const go=async()=>{
     const t=name.trim();
-    if(!t){setErr("Enter a username");return;}
-    if(t.length>20){setErr("Max 20 characters");return;}
+    const emailLogin=isEmailLogin(t);
+    if(!t){setErr("Enter a username or email");return;}
+    if(!emailLogin&&t.length>20){setErr("Username can be at most 20 characters");return;}
+    if(emailLogin&&t.length>254){setErr("Email address is too long");return;}
     if(!pass){setErr("Enter a password");return;}
     if(pass.length<6){setErr("Password must be at least 6 characters");return;}
     if(showRecovery && recA.trim() && recA.trim().length<2){setErr("Recovery answer is too short");return;}
@@ -8205,7 +8238,7 @@ function LoginScreen({ onLogin }) {
     const result = await fbSavePassword(t, pass, recovery);
     setLoading(false);
     if(!result.ok){setErr(result.error);return;}
-    onLogin(t, pass);
+    onLogin(result.username||t, pass);
   };
 
   // Step 1 of forgot: look up the user's recovery question
@@ -8273,16 +8306,19 @@ function LoginScreen({ onLogin }) {
   return (
     <div style={S.loginWrap}>
       <div style={S.loginCard}>
-        <div style={{fontSize:60,marginBottom:8}}>🌱</div>
+        <div style={{fontSize:60,marginBottom:8}}>🧑‍🎓</div>
         <h1 style={S.loginTitle}>Lumora</h1>
-        <p style={S.loginSub}>Grow your focus. Climb the board.</p>
+        <p style={S.loginSub}>Grow your focus. Build your future.</p>
         <input style={{...S.input,...(err&&!pass?S.inputErr:{})}}
-          placeholder="Username"
+          placeholder="Username or email"
+          aria-label="Username or email"
+          autoCapitalize="none" autoComplete="username"
           value={name} onChange={e=>{setName(e.target.value);setErr("");}}
-          onKeyDown={e=>e.key==="Enter"&&go()} maxLength={21} autoFocus/>
+          onKeyDown={e=>e.key==="Enter"&&go()} maxLength={254} autoFocus/>
         <input style={{...S.input,...(err&&pass?S.inputErr:{})}}
           placeholder="Password"
           type="password"
+          autoComplete="current-password"
           value={pass} onChange={e=>{setPass(e.target.value);setErr("");}}
           onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>
 
@@ -8301,9 +8337,9 @@ function LoginScreen({ onLogin }) {
         ))}
 
         {err&&<p style={S.errText}>{err}</p>}
-        <p style={S.loginHint}>New user? Just pick a username and password.<br/>Returning? Use the same ones to log back in.</p>
+        <p style={S.loginHint}>New user? Pick a username and password.<br/>Returning? Log in with your username or connected email.</p>
         <button style={{...S.primaryBtn,opacity:loading?0.6:1}} onClick={go} disabled={loading}>
-          {loading?"Checking...":"Enter Grove"}
+          {loading?"Checking...":"Enter Classroom"}
         </button>
         {AUTH_FUNCTIONS_ENABLED && <button style={S.linkBtn} onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
       </div>
@@ -9467,7 +9503,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
       </svg>
 
       <div style={fg.footer}>
-        <span style={fg.stat}>🌳 {trees.length} tree{trees.length!==1?"s":""} this {range}</span>
+        <span style={fg.stat}>✨ {trees.length} growth moment{trees.length!==1?"s":""} this {range}</span>
         <span style={fg.stat}>⏱ {fmtHrs(trees.reduce((a,t)=>a+t.secs,0))} total</span>
       </div>
     </div>
@@ -9482,13 +9518,13 @@ const fg = {
 
 // ── Garden editor ──────────────────────────────────────────────────────────────
 const GARDEN_LAYOUT_PRESETS = [
-  {id:"natural",label:"Natural Grove",icon:"🌿"},
-  {id:"paths",label:"Open Paths",icon:"↔"},
-  {id:"showcase",label:"Showcase",icon:"✦"},
-  {id:"ring",label:"Ring Garden",icon:"◯"},
-  {id:"trail",label:"Winding Trail",icon:"〰"},
-  {id:"clusters",label:"Seasonal Clusters",icon:"🍂"},
-  {id:"compact",label:"Compact",icon:"▦"},
+  {id:"natural",label:"Open Classroom",icon:"🏫"},
+  {id:"paths",label:"Study Aisles",icon:"↔"},
+  {id:"showcase",label:"Front Row",icon:"✦"},
+  {id:"ring",label:"Study Circle",icon:"◯"},
+  {id:"trail",label:"Learning Path",icon:"〰"},
+  {id:"clusters",label:"Subject Groups",icon:"📚"},
+  {id:"compact",label:"Compact Class",icon:"▦"},
 ];
 
 function buildGardenPresetPositions(presetId,placement){
@@ -9659,17 +9695,17 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
   return <div style={sd.overlay} className="sg-overlay-anim" onClick={onClose}>
     <div style={{...sd.modal,maxHeight:"92vh",overflowY:"auto"}} className="sg-sheet-anim" onClick={e=>e.stopPropagation()}>
       <div style={ge.header}>
-        <div><div style={sd.kicker}>GARDEN LAYOUT</div><h3 style={ge.title}>Arrange your grove</h3></div>
+        <div><div style={sd.kicker}>CLASSROOM LAYOUT</div><h3 style={ge.title}>Arrange your classroom</h3></div>
         <button style={ge.iconBtn} onClick={onClose} aria-label="Close">×</button>
       </div>
-      <p style={ge.help}>Drag a tree picture or decor onto another grid tile. On mobile, tap an item and then tap its destination.</p>
-      <div style={ge.legend}><span>Tree pictures show each skin</span><span>× removes decor from view</span></div>
+      <p style={ge.help}>Drag a growth marker or decor onto another grid tile. On mobile, tap an item and then tap its destination.</p>
+      <div style={ge.legend}><span>Growth markers show each style</span><span>× removes decor from view</span></div>
       <div style={ge.presetSection}>
         <div style={ge.presetHeading}>
           <span>Quick layouts</span>
           <span style={ge.presetHint}>Choose, then fine-tune</span>
         </div>
-        <div style={ge.presets} role="group" aria-label="Garden layout presets">
+        <div style={ge.presets} role="group" aria-label="Classroom layout presets">
           {GARDEN_LAYOUT_PRESETS.map(preset=><button type="button" key={preset.id}
             style={{...ge.presetBtn,...(activePreset===preset.id?ge.presetBtnActive:{})}}
             aria-pressed={activePreset===preset.id}
@@ -9696,7 +9732,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
             onClick={()=>selected&&moveItem(selected,key)}>
             {tree&&<div draggable style={ge.item} onDragStart={e=>dragStart(e,item)} onClick={e=>chooseOrMove(e,item,key)}
               title={`${skinDef.name} — drag or tap to move`} role="button" tabIndex={0}
-              aria-label={`Move ${skinDef.name} tree`}
+              aria-label={`Move ${skinDef.name} growth marker`}
               onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseOrMove(e,item,key);}}}>
               <span style={{...ge.treeThumb,background:`linear-gradient(160deg,${subj.color}20,#F7FBF5)`}}>
                 <TreeSVG progress={1} color={subj.color} paused skin={skinDef.id} enhance={treeTier} thumbnail/>
@@ -9711,7 +9747,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
         })}
       </div>
 
-      <p style={ge.removeNote}>Removed decor stays owned. Add it back from the Garden Shop whenever you like.</p>
+      <p style={ge.removeNote}>Removed decor stays owned. Add it back from Classroom Decor whenever you like.</p>
       <div style={ge.actions}>
         <button style={ge.cancelBtn} onClick={onClose}>Cancel</button>
         <button style={ge.saveBtn} onClick={save}>Save layout</button>
@@ -9980,7 +10016,7 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
       if(off)return;
       clearTimeout(timer);
       console.error("Friend grove load error:",err);
-      setLoad({status:"error",data:null,error:"Their grove took too long to load. Check your connection and try again."});
+      setLoad({status:"error",data:null,error:"Their classroom took too long to load. Check your connection and try again."});
     });
     return()=>{off=true;clearTimeout(timer);};
   },[username,attempt]);
@@ -9994,18 +10030,18 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
   return (
     <div style={sd.overlay} className="sg-overlay-anim" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{...sd.modal,boxSizing:"border-box",maxHeight:"min(92dvh,760px)",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",paddingBottom:"calc(24px + env(safe-area-inset-bottom))"}}
-        className="sg-sheet-anim" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${username}'s Grove`}>
+        className="sg-sheet-anim" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${username}'s Classroom`}>
         <div style={sd.header}>
           <div>
             <div style={sd.kicker}>VISITING</div>
-            <h3 style={sd.title}>🏡 {username}'s Grove</h3>
+            <h3 style={sd.title}>🏫 {username}'s Classroom</h3>
           </div>
-          <button style={sd.x} onClick={onClose} aria-label="Close friend grove">✕</button>
+          <button style={sd.x} onClick={onClose} aria-label="Close friend's classroom">✕</button>
         </div>
         {load.status==="loading" ? (
           <div style={{textAlign:"center",padding:"30px 0"}} aria-live="polite">
             <div className="sg-skeleton" style={{height:180,width:"100%",borderRadius:18,marginBottom:12}}/>
-            <p style={{color:"#888",margin:0}}>Walking over… 🌿</p>
+            <p style={{color:"#888",margin:0}}>Joining the classroom… 🏫</p>
           </div>
         ) : load.status==="error" ? (
           <div style={{textAlign:"center",padding:"24px 8px"}} role="alert">
@@ -10014,17 +10050,17 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
             <button style={{...sd.doneBtn,width:"auto",margin:"0 auto",padding:"11px 22px"}} onClick={()=>setAttempt(n=>n+1)}>Try again</button>
           </div>
         ) : hist.length===0 ? (
-          <p style={{textAlign:"center",color:"#888",padding:"36px 0",lineHeight:1.6}}>Their grove is just getting started 🌱</p>
+          <p style={{textAlign:"center",color:"#888",padding:"36px 0",lineHeight:1.6}}>Their classroom journey is just getting started ✨</p>
         ) : (
           <>
             <ForestGarden sessions={inMonth} subjects={data.subjects} range="month" decorations={data.decorations} enhancements={data.enhancements} layout={data.gardenLayout}/>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#EAF3EC",borderRadius:16,padding:"7px 13px"}}>🌳 {inMonth.length} trees this month</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#EAF3EC",borderRadius:16,padding:"7px 13px"}}>✨ {inMonth.length} growth moments this month</span>
               <span style={{fontSize:12,fontWeight:700,color:"#666",background:"#F0F2EE",borderRadius:16,padding:"7px 13px"}}>⏳ {fmtHrs(lifeSecs)} all time</span>
             </div>
           </>
         )}
-        <button style={sd.doneBtn} onClick={onClose}>Back to my grove 🌱</button>
+        <button style={sd.doneBtn} onClick={onClose}>Back to my classroom 🏫</button>
       </div>
     </div>
   );
@@ -10120,7 +10156,7 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit }) {
         const topSubj=subjects.find(s=>s.id===topId);
         return (
           <div key={entry.username} style={{...S.boardRow,...(isMe?S.boardRowMe:{}),cursor:"pointer"}}
-            className="sg-tap-card" onClick={()=>onVisit&&onVisit(entry.username)} title={`Visit ${entry.username}'s grove`}>
+            className="sg-tap-card" onClick={()=>onVisit&&onVisit(entry.username)} title={`Visit ${entry.username}'s classroom`}>
             <div style={S.boardRank}>{i<3?medals[i]:<span style={{color:"#aaa",fontWeight:700}}>#{i+1}</span>}</div>
             <div style={{flex:1}}>
               <div style={{fontWeight:isMe?700:500,color:isMe?"#56B68B":"#1a1a2e"}}>
@@ -10263,7 +10299,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
     <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Grove Groups</div>
+      <div style={gl.introTitle}>Private Classroom Groups</div>
       <div style={gl.introBody}>Small, invite-only weekly boards · up to {GROUP_MAX_MEMBERS} members · no effect on global prizes.</div>
     </div>
 
@@ -10271,7 +10307,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
     {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
       <div style={gl.sectionLabel}>PENDING INVITATIONS</div>
       {incomingInvites.map(invite=><div key={invite.id} style={gl.incomingRow}>
-        <div style={gl.incomingIcon}>🌿</div>
+        <div style={gl.incomingIcon}>🏫</div>
         <div style={gl.incomingText}>
           <div style={gl.incomingName}>{invite.groupName||"Private group"}</div>
           <div style={gl.incomingMeta}>Invited by {invite.createdBy}</div>
@@ -10355,7 +10391,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
         const topId=Object.entries(entry.subjects||{}).sort((a,b)=>b[1]-a[1])[0]?.[0];
         const topSubj=subjects.find(s=>s.id===topId);
         const podium=i<3?podiumStyles[i]:{};
-        return <div key={entry.username} style={{...gl.boardRow,...podium,...(isMe?gl.boardRowMe:{}),cursor:"pointer"}} className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s grove`}>
+        return <div key={entry.username} style={{...gl.boardRow,...podium,...(isMe?gl.boardRowMe:{}),cursor:"pointer"}} className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s classroom`}>
           <div style={{...gl.rankBadge,...(i<3?gl.rankBadgePodium:{})}}>{i+1}</div>
           <div style={{...gl.avatar,background:isMe?"#4F9D73":"#E6EEE7",color:isMe?"#fff":"#506258"}}>{entry.username.slice(0,1).toUpperCase()}</div>
           <div style={gl.boardIdentity}>
@@ -11009,7 +11045,7 @@ export default function App() {
     const previous=pomodoroRef.current;
     pomodoroRef.current=result.state;setPomodoro(result.state);
     if(result.finished){
-      cuePomodoroBoundary("All focus rounds complete — your grove is ready.");
+      cuePomodoroBoundary("All focus rounds complete — your classroom has grown.");
       clearInterval(intervalRef.current);
       startTimeRef.current=null;baseElapsed.current=0;setElapsed(0);setRunning(false);setPaused(false);
       await finishSession(result.state.completedFocusSeconds,{timerMode:"pomodoro",pomodoro:result.state});
@@ -11383,7 +11419,7 @@ export default function App() {
   const handleSaveGardenLayout=(next)=>{
     setGardenLayout(next); lsSet(LS_GARDEN_LAYOUT,next);
     fbSavePrefs(user,{gardenLayout:next});
-    showToast("Garden layout saved");
+    showToast("Classroom layout saved");
   };
   // Badge ownership + its coin reward settle in one transaction. This is safe
   // under React StrictMode and across tabs/devices: a repeated eligibility
@@ -11612,7 +11648,7 @@ export default function App() {
       <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
-        <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F"}}>🌿 Lumora</div>
+        <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F"}}>🧑‍🎓 Lumora</div>
       </div>
     </div>
   );
@@ -11634,7 +11670,7 @@ export default function App() {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
-          <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F",marginBottom:18}}>🌿 Lumora</div>
+          <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F",marginBottom:18}}>🧑‍🎓 Lumora</div>
           <div className="sg-skeleton" style={{height:14,width:"42%",margin:"0 auto 10px"}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%",marginBottom:8}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%"}}/>
@@ -11715,7 +11751,7 @@ export default function App() {
           )}
 
           <header style={S.header}>
-            <span style={S.logo}>🌿 Lumora</span>
+            <span style={S.logo}>🧑‍🎓 Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={coins} prefix="🪙 "/></button>
               <button onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
@@ -11919,7 +11955,7 @@ export default function App() {
                 <div style={S.timerLabel}>
                   {timerStyle==="pomodoro"
                     ? `${pomodoro.plannedRounds} focus ${pomodoro.plannedRounds===1?"round":"rounds"} · ${pomodoro.breakLengthMinutes} min breaks`
-                    : mode==="timer"?"Set duration and plant your tree":"Tap start — stopwatch counts up"}
+                    : mode==="timer"?"Set a duration and grow your learner":"Tap start — stopwatch counts up"}
                 </div>
                 {timerStyle==="standard"&&mode==="timer"&&(
                   <div style={S.durationSliderWrap}>
@@ -11936,7 +11972,7 @@ export default function App() {
                 )}
                 <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":subjectObj.color,...(otherTabActive?{cursor:"not-allowed"}:{})}}
                   onClick={startSession} disabled={otherTabActive}>
-                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"🌱 Plant Tree"}
+                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"✨ Start Growing"}
                 </button>
 
                 {/* Weekly target progress (only if set) */}
