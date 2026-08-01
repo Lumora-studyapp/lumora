@@ -21,6 +21,18 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.admin == true;
     }
 
+    function validUsername(username) {
+      return username.matches('^[a-z0-9_]{2,20}$');
+    }
+
+    function ownsUsernameValue(data) {
+      return data.username is string && ownsUsername(data.username);
+    }
+
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
     match /roles/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -32,15 +44,31 @@ service cloud.firestore {
       allow get: if true;
       allow list: if signedIn();
       allow create: if signedIn()
+        && validUsername(username)
         && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if ownsUsername(username);
+      allow update: if ownsUsername(username)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        // Direct username login must be able to add an email to an older
+        // mapping, but an existing login address cannot be swapped client-side.
+        && (!('email' in resource.data) || request.resource.data.email == resource.data.email);
+      allow delete: if ownsUsername(username);
     }
 
     match /prefs/{username} {
       allow read: if signedIn();
-      allow write: if ownsUsername(username)
+      allow create: if ownsUsername(username)
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if ownsUsername(username)
         && (!('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid)
-        && (!('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid);
+        // Preserve direct merge transactions for older Lumora prefs that have
+        // not been backfilled yet. Once ownerUid exists it cannot be removed or
+        // changed; the normal prefs save path adds it on the next full update.
+        && ((('ownerUid' in request.resource.data)
+              && request.resource.data.ownerUid == request.auth.uid)
+            || (!('ownerUid' in resource.data)
+              && !('ownerUid' in request.resource.data)));
+      allow delete: if ownsUsername(username) || isAdmin();
     }
 
     match /history/{username} {
@@ -49,12 +77,18 @@ service cloud.firestore {
     }
 
     match /tasks/{username}/items/{taskId} {
-      allow read, write: if ownsUsername(username);
+      allow read, delete: if ownsUsername(username);
+      allow create, update: if ownsUsername(username)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 180;
     }
 
     match /presence/{username} {
       allow read: if signedIn();
-      allow write: if ownsUsername(username);
+      allow create, update: if ownsUsername(username)
+        && request.resource.data.username == username;
+      allow delete: if ownsUsername(username);
     }
 
     // StudyGrove-compatible aggregate boards are retained. Client-side
@@ -90,19 +124,35 @@ service cloud.firestore {
     }
     match /announcements/{announcementId} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // Reply/reaction counters are still maintained by the client transaction.
+      // Limit non-admin mutations to those aggregate fields only.
+      allow update: if isAdmin()
+        || (signedIn() && onlyChanges(['replyCount', 'reactionCounts']));
 
       match /replies/{replyId} {
         allow read: if signedIn();
-        allow create, update, delete: if signedIn();
+        allow create: if ownsUsernameValue(request.resource.data)
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && request.resource.data.message.size() <= 800;
+        allow update: if isAdmin()
+          || (ownsUsernameValue(resource.data)
+            && request.resource.data.username == resource.data.username)
+          || (signedIn() && onlyChanges(['reactionCounts']));
+        allow delete: if isAdmin() || ownsUsernameValue(resource.data);
 
         match /reactions/{reactionId} {
-          allow read, write: if signedIn();
+          allow read: if signedIn();
+          allow create, update: if ownsUsernameValue(request.resource.data);
+          allow delete: if ownsUsernameValue(resource.data);
         }
       }
 
       match /reactions/{reactionId} {
-        allow read, write: if signedIn();
+        allow read: if signedIn();
+        allow create, update: if ownsUsernameValue(request.resource.data);
+        allow delete: if ownsUsernameValue(resource.data);
       }
     }
 
@@ -117,7 +167,8 @@ service cloud.firestore {
     }
     match /classes/{code} {
       allow read, create, update: if signedIn();
-      allow delete: if signedIn() && resource.data.owner != null;
+      allow delete: if isAdmin()
+        || (resource.data.owner is string && ownsUsername(resource.data.owner));
     }
     match /rooms/{code} {
       allow read, write: if signedIn();
