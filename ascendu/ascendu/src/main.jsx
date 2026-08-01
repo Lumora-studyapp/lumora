@@ -1,34 +1,37 @@
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-
-const getLocalWeekStart = (value = new Date()) => {
-  const date = new Date(value)
-  date.setHours(0, 0, 0, 0)
-  date.setDate(date.getDate() - date.getDay())
-  return date.getTime()
-}
+import { getStudyWeek, getStudyWeekKey } from './studyWeek.js'
 
 function LumoraRoot() {
-  const [weekRolloverToken, setWeekRolloverToken] = useState(() => getLocalWeekStart())
+  const [weekRolloverToken, setWeekRolloverToken] = useState(() => getStudyWeekKey())
 
   useEffect(() => {
+    let timeoutId
     const refreshWeek = () => {
-      const nextWeek = getLocalWeekStart()
+      const nextWeek = getStudyWeekKey()
       setWeekRolloverToken(currentWeek => currentWeek === nextWeek ? currentWeek : nextWeek)
     }
+    const scheduleRollover = () => {
+      refreshWeek()
+      window.clearTimeout(timeoutId)
+      const delay = Math.max(50, getStudyWeek().endExclusive.getTime() - Date.now() + 25)
+      timeoutId = window.setTimeout(scheduleRollover, delay)
+    }
+    const onResume = () => {
+      if (!document.hidden) scheduleRollover()
+    }
 
-    refreshWeek()
-    const intervalId = window.setInterval(refreshWeek, 60 * 1000)
-    document.addEventListener('visibilitychange', refreshWeek)
-    window.addEventListener('focus', refreshWeek)
-    window.addEventListener('pageshow', refreshWeek)
+    scheduleRollover()
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('focus', scheduleRollover)
+    window.addEventListener('pageshow', scheduleRollover)
 
     return () => {
-      window.clearInterval(intervalId)
-      document.removeEventListener('visibilitychange', refreshWeek)
-      window.removeEventListener('focus', refreshWeek)
-      window.removeEventListener('pageshow', refreshWeek)
+      window.clearTimeout(timeoutId)
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('focus', scheduleRollover)
+      window.removeEventListener('pageshow', scheduleRollover)
     }
   }, [])
 
