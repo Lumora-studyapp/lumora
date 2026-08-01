@@ -16,6 +16,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 const crypto = require("node:crypto");
+const { getStudyWeekKey } = require("./studyWeek.js");
 
 initializeApp();
 const db = getFirestore();
@@ -208,13 +209,6 @@ exports.setRecoveryQuestion = onCall(async (request) => {
   return { ok: true };
 });
 
-// Same ISO-week key the client uses, computed server-side.
-function getWeekKey(d = new Date()) {
-  const jan = new Date(d.getFullYear(), 0, 1);
-  const wk = Math.ceil(((d - jan) / 86400000 + jan.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${wk}`;
-}
-
 // Tracks how much focus time a session of a given start could plausibly contain.
 // We store the session start when it begins (startSession) and check elapsed here.
 const MAX_SESSION_SECS = 6 * 3600; // a single session can't exceed 6h
@@ -254,7 +248,13 @@ exports.recordSession = onCall(async (request) => {
   if (unameSnap.empty) throw new HttpsError("failed-precondition", "No username for this account.");
   const username = unameSnap.docs[0].data().displayName || unameSnap.docs[0].id;
 
-  const weekKey = getWeekKey();
+  // Match the client: a cross-midnight session belongs to the Melbourne week
+  // in which it began, while endTs records the real completion instant.
+  const endTs = Date.now();
+  const sessionTs = typeof startedAt === "number" && Number.isFinite(startedAt) && startedAt > 0
+    ? startedAt
+    : Math.max(0,endTs-dur*1000);
+  const weekKey = getStudyWeekKey(sessionTs);
 
   // ── Atomic-ish updates via a batch + transactions on the aggregate docs ──
   const bumpBoard = async (ref) => {
@@ -277,7 +277,7 @@ exports.recordSession = onCall(async (request) => {
   }
 
   // ── Append to personal history ──
-  const entry = { subject: subjectId, secs: dur, ts: Date.now(),
+  const entry = { subject: subjectId, secs: dur, ts: sessionTs, startTs: sessionTs, endTs,
                   ...(coop ? { coop: true } : {}),
                   ...(classCode ? { classCode } : {}) };
   const hRef = db.collection("history").doc(username);

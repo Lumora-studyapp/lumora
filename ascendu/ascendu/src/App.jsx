@@ -8,6 +8,11 @@ import {
   startNextPomodoroFocus, validPomodoroFocusSeconds,
 } from "./pomodoro.js";
 import {
+  formatStudyDate, getPreviousStudyWeekKey, getPreviousStudyWeekStart,
+  getStudyDayOfWeek, getStudyWeekDistance, getStudyWeekKey,
+  shiftStudyDay, shiftStudyWeek, startOfStudyDay, startOfStudyWeek,
+} from "./studyWeek.js";
+import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
   canEquipBackground, evaluateBackgroundPurchase, getBackgroundAppearance, normalizeBackgroundId,
@@ -1409,7 +1414,7 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
 
   // Bucket helpers
   const ws = startOfWeek(now);
-  const lastWs = new Date(ws); lastWs.setDate(lastWs.getDate()-7);
+  const lastWs = getPreviousStudyWeekStart(now);
   const thisWeek = hist.filter(s=>new Date(s.ts)>=ws);
   const lastWeek = hist.filter(s=>{ const t=new Date(s.ts); return t>=lastWs && t<ws; });
   const sum = arr => arr.reduce((a,s)=>a+s.secs,0);
@@ -1429,7 +1434,7 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
 
   // 2) Most productive day of week (needs spread across days)
   const dowTotals=[0,0,0,0,0,0,0], dowCount=[0,0,0,0,0,0,0];
-  hist.forEach(s=>{ const d=new Date(s.ts).getDay(); dowTotals[d]+=s.secs; dowCount[d]++; });
+  hist.forEach(s=>{ const d=getStudyDayOfWeek(s.ts); dowTotals[d]+=s.secs; dowCount[d]++; });
   const activeDows=dowTotals.filter(v=>v>0).length;
   if(activeDows>=3){
     const bestDow=dowTotals.indexOf(Math.max(...dowTotals));
@@ -1512,19 +1517,12 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const getWeekKeyFor = (date) => {
-  const d = date instanceof Date ? date : new Date(date);
-  const jan = new Date(d.getFullYear(),0,1);
-  const wk = Math.ceil(((d - jan)/86400000 + jan.getDay() + 1)/7);
-  return `${d.getFullYear()}-W${wk}`;
-};
-const getWeekKey = () => getWeekKeyFor(new Date());
-const getPreviousCompletedWeek = (date = new Date()) => {
-  const prev = startOfWeek(date);
-  prev.setDate(prev.getDate()-7);
-  return prev;
-};
-const getPreviousWeekKey = (date = new Date()) => getWeekKeyFor(getPreviousCompletedWeek(date));
+// Keep the long-standing helper names inside App.jsx, but route all of them to
+// the single Melbourne Sunday-midnight contract in studyWeek.js.
+const getWeekKeyFor = getStudyWeekKey;
+const getWeekKey = () => getStudyWeekKey();
+const getPreviousCompletedWeek = getPreviousStudyWeekStart;
+const getPreviousWeekKey = getPreviousStudyWeekKey;
 const pad = n => String(n).padStart(2,"0");
 const fmt = s => {
   const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
@@ -1572,18 +1570,15 @@ const migrateLumoraCache = () => {
 migrateLumoraCache();
 
 const startOfDay   = d => { const x=new Date(d); x.setHours(0,0,0,0); return x; };
-const startOfWeek  = d => { const x=startOfDay(d); x.setDate(x.getDate()-x.getDay()); return x; };
+const startOfWeek  = startOfStudyWeek;
 
 // Weekly prizes alternate from this launch week onward:
 // coin week → mystery-skin week → coin week → …
 // Weeks before the launch stay as coin weeks so already-finished leaderboards
 // are not retroactively changed.
-const REWARD_ROTATION_START = new Date(2026, 6, 19); // Sun 19 Jul 2026
-const WEEK_MS = 7*24*60*60*1000;
+const REWARD_ROTATION_START = new Date("2026-07-18T14:00:00.000Z"); // Sun 19 Jul 2026, Melbourne
 const getWeeklyRewardMode = date => {
-  const weekStart = startOfWeek(date instanceof Date ? date : new Date(date));
-  const rotationStart = startOfWeek(REWARD_ROTATION_START);
-  const weeksSinceLaunch = Math.round((weekStart-rotationStart)/WEEK_MS);
+  const weeksSinceLaunch = getStudyWeekDistance(REWARD_ROTATION_START,date instanceof Date ? date : new Date(date));
   return weeksSinceLaunch>=0 && weeksSinceLaunch%2===1 ? "skin" : "coins";
 };
 const getWeeklyRewardPlan = date => {
@@ -1699,7 +1694,7 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
 }
 
 async function fbLoadLeaderboard() {
-  const weekKey = getWeekKey(); // fresh at call time — same staleness risk as the save path
+  const weekKey = getWeekKey(); // always resolved from the current Melbourne week
   try {
     const [wSnap, aSnap] = await Promise.all([
       getDoc(doc(db, "leaderboard_weekly", weekKey)),
@@ -1795,7 +1790,7 @@ async function fbSendGroupInvite(senderRaw,groupId,invitedRaw){
   if(!invitedUser)return {ok:false,error:"Enter a username."};
   if(invitedUser===sender)return {ok:false,error:"You're already in this group."};
   try{
-    const userSnap=await getDoc(doc(db,"users",invitedUser));
+    const userSnap=await getDoc(doc(db,"usernames",invitedUser));
     if(!userSnap.exists())return {ok:false,error:"No Lumora account uses that username."};
     const inviteId=groupInviteDocId(groupId,invitedUser),now=Date.now();
     const invite=await runTransaction(db,async tx=>{
@@ -5457,16 +5452,22 @@ const am = {
 // ── Coin Shop ─────────────────────────────────────────────────────────────────
 // Shop cards used to mount every animated SVG at once. That meant dozens of
 // off-screen SMIL timelines were still repainting while the sheet scrolled.
-// Mount only cards near the viewport, and freeze the few visible SVGs while a
-// scroll gesture is active. The full enhancement preview remains live.
+// First-mount cards near the viewport, keep their SVG in the DOM afterward,
+// and freeze off-screen/scrolling animation timelines. Keeping a stable SVG
+// avoids mobile WebKit dropping a re-created skin while its sheet is scrolling.
 function LazyShopTree({ skin, enhance=0, scrolling=false }) {
   const hostRef=useRef(null);
   const [nearViewport,setNearViewport]=useState(false);
+  const [mounted,setMounted]=useState(false);
   useEffect(()=>{
     const host=hostRef.current;
     if(!host)return;
-    if(typeof IntersectionObserver==="undefined"){setNearViewport(true);return;}
-    const observer=new IntersectionObserver(([entry])=>setNearViewport(!!entry?.isIntersecting),{rootMargin:"140px 0px"});
+    if(typeof IntersectionObserver==="undefined"){setNearViewport(true);setMounted(true);return;}
+    const observer=new IntersectionObserver(([entry])=>{
+      const visible=!!entry?.isIntersecting;
+      setNearViewport(visible);
+      if(visible)setMounted(true);
+    },{rootMargin:"180px 0px"});
     observer.observe(host);
     return()=>observer.disconnect();
   },[]);
@@ -5475,16 +5476,16 @@ function LazyShopTree({ skin, enhance=0, scrolling=false }) {
     if(!svg)return;
     const sync=()=>{
       try{
-        if(scrolling||document.hidden)svg.pauseAnimations?.();
+        if(scrolling||!nearViewport||document.hidden)svg.pauseAnimations?.();
         else svg.unpauseAnimations?.();
       }catch{}
     };
     sync();
     document.addEventListener("visibilitychange",sync);
     return()=>document.removeEventListener("visibilitychange",sync);
-  },[nearViewport,scrolling]);
+  },[nearViewport,scrolling,mounted]);
   return <div ref={hostRef} style={{height:108,width:"100%",position:"relative",overflow:"hidden"}}>
-    {nearViewport
+    {mounted
       ? <div style={{position:"absolute",left:"50%",bottom:0,width:160,height:180,transform:"translateX(-50%) scale(.48)",transformOrigin:"bottom center"}}>
           <TreeSVG progress={0.7} color={skin.canopy||"#56B68B"} paused={false} skin={skin.id} enhance={enhance}/>
         </div>
@@ -5581,7 +5582,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
               const canBuy  = !owned && coins >= skin.cost;
               const tier    = enhancements[skin.id]||0;
               return (
-                <div key={skin.id} className="sg-card-anim sg-lift-card sg-shop-card" style={{...sh.card,...(active?sh.cardActive:{}),animationDelay:`${Math.min(idx*0.03,0.3)}s`,contentVisibility:"auto",containIntrinsicSize:"270px"}}>
+                <div key={skin.id} className="sg-card-anim sg-lift-card sg-shop-card" style={{...sh.card,...(active?sh.cardActive:{}),animationDelay:`${Math.min(idx*0.03,0.3)}s`}}>
                   {skin.flagship
                     ? <div style={sh.flagshipBadge}>FLAGSHIP</div>
                     : skin.isNew && !owned && <div style={sh.newBadge}>NEW</div>}
@@ -7229,17 +7230,18 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
 
   // ── Contribution heatmap (last ~13 weeks, GitHub-style) ──
   const DAYS = 7, WEEKS = 13;
-  const today = startOfDay(new Date());
+  const today = startOfStudyDay(new Date());
   const dayMap = {};
-  hist.forEach(s=>{ const k=startOfDay(new Date(s.ts)).getTime(); dayMap[k]=(dayMap[k]||0)+s.secs; });
-  // Build grid columns oldest→newest, aligned so the last column ends today
-  const gridStart = new Date(today); gridStart.setDate(gridStart.getDate() - (WEEKS*DAYS - 1) - today.getDay());
+  hist.forEach(s=>{ const k=startOfStudyDay(s.ts).getTime(); dayMap[k]=(dayMap[k]||0)+s.secs; });
+  // Build complete Melbourne Sunday→Saturday columns. Future cells in the
+  // current week stay transparent until that Melbourne calendar day arrives.
+  const gridStart = shiftStudyWeek(today,-(WEEKS-1)).start;
   const heat = [];
   let maxDay = 0;
   for(let w=0; w<WEEKS; w++){
     const col=[];
     for(let d=0; d<DAYS; d++){
-      const day=new Date(gridStart); day.setDate(day.getDate()+w*DAYS+d);
+      const day=shiftStudyDay(gridStart,w*DAYS+d);
       const secs = day>today ? -1 : (dayMap[day.getTime()]||0);
       if(secs>maxDay) maxDay=secs;
       col.push({ t:day.getTime(), secs });
@@ -7257,10 +7259,10 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
   const trendWeeks = 8;
   const trend = [];
   for(let i=trendWeeks-1; i>=0; i--){
-    const s=new Date(ws); s.setDate(s.getDate()-i*7);
-    const e=new Date(s); e.setDate(e.getDate()+7);
+    const range=shiftStudyWeek(ws,-i);
+    const s=range.start, e=range.endExclusive;
     const secs=hist.filter(x=>{const t=new Date(x.ts); return t>=s&&t<e;}).reduce((a,x)=>a+x.secs,0);
-    trend.push({ secs, label:`${s.getMonth()+1}/${s.getDate()}` });
+    trend.push({ secs, label:formatStudyDate(s,{month:"numeric",day:"numeric"}) });
   }
   const trendMax = Math.max(...trend.map(t=>t.secs), 1);
   const tW=300, tH=70, tPad=4;
@@ -7336,7 +7338,7 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
                   {heat.map((col,ci)=>(
                     <div key={ci} style={sd.heatCol}>
                       {col.map((cell,di)=>(
-                        <div key={di} title={cell.secs>=0?`${fmtMins(cell.secs)} on ${new Date(cell.t).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}`:""}
+                        <div key={di} title={cell.secs>=0?`${fmtMins(cell.secs)} on ${formatStudyDate(cell.t,{day:"numeric",month:"short"})}`:""}
                           style={{...sd.heatCell,background:heatColor(cell.secs)}}/>
                       ))}
                     </div>
@@ -9811,7 +9813,7 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
   if(range==="week"){
     rangeStart=startOfWeek(now);
     const t=mkBuckets(7);
-    history.forEach(s=>{const d=new Date(s.ts);if(d>=rangeStart)addTo(t[d.getDay()],s);});
+    history.forEach(s=>{const d=new Date(s.ts);if(d>=rangeStart)addTo(t[getStudyDayOfWeek(d)],s);});
     bars=t.map((b,i)=>({label:DAY_LABELS[i],value:b.total,segments:toSegments(b.bySubj)}));
   } else if(range==="month"){
     rangeStart=startOfMonth(now);
@@ -9943,6 +9945,7 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
 // elapsed seconds. Keep this large chart + SVG subtree intact between ticks.
 const MemoAnalyticsPanel=memo(AnalyticsPanel,(prev,next)=>
   prev.user===next.user&&
+  prev.currentWeekKey===next.currentWeekKey&&
   prev.subjects===next.subjects&&
   prev.decorations===next.decorations&&
   prev.targets===next.targets&&
@@ -9968,11 +9971,12 @@ const an = {
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 // Build the {year-Wnn} key + a friendly label for a week N weeks ago
 function weekKeyForOffset(offset, now=new Date()){
-  const d = new Date(now); d.setDate(d.getDate() - offset*7);
-  const ws = startOfWeek(d), we = new Date(ws); we.setDate(we.getDate()+6);
-  const fmt = x => x.toLocaleDateString("en-AU",{day:"numeric",month:"short"});
+  const week = shiftStudyWeek(now,-offset);
+  const ws = week.start;
+  const we = new Date(week.endExclusive.getTime()-1);
+  const fmt = x => formatStudyDate(x,{day:"numeric",month:"short"});
   return {
-    key:getWeekKeyFor(d),
+    key:week.key,
     label:offset===0?"This week":offset===1?"Last week":`${offset} weeks ago`,
     rangeLabel:`${fmt(ws)} – ${fmt(we)}`,
     weekStart:ws,
@@ -10066,7 +10070,7 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
   );
 }
 
-function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit }) {
+function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, currentWeekKey }) {
   const [view,setView]=useState("weekly");
   const [weekOffset,setWeekOffset]=useState(0);
   const [pastEntries,setPastEntries]=useState(null);
@@ -10078,15 +10082,14 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit }) {
     let active=true; setPastLoading(true);
     fbLoadWeekBoard(weekKeyForOffset(weekOffset).key).then(e=>{ if(active){setPastEntries(e);setPastLoading(false);} });
     return ()=>{active=false;};
-  },[view,weekOffset]);
+  },[view,weekOffset,currentWeekKey]);
 
   const isPast = view==="past";
   const entries = isPast ? (pastEntries||[]) : (data[view]||[]);
   const showLoading = isPast ? pastLoading : loading;
   const medals=["🥇","🥈","🥉"];
   const wk = weekKeyForOffset(weekOffset);
-  const rewardDate = new Date();
-  if(isPast) rewardDate.setDate(rewardDate.getDate()-weekOffset*7);
+  const rewardDate = wk.weekStart;
   const rewardMode = getWeeklyRewardMode(rewardDate);
   const rewardPlan = getWeeklyRewardPlan(rewardDate);
   return (
@@ -10176,7 +10179,7 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit }) {
   );
 }
 
-function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
+function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey }){
   const inviteFromUrl=()=>new URLSearchParams(window.location.search).get("group")?.toUpperCase()||"";
   const [groups,setGroups]=useState(null);
   const [groupsError,setGroupsError]=useState("");
@@ -10221,7 +10224,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
       if(live){setBoard(result.rows||[]);setBoardError(result.ok?"":result.error);setPendingInvites(pending);setBoardLoading(false);}
     });
     return()=>{live=false;};
-  },[active]);
+  },[active,currentWeekKey]);
 
   const run=async action=>{
     if(busy)return null;
@@ -10426,7 +10429,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit }){
   </div>;
 }
 
-function LeaderboardHub({data,currentUser,loading,subjects,onVisit}){
+function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey}){
   const [section,setSection]=useState(()=>new URLSearchParams(window.location.search).has("group")?"groups":"global");
   return <div>
     <div style={{...S.toggleRow,marginBottom:12}}>
@@ -10434,8 +10437,8 @@ function LeaderboardHub({data,currentUser,loading,subjects,onVisit}){
       <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🌿 Groups</button>
     </div>
     {section==="global"
-      ? <LeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit}/>
-      : <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit}/>} 
+      ? <LeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
+      : <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>}
   </div>;
 }
 
@@ -10458,7 +10461,7 @@ const gl={
 };
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [user,setUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS));
@@ -10471,6 +10474,7 @@ export default function App() {
   const [paused,setPaused]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [tab,setTab]=useState("timer");
+  const studyWeekKey=weekRolloverToken;
   const [lb,setLb]=useState({weekly:[],allTime:[]});
   const [loading,setLoading]=useState(false);
   const [toast,setToast]=useState(null);
@@ -10536,6 +10540,12 @@ export default function App() {
   const finishingSessionRef=useRef(false);
   const intervalAudioRef=useRef(null);
   useEffect(()=>{pomodoroRef.current=pomodoro;},[pomodoro]);
+  useEffect(()=>{
+    // Let the new Melbourne week independently run its recap and podium-claim
+    // checks even when this tab stayed open across Sunday midnight.
+    recapCheckedRef.current=false;
+    rewardCheckedWeekRef.current="";
+  },[studyWeekKey]);
   const renderedBackgroundId=normalizeBackgroundId(previewBackgroundId||activeBackground);
   const renderedBackgroundAppearance=useMemo(
     ()=>getBackgroundAppearance(renderedBackgroundId,theme),
@@ -10789,6 +10799,10 @@ export default function App() {
     setLb(data);
     setLoading(false);
   },[]);
+
+  useEffect(()=>{
+    if(user&&prefsReady&&tab==="leaderboard")loadLB();
+  },[studyWeekKey,user,prefsReady,tab,loadLB]);
 
   // Wall-clock elapsed — immune to browser tab throttling
   const getTrueElapsed = useCallback(() => {
@@ -11568,7 +11582,7 @@ export default function App() {
       window.removeEventListener("pageshow",onResume);
       clearInterval(retry);
     };
-  },[user,prefsReady]);
+  },[user,prefsReady,studyWeekKey]);
 
   const [todaySecs, setTodaySecs] = useState(0);
   const [history, setHistory] = useState(null);   // full session history (for targets + badges)
@@ -11641,7 +11655,7 @@ export default function App() {
       lsSetR(LS_RECAP, thisWeek);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[user, history]);
+  },[user, history, studyWeekKey]);
 
   if(!authReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
@@ -11997,13 +12011,13 @@ export default function App() {
           {tab==="leaderboard"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-board">
               <StudyingNow presence={presence} currentUser={user}/>
-              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading} subjects={subjects} onVisit={setVisiting}/>
+              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey}/>
             </div>
           )}
 
           {tab==="stats"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-stats">
-              <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout}/>
+              <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout} currentWeekKey={studyWeekKey}/>
             </div>
           )}
         </>
