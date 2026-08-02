@@ -509,16 +509,66 @@ function RainField() {
   </>;
 }
 
-function ClassroomFrame({ art }) {
-  return <div className={`sg-bg-classroom-frame sg-bg-classroom-frame--${art}`} aria-hidden="true">
-    <span className="sg-bg-classroom-ceiling"/>
-    <span className="sg-bg-classroom-board"><i/><i/><i/></span>
-    <span className="sg-bg-classroom-clock"/>
-    <span className="sg-bg-classroom-shelf"/>
-    <span className="sg-bg-classroom-floor"/>
-    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--one"/>
-    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--two"/>
-    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--three"/>
+function ClassroomEnvironment({ art }) {
+  if (art === "ocean") return <div className="sg-theme-room sg-theme-room--ocean" aria-hidden="true">
+    <span className="sg-ocean-room-canopy"/>
+    <span className="sg-ocean-room-arch sg-ocean-room-arch--left"/>
+    <span className="sg-ocean-room-arch sg-ocean-room-arch--right"/>
+    <span className="sg-ocean-room-ship"/>
+    <span className="sg-ocean-room-kelp sg-ocean-room-kelp--left"/>
+    <span className="sg-ocean-room-kelp sg-ocean-room-kelp--right"/>
+    <span className="sg-ocean-room-floor"/>
+    <span className="sg-ocean-room-desk sg-ocean-room-desk--one"><i/><i/><i/></span>
+    <span className="sg-ocean-room-desk sg-ocean-room-desk--two"><i/><i/></span>
+    <span className="sg-ocean-room-desk sg-ocean-room-desk--three"><i/><i/><i/></span>
+  </div>;
+
+  if (art === "planetarium" || art === "celestial" || art === "moonlit") return <div className={`sg-theme-room sg-theme-room--space sg-theme-room--${art}`} aria-hidden="true">
+    <span className="sg-space-room-ceiling"/>
+    <span className="sg-space-room-board sg-space-room-board--left"/>
+    <span className="sg-space-room-board sg-space-room-board--right"/>
+    <span className="sg-space-room-planet sg-space-room-planet--one"/>
+    <span className="sg-space-room-planet sg-space-room-planet--two"/>
+    <span className="sg-space-room-planet sg-space-room-planet--three"/>
+    <span className="sg-space-room-floor"/>
+    <span className="sg-space-room-table sg-space-room-table--left"/>
+    <span className="sg-space-room-table sg-space-room-table--right"/>
+    <span className="sg-space-room-stool sg-space-room-stool--one"/>
+    <span className="sg-space-room-stool sg-space-room-stool--two"/>
+    <span className="sg-space-room-stool sg-space-room-stool--three"/>
+  </div>;
+
+  if (art === "blossom") return <div className="sg-theme-room sg-theme-room--blossom" aria-hidden="true">
+    <span className="sg-blossom-room-ceiling"/>
+    <span className="sg-blossom-room-window"><i/><i/><i/><i/><i/></span>
+    <span className="sg-blossom-room-heater sg-blossom-room-heater--left"/>
+    <span className="sg-blossom-room-heater sg-blossom-room-heater--right"/>
+    <span className="sg-blossom-room-floor"/>
+    <span className="sg-blossom-room-light"/>
+    <span className="sg-blossom-room-desk sg-blossom-room-desk--left"/>
+    <span className="sg-blossom-room-desk sg-blossom-room-desk--right"/>
+  </div>;
+
+  if (art === "rain") return <div className="sg-theme-room sg-theme-room--rain" aria-hidden="true">
+    <span className="sg-rain-room-ceiling"/>
+    <span className="sg-rain-room-wall sg-rain-room-wall--left"/>
+    <span className="sg-rain-room-wall sg-rain-room-wall--right"/>
+    <span className="sg-rain-room-window"><i/><i/><i/><i/></span>
+    <span className="sg-rain-room-sill"/>
+    <span className="sg-rain-room-floor"/>
+    <span className="sg-rain-room-desk sg-rain-room-desk--left"/>
+    <span className="sg-rain-room-desk sg-rain-room-desk--middle"/>
+    <span className="sg-rain-room-desk sg-rain-room-desk--right"/>
+  </div>;
+
+  return <div className={`sg-theme-room sg-theme-room--everyday sg-theme-room--${art}`} aria-hidden="true">
+    <span className="sg-everyday-room-ceiling"/>
+    <span className="sg-everyday-room-window"><i/><i/><i/></span>
+    <span className="sg-everyday-room-board"/>
+    <span className="sg-everyday-room-feature"/>
+    <span className="sg-everyday-room-floor"/>
+    <span className="sg-everyday-room-table sg-everyday-room-table--one"/>
+    <span className="sg-everyday-room-table sg-everyday-room-table--two"/>
   </div>;
 }
 
@@ -656,7 +706,7 @@ export function BackgroundArtwork({
     >
       <div className="sg-bg-wash"/>
       <BackgroundDecor art={background.art}/>
-      <ClassroomFrame art={background.art}/>
+      <ClassroomEnvironment art={background.art}/>
       <div className="sg-bg-vignette"/>
     </div>
   );
@@ -938,23 +988,64 @@ export const BACKGROUND_CSS = `
   position:absolute;width:9px;height:9px;border-radius:50%;
   transform:scale(var(--sg-bg-dot-scale,.5));opacity:.48;
 }
-.sg-bg-classroom-frame{position:absolute;inset:0;pointer-events:none;opacity:.52}
-.sg-bg-classroom-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:10%;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.035));border-bottom:clamp(2px,.35vw,5px) solid rgba(86,74,64,.16);clip-path:polygon(0 0,100% 0,94% 100%,6% 100%)}
-.sg-bg-classroom-ceiling::before{content:"";position:absolute;left:22%;right:22%;top:26%;height:32%;border-radius:8px;background:rgba(255,249,218,.3);box-shadow:0 0 28px rgba(255,242,190,.18)}
-.sg-bg-classroom-board{position:absolute;left:34%;top:13%;width:32%;height:20%;border:clamp(4px,.55vw,8px) solid rgba(112,82,54,.38);border-radius:5px;background:linear-gradient(155deg,rgba(43,85,72,.48),rgba(27,66,58,.62));box-shadow:0 9px 24px rgba(27,39,32,.12),inset 0 0 0 1px rgba(255,255,255,.07)}
-.sg-bg-classroom-board::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-9%;height:6%;border-radius:3px;background:rgba(105,76,51,.43)}
-.sg-bg-classroom-board i{position:absolute;height:2px;border-radius:4px;background:rgba(244,242,216,.42);transform:rotate(-2deg)}
-.sg-bg-classroom-board i:nth-child(1){left:11%;top:31%;width:38%}.sg-bg-classroom-board i:nth-child(2){right:13%;top:49%;width:29%}.sg-bg-classroom-board i:nth-child(3){left:20%;top:67%;width:51%}
-.sg-bg-classroom-clock{position:absolute;right:10%;top:12%;width:clamp(24px,3.2vw,48px);aspect-ratio:1;border:clamp(3px,.35vw,5px) solid rgba(92,78,65,.38);border-radius:50%;background:rgba(250,248,228,.46);box-shadow:0 5px 13px rgba(32,42,35,.09)}
-.sg-bg-classroom-clock::before,.sg-bg-classroom-clock::after{content:"";position:absolute;left:50%;top:50%;width:2px;transform-origin:50% 100%;border-radius:2px;background:rgba(60,67,61,.64)}
-.sg-bg-classroom-clock::before{height:28%;transform:translate(-50%,-100%) rotate(18deg)}.sg-bg-classroom-clock::after{height:20%;transform:translate(-50%,-100%) rotate(132deg)}
-.sg-bg-classroom-shelf{position:absolute;right:3%;top:31%;width:18%;height:37%;border:clamp(4px,.5vw,7px) solid rgba(94,66,45,.35);border-radius:6px;background:repeating-linear-gradient(0deg,transparent 0 28%,rgba(78,53,37,.38) 28% 31%),repeating-linear-gradient(90deg,rgba(173,102,76,.5) 0 8%,rgba(92,123,105,.52) 8% 15%,rgba(210,166,88,.48) 15% 22%,rgba(106,84,119,.5) 22% 29%);opacity:.68;box-shadow:0 10px 24px rgba(38,33,29,.1)}
-.sg-bg-classroom-floor{position:absolute;left:-5%;right:-5%;bottom:-3%;height:42%;background:repeating-linear-gradient(105deg,rgba(111,78,52,.16) 0 2px,transparent 2px 9%),linear-gradient(180deg,rgba(239,213,176,.11),rgba(96,70,54,.21));clip-path:polygon(5% 0,95% 0,100% 100%,0 100%);border-top:2px solid rgba(255,255,255,.13)}
-.sg-bg-classroom-desk{position:absolute;bottom:7%;width:22%;height:16%;border-top:clamp(7px,.8vw,12px) solid rgba(132,88,49,.45);background:linear-gradient(180deg,rgba(175,119,68,.22),rgba(87,64,51,.19));clip-path:polygon(7% 0,93% 0,100% 72%,84% 72%,82% 100%,76% 100%,74% 72%,26% 72%,24% 100%,18% 100%,16% 72%,0 72%);filter:drop-shadow(0 9px 8px rgba(31,36,32,.1))}
-.sg-bg-classroom-desk::before{content:"";position:absolute;left:32%;top:-38%;width:36%;height:38%;border-radius:4px 4px 0 0;border:clamp(3px,.35vw,5px) solid rgba(78,67,58,.28);border-bottom:0;background:rgba(117,101,87,.11)}
-.sg-bg-classroom-desk--one{left:5%;transform:scale(.76);transform-origin:bottom left}.sg-bg-classroom-desk--two{left:39%;bottom:2%}.sg-bg-classroom-desk--three{right:4%;transform:scale(.82);transform-origin:bottom right}
-.sg-background-art--compact .sg-bg-classroom-frame{opacity:.58}.sg-background-art--compact .sg-bg-classroom-board{border-width:3px}.sg-background-art--compact .sg-bg-classroom-clock{display:none}.sg-background-art--compact .sg-bg-classroom-desk{border-top-width:4px}
-[data-background-mode="dark"] .sg-bg-classroom-frame{opacity:.43;filter:brightness(.7) saturate(.82)}
+/* Each catalogue entry is a complete learning environment. These rooms sit
+   in front of their own sky/weather artwork, so rain, water and space remain
+   outside the architecture instead of tinting one reusable classroom. */
+.sg-theme-room{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+
+/* Underwater classroom — arched observation glass, reef desks and sea-floor
+   masonry are deliberately unlike every terrestrial room. */
+.sg-ocean-room-canopy{position:absolute;left:-4%;right:-4%;top:-2%;height:11%;background:linear-gradient(180deg,rgba(3,29,45,.84),rgba(12,58,72,.54));border-bottom:clamp(4px,.7vw,10px) solid rgba(90,169,174,.38);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
+.sg-ocean-room-arch{position:absolute;top:8%;height:49%;border:clamp(7px,.9vw,14px) solid rgba(12,55,66,.72);border-bottom-width:clamp(10px,1.2vw,18px);border-radius:46% 46% 6px 6px/28% 28% 6px 6px;box-shadow:inset 0 0 45px rgba(122,226,225,.08),0 12px 30px rgba(1,22,34,.22)}
+.sg-ocean-room-arch::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 49.3%,rgba(105,190,195,.28) 49.5% 50.5%,transparent 50.7%),linear-gradient(transparent 62%,rgba(105,190,195,.25) 62.5% 64%,transparent 64.5%)}
+.sg-ocean-room-arch--left{left:5%;width:42%}.sg-ocean-room-arch--right{right:5%;width:35%}
+.sg-ocean-room-ship{position:absolute;right:9%;top:34%;width:26%;height:10%;border-radius:60% 15% 48% 42%;background:rgba(6,35,45,.43);transform:rotate(-5deg);box-shadow:inset 0 -6px 0 rgba(68,112,117,.18)}
+.sg-ocean-room-ship::before{content:"";position:absolute;right:7%;bottom:75%;width:42%;height:86%;border-left:3px solid rgba(12,43,51,.42);border-bottom:3px solid rgba(12,43,51,.42);transform:skewX(-18deg)}
+.sg-ocean-room-kelp{position:absolute;bottom:19%;width:9%;height:48%;opacity:.62;background:repeating-radial-gradient(ellipse at 50% 88%,#3D9278 0 11%,transparent 12% 20%);transform-origin:50% 100%;animation:sgBgKelp 8s ease-in-out infinite}.sg-ocean-room-kelp--left{left:-1%;transform:rotate(-7deg)}.sg-ocean-room-kelp--right{right:1%;height:40%;animation-delay:-4s;filter:brightness(.82)}
+.sg-ocean-room-floor{position:absolute;left:-5%;right:-5%;bottom:-3%;height:38%;border-top:clamp(4px,.5vw,8px) solid rgba(67,151,151,.3);background:repeating-linear-gradient(90deg,transparent 0 10%,rgba(5,36,45,.19) 10% 10.5%),repeating-linear-gradient(165deg,transparent 0 12%,rgba(2,27,38,.2) 12% 12.5%),linear-gradient(180deg,rgba(22,100,111,.48),rgba(3,40,54,.78));clip-path:polygon(5% 0,95% 0,100% 100%,0 100%)}
+.sg-ocean-room-desk{position:absolute;bottom:7%;width:25%;height:15%;border-top:clamp(8px,1vw,15px) solid rgba(44,95,90,.85);border-radius:46% 46% 8px 8px;background:linear-gradient(180deg,rgba(22,67,68,.58),rgba(5,38,47,.72));clip-path:polygon(4% 0,96% 0,100% 76%,82% 76%,79% 100%,72% 100%,70% 76%,28% 76%,25% 100%,18% 100%,17% 76%,0 76%);filter:drop-shadow(0 9px 8px rgba(0,15,24,.3))}.sg-ocean-room-desk--one{left:5%;transform:scale(.78);transform-origin:bottom left}.sg-ocean-room-desk--two{left:38%;bottom:2%}.sg-ocean-room-desk--three{right:4%;transform:scale(.82);transform-origin:bottom right}
+.sg-ocean-room-desk i{position:absolute;top:-48%;width:16%;height:51%;border-radius:50% 50% 12% 12%;background:linear-gradient(90deg,#D27E88,#E6A282);box-shadow:0 0 0 2px rgba(68,33,45,.18);transform-origin:bottom}.sg-ocean-room-desk i:nth-child(1){left:18%;transform:rotate(-14deg)}.sg-ocean-room-desk i:nth-child(2){left:43%;height:68%;background:linear-gradient(90deg,#7CB69B,#A1D0A8)}.sg-ocean-room-desk i:nth-child(3){right:15%;transform:rotate(16deg);background:linear-gradient(90deg,#C58DB1,#E2A6C2)}
+
+/* Space rooms use laboratory tables, luminous learning boards and suspended
+   planets rather than the ordinary desks/blackboard silhouette. */
+.sg-space-room-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:9%;background:linear-gradient(180deg,rgba(2,3,14,.9),rgba(22,27,65,.55));border-bottom:3px solid rgba(124,141,217,.26)}
+.sg-space-room-board{position:absolute;top:15%;width:29%;height:22%;border:clamp(4px,.55vw,8px) solid rgba(91,111,192,.48);border-radius:9px;background:radial-gradient(circle at 28% 38%,#F4D36B 0 2px,transparent 3px),radial-gradient(circle at 62% 67%,#AFD7FF 0 2px,transparent 3px),linear-gradient(155deg,rgba(24,35,88,.72),rgba(7,12,38,.86));box-shadow:0 0 28px rgba(83,109,215,.12),inset 0 0 18px rgba(107,135,223,.09)}.sg-space-room-board::after{content:"";position:absolute;inset:14%;border:1px solid rgba(143,166,240,.24);border-radius:50%;transform:rotate(-14deg)}.sg-space-room-board--left{left:5%}.sg-space-room-board--right{right:5%;transform:scale(.82)}
+.sg-space-room-planet{position:absolute;top:4%;border-radius:50%;box-shadow:0 0 18px rgba(145,172,255,.28);transform-origin:50% -80%;animation:sgBgPlanetSway 11s ease-in-out infinite}.sg-space-room-planet::before{content:"";position:absolute;left:50%;bottom:100%;height:90%;width:1px;background:rgba(160,178,229,.35)}.sg-space-room-planet--one{left:29%;width:clamp(28px,4.5vw,67px);aspect-ratio:1;background:linear-gradient(145deg,#E9B45D,#A85D6C)}.sg-space-room-planet--two{left:52%;top:7%;width:clamp(34px,5.5vw,82px);aspect-ratio:1;background:linear-gradient(145deg,#65BBD1,#5068B8);animation-delay:-4s}.sg-space-room-planet--two::after{content:"";position:absolute;left:-22%;right:-22%;top:44%;height:12%;border:2px solid rgba(237,222,165,.54);border-radius:50%;transform:rotate(-14deg)}.sg-space-room-planet--three{right:22%;width:clamp(20px,3.3vw,48px);aspect-ratio:1;background:linear-gradient(145deg,#B38DDB,#5F62AA);animation-delay:-7s}
+.sg-space-room-floor{position:absolute;left:-4%;right:-4%;bottom:-4%;height:37%;background:repeating-linear-gradient(90deg,transparent 0 12%,rgba(105,119,192,.12) 12% 12.4%),linear-gradient(180deg,rgba(35,43,99,.5),rgba(6,10,35,.84));border-top:2px solid rgba(125,145,220,.2);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
+.sg-space-room-table{position:absolute;bottom:6%;width:35%;height:15%;border-top:clamp(8px,1vw,15px) solid rgba(74,91,160,.78);background:linear-gradient(180deg,rgba(56,70,131,.52),rgba(16,24,70,.72));clip-path:polygon(3% 0,97% 0,100% 72%,86% 72%,84% 100%,77% 100%,75% 72%,25% 72%,23% 100%,16% 100%,14% 72%,0 72%)}.sg-space-room-table--left{left:3%;transform:scale(.82);transform-origin:bottom left}.sg-space-room-table--right{right:3%;bottom:1%}
+.sg-space-room-stool{position:absolute;bottom:2%;width:5%;height:10%;border-radius:45% 45% 5px 5px;background:linear-gradient(180deg,#5366A8,#1C275D);box-shadow:0 7px 10px rgba(0,0,0,.22)}.sg-space-room-stool--one{left:18%}.sg-space-room-stool--two{left:59%}.sg-space-room-stool--three{right:12%}
+.sg-theme-room--moonlit .sg-space-room-board{opacity:.48}.sg-theme-room--moonlit .sg-space-room-planet--one{background:linear-gradient(145deg,#DDEAF4,#7D91B5)}.sg-theme-room--celestial .sg-space-room-floor{background:repeating-linear-gradient(90deg,transparent 0 12%,rgba(141,118,194,.14) 12% 12.4%),linear-gradient(180deg,rgba(58,50,111,.56),rgba(12,12,45,.86))}
+
+/* Cherry-blossom classroom — the window wall and sun-cast branch shadow are
+   the composition, matching the calm, almost empty reference room. */
+.sg-blossom-room-ceiling{position:absolute;left:-2%;right:-2%;top:0;height:9%;background:linear-gradient(180deg,rgba(255,248,235,.8),rgba(238,205,191,.52));border-bottom:2px solid rgba(148,102,91,.16)}
+.sg-blossom-room-window{position:absolute;left:5%;right:5%;top:7%;height:53%;border:clamp(6px,.8vw,12px) solid rgba(120,81,72,.42);background:rgba(255,242,236,.08);box-shadow:inset 0 0 34px rgba(255,223,211,.2),0 9px 23px rgba(83,53,48,.08)}.sg-blossom-room-window i{position:absolute;top:0;bottom:0;width:clamp(4px,.42vw,7px);background:rgba(128,83,74,.34)}.sg-blossom-room-window i:nth-child(1){left:18%}.sg-blossom-room-window i:nth-child(2){left:38%}.sg-blossom-room-window i:nth-child(3){left:58%}.sg-blossom-room-window i:nth-child(4){left:78%}.sg-blossom-room-window i:nth-child(5){left:0;right:0;top:48%;bottom:auto;width:100%;height:clamp(4px,.42vw,7px)}
+.sg-blossom-room-heater{position:absolute;top:48%;width:10%;height:13%;border:3px solid rgba(126,97,91,.23);border-radius:4px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.42) 0 9%,rgba(147,111,104,.18) 9% 13%)}.sg-blossom-room-heater--left{left:7%}.sg-blossom-room-heater--right{right:7%}
+.sg-blossom-room-floor{position:absolute;left:-4%;right:-4%;bottom:-3%;height:42%;background:repeating-linear-gradient(92deg,transparent 0 12%,rgba(139,85,73,.08) 12% 12.3%),linear-gradient(180deg,rgba(227,173,151,.36),rgba(154,92,79,.46));border-top:3px solid rgba(255,233,220,.22);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
+.sg-blossom-room-light{position:absolute;left:18%;bottom:0;width:62%;height:37%;background:linear-gradient(120deg,rgba(255,249,220,.52),rgba(255,224,211,.08) 60%,transparent 61%),repeating-radial-gradient(ellipse at 18% 12%,rgba(138,76,87,.14) 0 3%,transparent 4% 10%);clip-path:polygon(7% 0,74% 0,100% 100%,0 100%);animation:sgBgBlossomLight 16s ease-in-out infinite;transform-origin:top left}
+.sg-blossom-room-desk{position:absolute;bottom:5%;width:18%;height:12%;border-top:clamp(7px,.8vw,12px) solid rgba(129,76,58,.42);background:rgba(126,82,67,.18);clip-path:polygon(4% 0,96% 0,100% 65%,82% 65%,80% 100%,73% 100%,72% 65%,28% 65%,27% 100%,20% 100%,18% 65%,0 65%);opacity:.62}.sg-blossom-room-desk--left{left:-3%;transform:scale(.72)}.sg-blossom-room-desk--right{right:-2%;transform:scale(.78)}
+
+/* Rain classroom — the storm is visible through one broad wall of glass; the
+   opaque ceiling, side walls, floor and furniture remain dry foreground. */
+.sg-rain-room-ceiling{position:absolute;left:-2%;right:-2%;top:0;height:8%;background:linear-gradient(180deg,rgba(210,220,222,.96),rgba(139,156,162,.82));border-bottom:3px solid rgba(60,76,82,.25)}
+.sg-rain-room-wall{position:absolute;top:7%;bottom:33%;width:7%;background:linear-gradient(90deg,rgba(83,105,113,.92),rgba(150,167,171,.78));box-shadow:0 0 18px rgba(27,45,53,.2)}.sg-rain-room-wall--left{left:0}.sg-rain-room-wall--right{right:0;transform:scaleX(-1)}
+.sg-rain-room-window{position:absolute;left:6%;right:6%;top:7%;height:59%;border:clamp(7px,.9vw,14px) solid rgba(59,83,91,.66);background:rgba(150,189,200,.04);box-shadow:inset 0 0 65px rgba(8,29,40,.22),0 10px 26px rgba(24,41,49,.15)}.sg-rain-room-window i{position:absolute;background:rgba(78,102,109,.55)}.sg-rain-room-window i:nth-child(1){left:24.5%;top:0;bottom:0;width:clamp(4px,.48vw,8px)}.sg-rain-room-window i:nth-child(2){left:49.5%;top:0;bottom:0;width:clamp(4px,.48vw,8px)}.sg-rain-room-window i:nth-child(3){left:74.5%;top:0;bottom:0;width:clamp(4px,.48vw,8px)}.sg-rain-room-window i:nth-child(4){left:0;right:0;top:51%;height:clamp(4px,.48vw,8px)}
+.sg-rain-room-sill{position:absolute;left:4%;right:4%;top:65%;height:2%;border-radius:2px;background:rgba(59,77,83,.72);box-shadow:0 6px 13px rgba(23,38,45,.17)}
+.sg-rain-room-floor{position:absolute;left:-4%;right:-4%;bottom:-3%;height:37%;background:repeating-linear-gradient(100deg,transparent 0 13%,rgba(51,67,70,.1) 13% 13.5%),linear-gradient(180deg,rgba(112,126,126,.72),rgba(56,70,73,.86));border-top:2px solid rgba(203,220,217,.16);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
+.sg-rain-room-desk{position:absolute;bottom:5%;width:24%;height:14%;border-top:clamp(8px,.9vw,13px) solid rgba(72,67,61,.72);background:linear-gradient(180deg,rgba(103,99,92,.54),rgba(47,52,54,.68));clip-path:polygon(4% 0,96% 0,100% 73%,84% 73%,82% 100%,76% 100%,74% 73%,26% 73%,24% 100%,18% 100%,16% 73%,0 73%);filter:drop-shadow(0 8px 9px rgba(18,27,31,.24))}.sg-rain-room-desk::after{content:"";position:absolute;left:11%;right:53%;top:-36%;height:28%;border-radius:3px;background:linear-gradient(90deg,#7D91A0,#A5B4BA);transform:rotate(-3deg)}.sg-rain-room-desk--left{left:5%;transform:scale(.78);transform-origin:bottom left}.sg-rain-room-desk--middle{left:38%;bottom:1%}.sg-rain-room-desk--right{right:4%;transform:scale(.82);transform-origin:bottom right}
+
+/* Remaining catalogue entries retain their own art direction while receiving
+   a light room shell tailored through per-theme colour variables. */
+.sg-theme-room--everyday{--room-wall:rgba(232,239,228,.52);--room-trim:rgba(92,78,61,.32);--room-floor-a:rgba(209,177,132,.34);--room-floor-b:rgba(104,76,55,.38);--room-desk:rgba(124,84,54,.48);opacity:.72}
+.sg-everyday-room-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:9%;background:linear-gradient(180deg,rgba(255,255,247,.56),rgba(255,255,255,.12));border-bottom:3px solid var(--room-trim);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
+.sg-everyday-room-window{position:absolute;left:4%;top:8%;width:46%;height:46%;border:clamp(6px,.7vw,11px) solid var(--room-trim);border-radius:8px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 40px rgba(255,255,255,.08)}.sg-everyday-room-window i{position:absolute;background:var(--room-trim)}.sg-everyday-room-window i:nth-child(1){left:33%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(2){left:66%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(3){left:0;right:0;top:55%;height:4px}
+.sg-everyday-room-board{position:absolute;right:6%;top:15%;width:34%;height:24%;border:clamp(5px,.6vw,9px) solid var(--room-trim);border-radius:5px;background:linear-gradient(150deg,rgba(39,78,65,.5),rgba(18,55,49,.66));box-shadow:0 8px 20px rgba(23,35,29,.1)}.sg-everyday-room-board::before{content:"STUDY  •  GROW  •  SHINE";position:absolute;left:8%;right:8%;top:42%;color:rgba(246,241,211,.44);font:700 clamp(5px,.7vw,11px)/1 system-ui;letter-spacing:.1em;text-align:center}
+.sg-everyday-room-feature{position:absolute;right:7%;top:44%;width:15%;height:18%;border:4px solid var(--room-trim);border-radius:6px;background:repeating-linear-gradient(90deg,#C78667 0 9%,#799685 9% 17%,#D4AE63 17% 25%);opacity:.58}
+.sg-everyday-room-floor{position:absolute;left:-4%;right:-4%;bottom:-4%;height:39%;background:repeating-linear-gradient(104deg,transparent 0 12%,rgba(86,64,49,.08) 12% 12.4%),linear-gradient(180deg,var(--room-floor-a),var(--room-floor-b));border-top:2px solid rgba(255,255,255,.14);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
+.sg-everyday-room-table{position:absolute;bottom:4%;width:31%;height:14%;border-top:clamp(8px,.9vw,13px) solid var(--room-desk);background:color-mix(in srgb,var(--room-desk),transparent 44%);clip-path:polygon(4% 0,96% 0,100% 72%,84% 72%,82% 100%,75% 100%,73% 72%,27% 72%,25% 100%,18% 100%,16% 72%,0 72%)}.sg-everyday-room-table--one{left:7%;transform:scale(.82);transform-origin:bottom left}.sg-everyday-room-table--two{right:6%}
+.sg-theme-room--forest{--room-trim:rgba(72,105,72,.36);--room-floor-a:rgba(190,197,139,.28);--room-floor-b:rgba(82,116,75,.42);--room-desk:rgba(93,110,68,.5)}.sg-theme-room--forest .sg-everyday-room-window{width:60%;border-radius:42% 42% 8px 8px/20% 20% 8px 8px}.sg-theme-room--clouds{--room-trim:rgba(94,139,157,.3);--room-floor-a:rgba(205,223,225,.3);--room-floor-b:rgba(115,151,161,.38);--room-desk:rgba(97,131,142,.45)}.sg-theme-room--sunset{--room-trim:rgba(136,85,65,.34);--room-floor-a:rgba(232,173,123,.34);--room-floor-b:rgba(139,77,66,.42);--room-desk:rgba(142,80,54,.5)}.sg-theme-room--library{opacity:.44;--room-trim:rgba(101,66,40,.36);--room-floor-a:rgba(174,126,73,.28);--room-floor-b:rgba(74,47,30,.34);--room-desk:rgba(83,50,29,.45)}.sg-theme-room--lanterns{opacity:.5;--room-trim:rgba(114,58,43,.38);--room-floor-a:rgba(179,94,60,.3);--room-floor-b:rgba(72,41,39,.38);--room-desk:rgba(109,54,37,.5)}.sg-theme-room--aurora{--room-trim:rgba(115,149,181,.25);--room-floor-a:rgba(75,105,138,.28);--room-floor-b:rgba(17,32,62,.5);--room-desk:rgba(66,89,122,.5)}.sg-theme-room--midnight{opacity:.45;--room-trim:rgba(104,142,119,.2);--room-floor-a:rgba(39,61,49,.28);--room-floor-b:rgba(9,20,16,.48);--room-desk:rgba(49,75,59,.44)}
+[data-background-mode="dark"] .sg-theme-room--everyday{filter:brightness(.72) saturate(.82);opacity:.62}
+.sg-background-art--compact .sg-theme-room{font-size:6px}.sg-background-art--compact .sg-space-room-planet--three,.sg-background-art--compact .sg-ocean-room-ship,.sg-background-art--compact .sg-everyday-room-feature{display:none}.sg-background-art--compact .sg-ocean-room-desk,.sg-background-art--compact .sg-space-room-table,.sg-background-art--compact .sg-rain-room-desk,.sg-background-art--compact .sg-everyday-room-table{border-top-width:4px}.sg-background-art--compact .sg-blossom-room-window,.sg-background-art--compact .sg-rain-room-window,.sg-background-art--compact .sg-ocean-room-arch{border-width:4px}
 .sg-bg-classic-leaves {
   position:absolute;width:34vw;height:34vw;max-width:420px;max-height:420px;opacity:.22;
   background:
@@ -1115,6 +1206,9 @@ export const BACKGROUND_CSS = `
 @keyframes sgBgFish{0%{transform:translate3d(-10vw,0,0)}45%{transform:translate3d(58vw,-10px,0)}50%{transform:translate3d(58vw,-10px,0) scaleX(-1)}95%{transform:translate3d(-10vw,7px,0) scaleX(-1)}100%{transform:translate3d(-10vw,0,0)}}
 @keyframes sgBgBubble{0%{transform:translate3d(0,0,0) scale(.7);opacity:0}12%{opacity:.6}74%{opacity:.48}100%{transform:translate3d(10px,-92vh,0) scale(1.22);opacity:0}}
 @keyframes sgBgPlanetarium{to{transform:translateX(-50%) rotate(360deg)}}
+@keyframes sgBgKelp{0%,100%{rotate:-2deg;scale:1 .98}50%{rotate:3deg;scale:1 1.025}}
+@keyframes sgBgPlanetSway{0%,100%{rotate:-2.2deg;translate:0 0}50%{rotate:2.4deg;translate:0 3px}}
+@keyframes sgBgBlossomLight{0%,100%{transform:skewX(-1deg);opacity:.62}50%{transform:skewX(2deg) translateX(1.5%);opacity:.82}}
 @keyframes sgBgCloud{0%,100%{translate:-8px 0}50%{translate:18px -3px}}
 @keyframes sgBgAurora{0%,100%{transform:skewX(-6deg) scaleY(.9);opacity:.14}50%{transform:skewX(7deg) scaleY(1.12);opacity:.28}}
 @keyframes sgBgOrbit{to{transform:rotate(360deg)}}
@@ -1128,7 +1222,10 @@ export const BACKGROUND_CSS = `
 .sg-background-art--focus .sg-bg-cloud,
 .sg-background-art--focus .sg-bg-mist,
 .sg-background-art--focus .sg-bg-ocean-fish,
-.sg-background-art--focus .sg-bg-planetarium-map { animation-duration:60s!important;opacity:.12 }
+.sg-background-art--focus .sg-bg-planetarium-map,
+.sg-background-art--focus .sg-ocean-room-kelp,
+.sg-background-art--focus .sg-space-room-planet,
+.sg-background-art--focus .sg-blossom-room-light { animation-duration:60s!important;opacity:.18 }
 .sg-background-art--focus { filter:saturate(.72) contrast(.9); }
 [data-theme="dark"] .sg-shell .sg-background-art--focus.sg-keepcolor {
   filter:invert(1) hue-rotate(180deg) saturate(.72) contrast(.9);
@@ -1143,7 +1240,10 @@ export const BACKGROUND_CSS = `
 .sg-background-art--low-power .sg-bg-rain-droplets,
 .sg-background-art--low-power .sg-bg-ocean-fish,
 .sg-background-art--low-power .sg-bg-ocean-bubbles,
-.sg-background-art--low-power .sg-bg-planetarium-map { animation-play-state:paused!important; }
+.sg-background-art--low-power .sg-bg-planetarium-map,
+.sg-background-art--low-power .sg-ocean-room-kelp,
+.sg-background-art--low-power .sg-space-room-planet,
+.sg-background-art--low-power .sg-blossom-room-light { animation-play-state:paused!important; }
 .sg-shop-category-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4;padding:4;margin:0 0 11px;background:#EEF3EB;border-radius:13px}
 .sg-shop-category-tab{min-width:0;min-height:40px;border:0;border-radius:10px;background:transparent;color:#7C887E;padding:8px 5px;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap}
 .sg-shop-category-tab--active{color:#2D6A4F;background:#fff;box-shadow:0 1px 4px rgba(35,58,42,.1)}
