@@ -205,6 +205,31 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     },
   },
   {
+    id: "lantern-study-hall",
+    name: "Lantern Study Hall",
+    cost: 720,
+    rarity: "Rare",
+    art: "lanterns",
+    tone: "warm",
+    motion: "low",
+    description: "A cosy evening classroom with paper lanterns, books and a warm window glow.",
+    baseColor: "#7A493C",
+    gradient: "linear-gradient(160deg,#D58A64 0%,#8D5547 48%,#382B35 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(252,244,232,.69),rgba(242,226,211,.59))",
+    focusSurface: "rgba(248,239,229,.9)",
+    uiAccent: "#A7664C",
+    uiAccentSoft: "rgba(167,102,76,.2)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#190F13",
+      gradient: "linear-gradient(160deg,#4D2C29 0%,#22151A 52%,#0B080D 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(250,243,235,.73),rgba(239,228,219,.64))",
+      focusSurface: "rgba(247,239,232,.92)",
+      uiAccent: "#B17359",
+      uiAccentSoft: "rgba(177,115,89,.21)",
+    },
+  },
+  {
     id: "moonlit-grove",
     name: "Moonlit Classroom",
     cost: 780,
@@ -255,6 +280,31 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     },
   },
   {
+    id: "ocean-observatory",
+    name: "Ocean Observatory",
+    cost: 1180,
+    rarity: "Epic",
+    art: "ocean",
+    tone: "cool",
+    motion: "medium",
+    description: "A glass-walled learning room beneath blue water, drifting bubbles and quiet sea life.",
+    baseColor: "#0C5268",
+    gradient: "linear-gradient(165deg,#2195A6 0%,#0C5970 50%,#073047 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(237,249,248,.7),rgba(219,239,240,.61))",
+    focusSurface: "rgba(231,244,244,.9)",
+    uiAccent: "#3C8EA0",
+    uiAccentSoft: "rgba(60,142,160,.2)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#041923",
+      gradient: "linear-gradient(165deg,#0E5265 0%,#062B3A 52%,#021018 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(236,246,247,.74),rgba(219,235,238,.65))",
+      focusSurface: "rgba(233,242,244,.92)",
+      uiAccent: "#4F91A2",
+      uiAccentSoft: "rgba(79,145,162,.21)",
+    },
+  },
+  {
     id: "celestial-garden",
     name: "Celestial Classroom",
     cost: 1400,
@@ -279,7 +329,51 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
       uiAccentSoft: "rgba(133,131,179,.21)",
     },
   },
+  {
+    id: "starlight-planetarium",
+    name: "Starlight Planetarium",
+    cost: 1750,
+    rarity: "Mythical",
+    art: "planetarium",
+    tone: "dark",
+    motion: "medium",
+    description: "A classroom planetarium with a turning star map, constellation lines and projector light.",
+    baseColor: "#10142E",
+    gradient: "linear-gradient(155deg,#292D58 0%,#121631 56%,#070918 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(246,247,252,.73),rgba(229,232,243,.64))",
+    focusSurface: "rgba(237,239,247,.91)",
+    uiAccent: "#747CB0",
+    uiAccentSoft: "rgba(116,124,176,.2)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#050611",
+      gradient: "linear-gradient(155deg,#1A1D3D 0%,#090B20 58%,#02030A 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(244,245,250,.76),rgba(229,230,241,.67))",
+      focusSurface: "rgba(239,240,247,.93)",
+      uiAccent: "#8289BC",
+      uiAccentSoft: "rgba(130,137,188,.22)",
+    },
+  },
 ]);
+
+export const BACKGROUND_RARITY_ORDER = Object.freeze({
+  Default:0,
+  Common:1,
+  Rare:2,
+  Epic:3,
+  Mythical:4,
+});
+
+export function sortBackgroundsByRarity(items = BACKGROUND_CATALOGUE) {
+  return [...items].sort((left,right) =>
+    (BACKGROUND_RARITY_ORDER[left.rarity] ?? Number.MAX_SAFE_INTEGER)
+      - (BACKGROUND_RARITY_ORDER[right.rarity] ?? Number.MAX_SAFE_INTEGER)
+    || Number(left.cost || 0) - Number(right.cost || 0)
+    || left.name.localeCompare(right.name)
+  );
+}
+
+const SORTED_BACKGROUND_CATALOGUE = Object.freeze(sortBackgroundsByRarity());
 
 const CATALOGUE_BY_ID = new Map(BACKGROUND_CATALOGUE.map(item => [item.id, item]));
 
@@ -350,6 +444,28 @@ const AMBIENT_POINTS = Object.freeze([
   [18,69,.42],[38,82,.56],[61,70,.36],[78,88,.5],[7,48,.34],[54,45,.3],
 ]);
 
+const RAIN_STREAKS = Object.freeze(Array.from({ length:28 },(_,index) => ({
+  left:(index * 37 + 11) % 100,
+  height:70 + (index % 6) * 24,
+  delay:-(index % 11) * .47,
+  duration:1.45 + (index % 5) * .22,
+  drift:10 + (index % 4) * 4,
+})));
+
+const RAIN_TRAILS = Object.freeze(Array.from({ length:9 },(_,index) => ({
+  left:(index * 23 + 7) % 96,
+  height:120 + (index % 4) * 34,
+  delay:-(index % 7) * 2.8,
+  duration:10 + (index % 4) * 2.2,
+})));
+
+const OCEAN_BUBBLES = Object.freeze(Array.from({ length:12 },(_,index) => ({
+  left:(index * 29 + 9) % 94,
+  size:4 + (index % 4) * 3,
+  delay:-(index % 8) * 1.7,
+  duration:12 + (index % 5) * 2,
+})));
+
 function AmbientDots({ className = "", count = 8 }) {
   return <div className={`sg-bg-dots ${className}`} aria-hidden="true">
     {AMBIENT_POINTS.slice(0, count).map(([left,top,scale],index) => (
@@ -359,6 +475,65 @@ function AmbientDots({ className = "", count = 8 }) {
       }}/>
     ))}
   </div>;
+}
+
+function RainField() {
+  return <>
+    <div className="sg-bg-rain-bokeh" aria-hidden="true"><i/><i/><i/><i/><i/></div>
+    <div className="sg-bg-rain-sheet sg-bg-rain-sheet--far" aria-hidden="true">
+      {RAIN_STREAKS.slice(0,18).map((streak,index)=><i key={`far-${index}`} style={{
+        left:`${streak.left}%`,height:`${streak.height}px`,
+        "--sg-rain-delay":`${streak.delay}s`,"--sg-rain-duration":`${streak.duration+.75}s`,
+        "--sg-rain-drift":`${streak.drift}px`,
+      }}/>) }
+    </div>
+    <div className="sg-bg-rain-sheet sg-bg-rain-sheet--near" aria-hidden="true">
+      {RAIN_STREAKS.map((streak,index)=><i key={`near-${index}`} style={{
+        left:`${streak.left}%`,height:`${streak.height+45}px`,
+        "--sg-rain-delay":`${streak.delay-.9}s`,"--sg-rain-duration":`${streak.duration}s`,
+        "--sg-rain-drift":`${streak.drift+5}px`,
+      }}/>) }
+    </div>
+    <div className="sg-bg-rain-trails" aria-hidden="true">
+      {RAIN_TRAILS.map((trail,index)=><i key={`trail-${index}`} style={{
+        left:`${trail.left}%`,height:`${trail.height}px`,
+        "--sg-rain-delay":`${trail.delay}s`,"--sg-rain-duration":`${trail.duration}s`,
+      }}/>) }
+    </div>
+    <div className="sg-bg-rain-droplets" aria-hidden="true">
+      {AMBIENT_POINTS.map(([left,top,scale],index)=><i key={`drop-${index}`} style={{
+        left:`${left}%`,top:`${top}%`,width:`${5+scale*7}px`,height:`${8+scale*13}px`,
+        "--sg-bg-dot-delay":`${-index*1.35}s`,
+      }}/>) }
+    </div>
+  </>;
+}
+
+function ClassroomFrame({ art }) {
+  return <div className={`sg-bg-classroom-frame sg-bg-classroom-frame--${art}`} aria-hidden="true">
+    <span className="sg-bg-classroom-ceiling"/>
+    <span className="sg-bg-classroom-board"><i/><i/><i/></span>
+    <span className="sg-bg-classroom-clock"/>
+    <span className="sg-bg-classroom-shelf"/>
+    <span className="sg-bg-classroom-floor"/>
+    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--one"/>
+    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--two"/>
+    <span className="sg-bg-classroom-desk sg-bg-classroom-desk--three"/>
+  </div>;
+}
+
+function OceanField() {
+  return <>
+    <div className="sg-bg-ocean-window"/>
+    <div className="sg-bg-ocean-rays"/>
+    <div className="sg-bg-ocean-fish sg-bg-ocean-fish--one"/><div className="sg-bg-ocean-fish sg-bg-ocean-fish--two"/>
+    <div className="sg-bg-ocean-bubbles">
+      {OCEAN_BUBBLES.map((bubble,index)=><i key={index} style={{
+        left:`${bubble.left}%`,width:`${bubble.size}px`,height:`${bubble.size}px`,
+        "--sg-bubble-delay":`${bubble.delay}s`,"--sg-bubble-duration":`${bubble.duration}s`,
+      }}/>) }
+    </div>
+  </>;
 }
 
 function BackgroundDecor({ art }) {
@@ -376,9 +551,9 @@ function BackgroundDecor({ art }) {
       </>;
     case "moonlit":
       return <>
-        <span className="sg-bg-moon"/><AmbientDots className="sg-bg-stars" count={10}/>
-        <div className="sg-bg-forest sg-bg-forest--moon-far"/><div className="sg-bg-forest sg-bg-forest--moon-near"/>
-        <div className="sg-bg-mist sg-bg-mist--one"/><div className="sg-bg-mist sg-bg-mist--two"/>
+        <div className="sg-bg-night-window"/><span className="sg-bg-moon"/><AmbientDots className="sg-bg-stars" count={10}/>
+        <div className="sg-bg-moon-cloud sg-bg-moon-cloud--one"/><div className="sg-bg-moon-cloud sg-bg-moon-cloud--two"/>
+        <div className="sg-bg-moonbeam"/><div className="sg-bg-curtain sg-bg-curtain--left"/><div className="sg-bg-curtain sg-bg-curtain--right"/>
       </>;
     case "blossom":
       return <>
@@ -387,8 +562,7 @@ function BackgroundDecor({ art }) {
       </>;
     case "rain":
       return <>
-        <div className="sg-bg-window-grid"/><AmbientDots className="sg-bg-raindrops" count={12}/>
-        <div className="sg-bg-rain-glow"/>
+        <div className="sg-bg-window-grid"/><RainField/><div className="sg-bg-rain-glow"/>
       </>;
     case "sunset":
       return <>
@@ -404,6 +578,14 @@ function BackgroundDecor({ art }) {
         <div className="sg-bg-library-lamp"/>
         <div className="sg-bg-library-light"/>
       </>;
+    case "lanterns":
+      return <>
+        <div className="sg-bg-lantern-window"/><div className="sg-bg-lantern-shelf"/>
+        <div className="sg-bg-paper-lantern sg-bg-paper-lantern--one"/>
+        <div className="sg-bg-paper-lantern sg-bg-paper-lantern--two"/>
+        <div className="sg-bg-paper-lantern sg-bg-paper-lantern--three"/>
+        <AmbientDots className="sg-bg-lantern-motes" count={7}/>
+      </>;
     case "clouds":
       return <>
         <div className="sg-bg-cloud sg-bg-cloud--one"/><div className="sg-bg-cloud sg-bg-cloud--two"/>
@@ -415,11 +597,21 @@ function BackgroundDecor({ art }) {
         <div className="sg-bg-aurora sg-bg-aurora--three"/><AmbientDots className="sg-bg-stars" count={12}/>
         <div className="sg-bg-hill sg-bg-hill--night"/>
       </>;
+    case "ocean":
+      return <OceanField/>;
     case "celestial":
       return <>
         <span className="sg-bg-celestial-moon"/><span className="sg-bg-orbit sg-bg-orbit--one"/>
         <span className="sg-bg-orbit sg-bg-orbit--two"/><AmbientDots className="sg-bg-celestial-stars" count={12}/>
         <div className="sg-bg-celestial-garden"/>
+      </>;
+    case "planetarium":
+      return <>
+        <div className="sg-bg-planetarium-dome"/><div className="sg-bg-planetarium-map"/>
+        <div className="sg-bg-planetarium-constellation sg-bg-planetarium-constellation--one"/>
+        <div className="sg-bg-planetarium-constellation sg-bg-planetarium-constellation--two"/>
+        <div className="sg-bg-planetarium-projector"/><div className="sg-bg-planetarium-beam"/>
+        <AmbientDots className="sg-bg-celestial-stars" count={12}/>
       </>;
     default:
       return <>
@@ -464,6 +656,7 @@ export function BackgroundArtwork({
     >
       <div className="sg-bg-wash"/>
       <BackgroundDecor art={background.art}/>
+      <ClassroomFrame art={background.art}/>
       <div className="sg-bg-vignette"/>
     </div>
   );
@@ -572,8 +765,8 @@ export function BackgroundShop({
   const [toast, setToast] = useState("");
   const [busyId, setBusyId] = useState("");
   const items = filter === "owned"
-    ? BACKGROUND_CATALOGUE.filter(item => ownedIds.includes(item.id))
-    : BACKGROUND_CATALOGUE;
+    ? SORTED_BACKGROUND_CATALOGUE.filter(item => ownedIds.includes(item.id))
+    : SORTED_BACKGROUND_CATALOGUE;
 
   const showToast = message => {
     setToast(message);
@@ -745,6 +938,23 @@ export const BACKGROUND_CSS = `
   position:absolute;width:9px;height:9px;border-radius:50%;
   transform:scale(var(--sg-bg-dot-scale,.5));opacity:.48;
 }
+.sg-bg-classroom-frame{position:absolute;inset:0;pointer-events:none;opacity:.52}
+.sg-bg-classroom-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:10%;background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.035));border-bottom:clamp(2px,.35vw,5px) solid rgba(86,74,64,.16);clip-path:polygon(0 0,100% 0,94% 100%,6% 100%)}
+.sg-bg-classroom-ceiling::before{content:"";position:absolute;left:22%;right:22%;top:26%;height:32%;border-radius:8px;background:rgba(255,249,218,.3);box-shadow:0 0 28px rgba(255,242,190,.18)}
+.sg-bg-classroom-board{position:absolute;left:34%;top:13%;width:32%;height:20%;border:clamp(4px,.55vw,8px) solid rgba(112,82,54,.38);border-radius:5px;background:linear-gradient(155deg,rgba(43,85,72,.48),rgba(27,66,58,.62));box-shadow:0 9px 24px rgba(27,39,32,.12),inset 0 0 0 1px rgba(255,255,255,.07)}
+.sg-bg-classroom-board::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-9%;height:6%;border-radius:3px;background:rgba(105,76,51,.43)}
+.sg-bg-classroom-board i{position:absolute;height:2px;border-radius:4px;background:rgba(244,242,216,.42);transform:rotate(-2deg)}
+.sg-bg-classroom-board i:nth-child(1){left:11%;top:31%;width:38%}.sg-bg-classroom-board i:nth-child(2){right:13%;top:49%;width:29%}.sg-bg-classroom-board i:nth-child(3){left:20%;top:67%;width:51%}
+.sg-bg-classroom-clock{position:absolute;right:10%;top:12%;width:clamp(24px,3.2vw,48px);aspect-ratio:1;border:clamp(3px,.35vw,5px) solid rgba(92,78,65,.38);border-radius:50%;background:rgba(250,248,228,.46);box-shadow:0 5px 13px rgba(32,42,35,.09)}
+.sg-bg-classroom-clock::before,.sg-bg-classroom-clock::after{content:"";position:absolute;left:50%;top:50%;width:2px;transform-origin:50% 100%;border-radius:2px;background:rgba(60,67,61,.64)}
+.sg-bg-classroom-clock::before{height:28%;transform:translate(-50%,-100%) rotate(18deg)}.sg-bg-classroom-clock::after{height:20%;transform:translate(-50%,-100%) rotate(132deg)}
+.sg-bg-classroom-shelf{position:absolute;right:3%;top:31%;width:18%;height:37%;border:clamp(4px,.5vw,7px) solid rgba(94,66,45,.35);border-radius:6px;background:repeating-linear-gradient(0deg,transparent 0 28%,rgba(78,53,37,.38) 28% 31%),repeating-linear-gradient(90deg,rgba(173,102,76,.5) 0 8%,rgba(92,123,105,.52) 8% 15%,rgba(210,166,88,.48) 15% 22%,rgba(106,84,119,.5) 22% 29%);opacity:.68;box-shadow:0 10px 24px rgba(38,33,29,.1)}
+.sg-bg-classroom-floor{position:absolute;left:-5%;right:-5%;bottom:-3%;height:42%;background:repeating-linear-gradient(105deg,rgba(111,78,52,.16) 0 2px,transparent 2px 9%),linear-gradient(180deg,rgba(239,213,176,.11),rgba(96,70,54,.21));clip-path:polygon(5% 0,95% 0,100% 100%,0 100%);border-top:2px solid rgba(255,255,255,.13)}
+.sg-bg-classroom-desk{position:absolute;bottom:7%;width:22%;height:16%;border-top:clamp(7px,.8vw,12px) solid rgba(132,88,49,.45);background:linear-gradient(180deg,rgba(175,119,68,.22),rgba(87,64,51,.19));clip-path:polygon(7% 0,93% 0,100% 72%,84% 72%,82% 100%,76% 100%,74% 72%,26% 72%,24% 100%,18% 100%,16% 72%,0 72%);filter:drop-shadow(0 9px 8px rgba(31,36,32,.1))}
+.sg-bg-classroom-desk::before{content:"";position:absolute;left:32%;top:-38%;width:36%;height:38%;border-radius:4px 4px 0 0;border:clamp(3px,.35vw,5px) solid rgba(78,67,58,.28);border-bottom:0;background:rgba(117,101,87,.11)}
+.sg-bg-classroom-desk--one{left:5%;transform:scale(.76);transform-origin:bottom left}.sg-bg-classroom-desk--two{left:39%;bottom:2%}.sg-bg-classroom-desk--three{right:4%;transform:scale(.82);transform-origin:bottom right}
+.sg-background-art--compact .sg-bg-classroom-frame{opacity:.58}.sg-background-art--compact .sg-bg-classroom-board{border-width:3px}.sg-background-art--compact .sg-bg-classroom-clock{display:none}.sg-background-art--compact .sg-bg-classroom-desk{border-top-width:4px}
+[data-background-mode="dark"] .sg-bg-classroom-frame{opacity:.43;filter:brightness(.7) saturate(.82)}
 .sg-bg-classic-leaves {
   position:absolute;width:34vw;height:34vw;max-width:420px;max-height:420px;opacity:.22;
   background:
@@ -784,11 +994,15 @@ export const BACKGROUND_CSS = `
 [data-background-mode="dark"][data-background-art="forest"] .sg-bg-forest--far{background:rgba(70,112,81,.3)}
 [data-background-mode="dark"][data-background-art="forest"] .sg-bg-forest--near{background:rgba(21,57,35,.56)}
 [data-background-mode="dark"][data-background-art="forest"] .sg-bg-pollen i{opacity:.24;background:#D8E8B6;box-shadow:0 0 7px rgba(180,218,166,.34)}
-.sg-bg-moon{position:absolute;right:13%;top:8%;width:clamp(72px,10vw,140px);aspect-ratio:1;border-radius:50%;background:#E8F2F7;box-shadow:0 0 48px rgba(197,224,244,.45)}
+.sg-bg-night-window{position:absolute;left:5%;right:5%;top:5%;height:60%;border:clamp(6px,.7vw,11px) solid rgba(168,188,209,.24);border-radius:9px;background:linear-gradient(90deg,transparent 33%,rgba(190,207,223,.15) 33.2% 33.8%,transparent 34% 66%,rgba(190,207,223,.15) 66.2% 66.8%,transparent 67%),linear-gradient(transparent 56%,rgba(190,207,223,.14) 56.2% 57%,transparent 57.2%);box-shadow:inset 0 0 60px rgba(7,14,29,.38),0 16px 42px rgba(5,9,18,.2)}
+.sg-bg-moon{position:absolute;left:16%;top:10%;width:clamp(82px,12vw,168px);aspect-ratio:1;border-radius:50%;background:#E8F2F7;box-shadow:0 0 55px rgba(197,224,244,.5);animation:sgBgMoonPulse 12s ease-in-out infinite}
 .sg-bg-moon::after{content:"";position:absolute;left:30%;top:-5%;width:92%;height:92%;border-radius:50%;background:#243650}
 .sg-bg-stars i,.sg-bg-celestial-stars i{width:4px;height:4px;background:#F4F5D5;box-shadow:0 0 7px rgba(235,241,214,.72);animation:sgBgTwinkle 8s ease-in-out var(--sg-bg-dot-delay) infinite}
-.sg-bg-forest--moon-far{background:rgba(58,83,105,.48);transform:translateY(-11%) scale(1.05)}
-.sg-bg-forest--moon-near{background:rgba(20,43,52,.62)}
+.sg-bg-moon-cloud{position:absolute;width:clamp(150px,25vw,330px);height:clamp(34px,5vw,66px);border-radius:80%;background:rgba(170,190,207,.12);filter:blur(6px);animation:sgBgMoonCloud 34s ease-in-out infinite}
+.sg-bg-moon-cloud--one{left:4%;top:19%}.sg-bg-moon-cloud--two{right:4%;top:36%;transform:scale(.7);animation-delay:-16s}
+.sg-bg-moonbeam{position:absolute;left:4%;top:20%;width:62%;height:72%;clip-path:polygon(8% 0,39% 0,100% 100%,0 100%);background:linear-gradient(135deg,rgba(201,225,245,.22),rgba(178,207,237,.02));animation:sgBgBeam 10s ease-in-out infinite}
+.sg-bg-curtain{position:absolute;top:4%;width:9%;height:63%;border-radius:12% 12% 34% 34%;background:repeating-linear-gradient(90deg,rgba(71,88,119,.48) 0 17%,rgba(110,126,153,.32) 17% 34%);filter:drop-shadow(0 8px 8px rgba(6,11,21,.16));transform-origin:top center;animation:sgBgCurtain 11s ease-in-out infinite}
+.sg-bg-curtain--left{left:3%}.sg-bg-curtain--right{right:3%;animation-delay:-5s}
 .sg-bg-mist{position:absolute;left:-25%;width:150%;height:16%;border-radius:50%;background:rgba(213,229,235,.13);filter:blur(16px);animation:sgBgMist 28s ease-in-out infinite}
 .sg-bg-mist--one{bottom:28%}.sg-bg-mist--two{bottom:14%;animation-delay:-13s;opacity:.65}
 .sg-bg-branch{position:absolute;width:44%;height:15%;border-radius:50%;border-bottom:clamp(4px,.7vw,10px) solid rgba(104,75,70,.34)}
@@ -800,12 +1014,18 @@ export const BACKGROUND_CSS = `
 [data-background-mode="dark"][data-background-art="blossom"] .sg-bg-branch::before,
 [data-background-mode="dark"][data-background-art="blossom"] .sg-bg-branch::after{border-top-color:rgba(192,144,157,.17)}
 [data-background-mode="dark"][data-background-art="blossom"] .sg-bg-petals i{background:#D799B3;opacity:.28}
-.sg-bg-window-grid{position:absolute;inset:6%;border:3px solid rgba(238,245,246,.2);background:linear-gradient(90deg,transparent 49.6%,rgba(240,247,248,.16) 49.8% 50.2%,transparent 50.4%),linear-gradient(transparent 49.6%,rgba(240,247,248,.16) 49.8% 50.2%,transparent 50.4%);box-shadow:0 16px 46px rgba(38,58,69,.18)}
-.sg-bg-raindrops i{width:2px;height:48px;border-radius:2px;background:linear-gradient(transparent,rgba(232,243,247,.58));animation:sgBgRain 2.8s linear var(--sg-bg-dot-delay) infinite}
-.sg-bg-rain-glow{background:radial-gradient(circle at 75% 20%,rgba(242,248,246,.25),transparent 28%)}
+.sg-bg-window-grid{position:absolute;left:4%;right:4%;top:4%;height:64%;border:clamp(5px,.65vw,10px) solid rgba(238,245,246,.22);border-radius:8px;background:linear-gradient(90deg,transparent 32.8%,rgba(240,247,248,.2) 33% 33.5%,transparent 33.7% 66%,rgba(240,247,248,.2) 66.2% 66.7%,transparent 66.9%),linear-gradient(transparent 52%,rgba(240,247,248,.18) 52.2% 52.8%,transparent 53%);box-shadow:inset 0 0 70px rgba(31,55,68,.2),0 16px 46px rgba(38,58,69,.18)}
+.sg-bg-rain-sheet,.sg-bg-rain-trails,.sg-bg-rain-droplets,.sg-bg-rain-bokeh{position:absolute;left:4%;right:4%;top:4%;height:64%;overflow:hidden;border-radius:8px}
+.sg-bg-rain-sheet i{position:absolute;top:-42%;width:1.4px;border-radius:999px;background:linear-gradient(180deg,transparent 0 5%,rgba(232,246,252,.16) 18%,rgba(235,248,252,.72) 72%,rgba(255,255,255,.18));transform:rotate(-6deg);animation:sgBgRainStreak var(--sg-rain-duration,1.8s) linear var(--sg-rain-delay,0s) infinite;will-change:transform,opacity}
+.sg-bg-rain-sheet--far{opacity:.46;filter:blur(.35px)}.sg-bg-rain-sheet--near{opacity:.78}.sg-bg-rain-sheet--near i:nth-child(3n){width:2.4px;filter:drop-shadow(0 0 2px rgba(227,244,250,.42))}
+.sg-bg-rain-trails i{position:absolute;top:-28%;width:clamp(2px,.24vw,4px);border-radius:999px 999px 50% 50%;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(226,242,248,.4) 18%,rgba(244,251,253,.6) 86%,rgba(250,254,255,.1));box-shadow:0 0 4px rgba(232,247,252,.26);opacity:.56;animation:sgBgRainTrail var(--sg-rain-duration,12s) ease-in var(--sg-rain-delay,0s) infinite;will-change:transform,opacity}
+.sg-bg-rain-droplets i{position:absolute;border-radius:60% 45% 58% 48%;background:radial-gradient(circle at 35% 28%,rgba(255,255,255,.8) 0 8%,rgba(228,244,249,.36) 24%,rgba(133,173,189,.13) 68%,rgba(255,255,255,.42) 72% 77%,transparent 79%);box-shadow:inset -1px -2px 2px rgba(58,103,121,.2),0 1px 2px rgba(255,255,255,.25);animation:sgBgDropCreep 18s ease-in-out var(--sg-bg-dot-delay) infinite;will-change:transform,opacity}
+.sg-bg-rain-bokeh{background:radial-gradient(circle at 12% 61%,rgba(255,184,88,.36) 0 1.8%,transparent 6%),radial-gradient(circle at 81% 22%,rgba(122,202,224,.28) 0 1.5%,transparent 6%),radial-gradient(circle at 70% 68%,rgba(255,216,136,.24) 0 1.2%,transparent 5%),linear-gradient(180deg,rgba(55,101,122,.12),rgba(19,54,72,.2));filter:blur(2px);opacity:.72}
+.sg-bg-rain-bokeh i{position:absolute;width:clamp(26px,5vw,68px);aspect-ratio:1;border-radius:50%;background:rgba(255,184,87,.2);filter:blur(8px);animation:sgBgBokeh 9s ease-in-out infinite}.sg-bg-rain-bokeh i:nth-child(1){left:6%;top:18%}.sg-bg-rain-bokeh i:nth-child(2){left:25%;top:66%;background:rgba(93,185,218,.2);animation-delay:-2s}.sg-bg-rain-bokeh i:nth-child(3){right:8%;top:42%;animation-delay:-4s}.sg-bg-rain-bokeh i:nth-child(4){right:28%;top:15%;background:rgba(119,194,219,.2);animation-delay:-6s}.sg-bg-rain-bokeh i:nth-child(5){left:48%;top:48%;animation-delay:-7s}
+.sg-bg-rain-glow{background:radial-gradient(circle at 75% 20%,rgba(242,248,246,.26),transparent 28%),linear-gradient(115deg,transparent 42%,rgba(210,233,243,.08) 55%,transparent 68%)}
 [data-background-mode="dark"][data-background-art="rain"] .sg-bg-window-grid{border-color:rgba(205,225,234,.12);box-shadow:0 16px 50px rgba(0,0,0,.28)}
 [data-background-mode="dark"][data-background-art="rain"] .sg-bg-rain-glow{background:radial-gradient(circle at 75% 20%,rgba(183,210,221,.13),transparent 30%)}
-[data-background-mode="dark"][data-background-art="rain"] .sg-bg-raindrops i{opacity:.34}
+[data-background-mode="dark"][data-background-art="rain"] .sg-bg-rain-sheet{opacity:.54}[data-background-mode="dark"][data-background-art="rain"] .sg-bg-rain-trails{opacity:.64}[data-background-mode="dark"][data-background-art="rain"] .sg-bg-rain-bokeh{opacity:.52}
 .sg-bg-sunset-sun{position:absolute;left:62%;top:25%;width:clamp(94px,14vw,190px);aspect-ratio:1;border-radius:50%;background:rgba(255,230,168,.7);box-shadow:0 0 70px rgba(255,214,147,.38)}
 .sg-bg-hill{position:absolute;left:-10%;right:-10%;bottom:-24%;height:58%;border-radius:50% 50% 0 0/38% 38% 0 0}
 .sg-bg-hill--far{background:rgba(119,115,91,.21);transform:translate(-9%,-16%) rotate(2deg)}
@@ -834,6 +1054,13 @@ export const BACKGROUND_CSS = `
 [data-background-mode="dark"][data-background-art="library"] .sg-bg-library-lamp{filter:brightness(.78)}
 [data-background-mode="dark"][data-background-art="library"] .sg-bg-library-light{background:radial-gradient(ellipse at 50% 18%,rgba(239,190,112,.16),transparent 36%),radial-gradient(circle at 29% 73%,rgba(246,186,93,.13),transparent 19%)}
 .sg-background-art--compact .sg-bg-shelf{top:5%;bottom:5%;width:27%;border-width:4px}.sg-background-art--compact .sg-bg-shelf--left{left:2%}.sg-background-art--compact .sg-bg-shelf--right{right:2%}.sg-background-art--compact .sg-bg-library-window{top:8%;width:34%;height:43%;border-width:4px}.sg-background-art--compact .sg-bg-library-window::after{bottom:-7px;height:6px}.sg-background-art--compact .sg-bg-library-desk{left:27%;right:27%;height:18%;border-top-width:5px}.sg-background-art--compact .sg-bg-library-lamp{left:30%;width:24px;height:36px;border-left-width:2px}
+.sg-bg-lantern-window{position:absolute;left:5%;right:33%;top:6%;height:54%;border:clamp(6px,.7vw,10px) solid rgba(84,53,40,.35);border-radius:8px;background:linear-gradient(180deg,rgba(255,191,115,.46),rgba(102,61,65,.2)),linear-gradient(90deg,transparent 49.5%,rgba(83,54,43,.32) 49.7% 50.3%,transparent 50.5%);box-shadow:inset 0 0 50px rgba(255,193,111,.18),0 12px 28px rgba(47,29,26,.13)}
+.sg-bg-lantern-shelf{position:absolute;right:4%;top:8%;width:23%;height:57%;border:clamp(5px,.6vw,9px) solid rgba(67,43,33,.42);border-radius:8px;background:repeating-linear-gradient(0deg,transparent 0 22%,rgba(61,39,30,.48) 22% 25%),repeating-linear-gradient(90deg,#A5674F 0 7%,#D0A55C 7% 13%,#526C63 13% 20%,#7D5069 20% 26%);opacity:.7}
+.sg-bg-paper-lantern{position:absolute;top:5%;width:clamp(30px,4.6vw,66px);height:clamp(43px,6vw,88px);border-radius:44% 44% 38% 38%;background:repeating-linear-gradient(0deg,rgba(153,64,47,.74) 0 12%,rgba(224,106,68,.8) 12% 24%);border:2px solid rgba(84,41,34,.32);box-shadow:0 0 34px rgba(255,151,78,.32);transform-origin:50% -20%;animation:sgBgLanternSway 8s ease-in-out infinite}
+.sg-bg-paper-lantern::before{content:"";position:absolute;left:50%;top:-38%;width:1px;height:38%;background:rgba(50,38,36,.42)}.sg-bg-paper-lantern::after{content:"";position:absolute;left:42%;bottom:-24%;width:16%;height:24%;background:repeating-linear-gradient(90deg,#E8A44D 0 24%,transparent 24% 44%)}
+.sg-bg-paper-lantern--one{left:12%}.sg-bg-paper-lantern--two{left:43%;top:8%;transform:scale(.8);animation-delay:-3s}.sg-bg-paper-lantern--three{right:8%;top:3%;transform:scale(.68);animation-delay:-5.5s}
+.sg-bg-lantern-motes i{background:#FFD28A;box-shadow:0 0 9px rgba(255,181,92,.64);animation:sgBgFloat 17s ease-in-out var(--sg-bg-dot-delay) infinite}
+[data-background-mode="dark"][data-background-art="lanterns"] .sg-bg-paper-lantern{filter:brightness(.76);box-shadow:0 0 26px rgba(255,140,71,.2)}
 .sg-bg-cloud{position:absolute;width:clamp(130px,23vw,300px);height:clamp(36px,6vw,84px);border-radius:80px;background:rgba(255,255,255,.54);filter:blur(.2px);animation:sgBgCloud 40s ease-in-out infinite}
 .sg-bg-cloud::before,.sg-bg-cloud::after{content:"";position:absolute;border-radius:50%;background:inherit}
 .sg-bg-cloud::before{width:42%;aspect-ratio:1;left:16%;bottom:16%}.sg-bg-cloud::after{width:33%;aspect-ratio:1;right:17%;bottom:17%}
@@ -846,11 +1073,26 @@ export const BACKGROUND_CSS = `
 .sg-bg-aurora--two{top:18%;background:linear-gradient(90deg,transparent,#97C6E8 25%,#B99AE4 70%,transparent);animation-delay:-8s}
 .sg-bg-aurora--three{top:34%;opacity:.12;background:linear-gradient(90deg,transparent,#64CFA7 45%,#7D8BE2 76%,transparent);animation-delay:-14s}
 .sg-bg-hill--night{background:rgba(6,14,25,.62);bottom:-35%;height:58%}
+.sg-bg-ocean-window{position:absolute;left:4%;right:4%;top:4%;height:65%;border:clamp(8px,1vw,15px) solid rgba(20,57,68,.42);border-radius:18px;background:linear-gradient(90deg,transparent 49.4%,rgba(155,224,229,.16) 49.6% 50.4%,transparent 50.6%),linear-gradient(180deg,rgba(90,207,218,.18),rgba(2,42,61,.34));box-shadow:inset 0 0 65px rgba(1,29,44,.38),0 18px 38px rgba(1,27,38,.18)}
+.sg-bg-ocean-rays{position:absolute;left:-8%;right:-8%;top:-8%;height:82%;background:repeating-linear-gradient(104deg,transparent 0 10%,rgba(158,232,229,.1) 11% 14%,transparent 15% 25%);clip-path:polygon(0 0,100% 0,78% 100%,18% 100%);animation:sgBgOceanRays 15s ease-in-out infinite;transform-origin:top center}
+.sg-bg-ocean-fish{position:absolute;width:clamp(34px,6vw,84px);height:clamp(13px,2.2vw,30px);border-radius:60% 48% 48% 60%;background:rgba(5,42,57,.46);animation:sgBgFish 24s linear infinite;will-change:transform}
+.sg-bg-ocean-fish::after{content:"";position:absolute;right:-28%;top:10%;width:34%;height:80%;background:inherit;clip-path:polygon(0 50%,100% 0,100% 100%)}.sg-bg-ocean-fish::before{content:"";position:absolute;left:18%;top:25%;width:7%;aspect-ratio:1;border-radius:50%;background:rgba(196,237,234,.62)}
+.sg-bg-ocean-fish--one{left:-12%;top:23%}.sg-bg-ocean-fish--two{left:-26%;top:46%;transform:scale(.58);animation-duration:32s;animation-delay:-14s;opacity:.62}
+.sg-bg-ocean-bubbles{position:absolute;inset:0}.sg-bg-ocean-bubbles i{position:absolute;bottom:-8%;border:1px solid rgba(190,244,242,.54);border-radius:50%;box-shadow:inset 1px 1px 2px rgba(255,255,255,.24);animation:sgBgBubble var(--sg-bubble-duration,15s) ease-in var(--sg-bubble-delay,0s) infinite;will-change:transform,opacity}
+[data-background-mode="dark"][data-background-art="ocean"] .sg-bg-ocean-window{filter:brightness(.7)}[data-background-mode="dark"][data-background-art="ocean"] .sg-bg-ocean-rays{opacity:.58}
 .sg-bg-celestial-moon{position:absolute;left:12%;top:9%;width:clamp(60px,9vw,126px);aspect-ratio:1;border-radius:50%;border:clamp(6px,.8vw,12px) solid rgba(229,226,191,.68);box-shadow:0 0 35px rgba(216,217,192,.26)}
 .sg-bg-orbit{position:absolute;right:10%;top:10%;width:clamp(170px,28vw,390px);aspect-ratio:1;border:1px solid rgba(197,195,231,.18);border-radius:50%;animation:sgBgOrbit 42s linear infinite}
 .sg-bg-orbit::after{content:"";position:absolute;width:10px;height:10px;border-radius:50%;background:#E5D89D;left:18%;top:8%;box-shadow:0 0 12px rgba(232,217,157,.5)}
 .sg-bg-orbit--two{right:16%;top:17%;transform:scale(.62);animation-direction:reverse;animation-duration:34s}
 .sg-bg-celestial-garden{position:absolute;left:-5%;right:-5%;bottom:-3%;height:35%;opacity:.36;background:radial-gradient(ellipse at 15% 100%,#62648D 0 19%,transparent 20%),radial-gradient(ellipse at 38% 100%,#4F537B 0 24%,transparent 25%),radial-gradient(ellipse at 70% 100%,#64678E 0 21%,transparent 22%),radial-gradient(ellipse at 92% 100%,#4B5179 0 24%,transparent 25%)}
+.sg-bg-planetarium-dome{position:absolute;left:-8%;right:-8%;top:-31%;height:88%;border-radius:0 0 50% 50%;border-bottom:clamp(8px,1vw,14px) solid rgba(105,112,159,.28);background:radial-gradient(ellipse at 50% 84%,rgba(80,91,151,.16),rgba(4,6,20,.38) 68%);box-shadow:inset 0 -25px 65px rgba(79,89,149,.1)}
+.sg-bg-planetarium-map{position:absolute;left:50%;top:5%;width:clamp(260px,46vw,620px);aspect-ratio:1;border:1px solid rgba(184,193,239,.15);border-radius:50%;transform:translateX(-50%);background:repeating-radial-gradient(circle,transparent 0 15%,rgba(171,181,230,.09) 15.2% 15.5%,transparent 15.8% 25%);animation:sgBgPlanetarium 70s linear infinite}
+.sg-bg-planetarium-map::before,.sg-bg-planetarium-map::after{content:"";position:absolute;inset:15%;border:1px solid rgba(174,184,232,.11);border-radius:50%;transform:rotate(58deg)}.sg-bg-planetarium-map::after{inset:31%;transform:rotate(118deg)}
+.sg-bg-planetarium-constellation{position:absolute;width:24%;height:16%;background:linear-gradient(28deg,transparent 48%,rgba(182,195,246,.2) 49% 51%,transparent 52%),linear-gradient(-32deg,transparent 48%,rgba(182,195,246,.16) 49% 51%,transparent 52%);opacity:.7;animation:sgBgTwinkle 10s ease-in-out infinite}.sg-bg-planetarium-constellation::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 5% 76%,#F4EDBE 0 2px,transparent 3px),radial-gradient(circle at 48% 38%,#DDE7FF 0 2px,transparent 3px),radial-gradient(circle at 96% 7%,#F4EDBE 0 2px,transparent 3px),radial-gradient(circle at 77% 91%,#DDE7FF 0 2px,transparent 3px)}
+.sg-bg-planetarium-constellation--one{left:7%;top:17%}.sg-bg-planetarium-constellation--two{right:8%;top:31%;transform:rotate(24deg);animation-delay:-5s}
+.sg-bg-planetarium-projector{position:absolute;left:50%;bottom:16%;width:clamp(42px,6vw,82px);height:clamp(28px,4vw,54px);transform:translateX(-50%);border-radius:50% 50% 12px 12px;background:linear-gradient(180deg,#62709A,#262E52);box-shadow:0 9px 19px rgba(0,0,0,.25)}
+.sg-bg-planetarium-projector::before{content:"";position:absolute;left:50%;top:-38%;width:34%;aspect-ratio:1;border-radius:50%;transform:translateX(-50%);background:#B9C8F1;box-shadow:0 0 18px rgba(167,189,244,.55)}
+.sg-bg-planetarium-beam{position:absolute;left:50%;bottom:24%;width:70%;height:67%;transform:translateX(-50%);clip-path:polygon(47% 100%,53% 100%,100% 0,0 0);background:linear-gradient(180deg,rgba(162,181,239,.02),rgba(164,184,242,.1));animation:sgBgBeam 12s ease-in-out infinite}
 [data-background-mode="dark"][data-background-art="moonlit"] .sg-bg-moon,
 [data-background-mode="dark"][data-background-art="aurora"] .sg-bg-stars,
 [data-background-mode="dark"][data-background-art="celestial"] .sg-bg-celestial-moon{opacity:.78}
@@ -860,16 +1102,33 @@ export const BACKGROUND_CSS = `
 @keyframes sgBgTwinkle{0%,100%{opacity:.18}48%{opacity:.72}62%{opacity:.34}}
 @keyframes sgBgMist{0%,100%{transform:translate3d(-3%,0,0)}50%{transform:translate3d(7%,4px,0)}}
 @keyframes sgBgPetal{0%{transform:translate3d(-10px,-16px,0) rotate(0);opacity:0}12%{opacity:.48}100%{transform:translate3d(42px,120px,0) rotate(260deg);opacity:0}}
-@keyframes sgBgRain{0%{transform:translate3d(-8px,-70px,0);opacity:0}18%{opacity:.6}100%{transform:translate3d(26px,150px,0);opacity:0}}
+@keyframes sgBgRainStreak{0%{transform:translate3d(0,-35vh,0) rotate(-6deg);opacity:.18}8%{opacity:.78}92%{opacity:.72}100%{transform:translate3d(var(--sg-rain-drift,16px),115vh,0) rotate(-6deg);opacity:.2}}
+@keyframes sgBgRainTrail{0%,8%{transform:translate3d(0,-18%,0) scaleY(.78);opacity:0}18%{opacity:.45}78%{opacity:.64}100%{transform:translate3d(2px,92vh,0) scaleY(1.08);opacity:0}}
+@keyframes sgBgDropCreep{0%,18%,100%{transform:translate3d(0,0,0) scale(.82);opacity:.28}34%{opacity:.72}72%{transform:translate3d(1px,46px,0) scale(1);opacity:.58}84%{transform:translate3d(2px,73px,0) scale(.86);opacity:0}}
+@keyframes sgBgBokeh{0%,100%{transform:scale(.9);opacity:.35}50%{transform:scale(1.08);opacity:.7}}
+@keyframes sgBgMoonPulse{0%,100%{transform:scale(.985);opacity:.92}50%{transform:scale(1.025);opacity:1}}
+@keyframes sgBgMoonCloud{0%,100%{transform:translate3d(-14px,0,0) scale(.92);opacity:.35}50%{transform:translate3d(28px,-2px,0) scale(1.02);opacity:.62}}
+@keyframes sgBgCurtain{0%,100%{transform:skewX(-1.5deg) scaleX(.98)}50%{transform:skewX(2.4deg) scaleX(1.04)}}
+@keyframes sgBgBeam{0%,100%{opacity:.38}50%{opacity:.72}}
+@keyframes sgBgLanternSway{0%,100%{rotate:-2.5deg}50%{rotate:2.5deg}}
+@keyframes sgBgOceanRays{0%,100%{transform:skewX(-2deg) scaleX(.98);opacity:.54}50%{transform:skewX(3deg) scaleX(1.04);opacity:.82}}
+@keyframes sgBgFish{0%{transform:translate3d(-10vw,0,0)}45%{transform:translate3d(58vw,-10px,0)}50%{transform:translate3d(58vw,-10px,0) scaleX(-1)}95%{transform:translate3d(-10vw,7px,0) scaleX(-1)}100%{transform:translate3d(-10vw,0,0)}}
+@keyframes sgBgBubble{0%{transform:translate3d(0,0,0) scale(.7);opacity:0}12%{opacity:.6}74%{opacity:.48}100%{transform:translate3d(10px,-92vh,0) scale(1.22);opacity:0}}
+@keyframes sgBgPlanetarium{to{transform:translateX(-50%) rotate(360deg)}}
 @keyframes sgBgCloud{0%,100%{translate:-8px 0}50%{translate:18px -3px}}
 @keyframes sgBgAurora{0%,100%{transform:skewX(-6deg) scaleY(.9);opacity:.14}50%{transform:skewX(7deg) scaleY(1.12);opacity:.28}}
 @keyframes sgBgOrbit{to{transform:rotate(360deg)}}
 .sg-background-art--focus .sg-bg-petals i,
-.sg-background-art--focus .sg-bg-raindrops i,
+.sg-background-art--focus .sg-bg-rain-sheet i,
+.sg-background-art--focus .sg-bg-rain-trails i,
+.sg-background-art--focus .sg-bg-rain-droplets i,
+.sg-background-art--focus .sg-bg-ocean-bubbles i,
 .sg-background-art--focus .sg-bg-dots i { animation-duration:36s!important;opacity:.22 }
 .sg-background-art--focus .sg-bg-aurora,
 .sg-background-art--focus .sg-bg-cloud,
-.sg-background-art--focus .sg-bg-mist { animation-duration:60s!important;opacity:.12 }
+.sg-background-art--focus .sg-bg-mist,
+.sg-background-art--focus .sg-bg-ocean-fish,
+.sg-background-art--focus .sg-bg-planetarium-map { animation-duration:60s!important;opacity:.12 }
 .sg-background-art--focus { filter:saturate(.72) contrast(.9); }
 [data-theme="dark"] .sg-shell .sg-background-art--focus.sg-keepcolor {
   filter:invert(1) hue-rotate(180deg) saturate(.72) contrast(.9);
@@ -879,7 +1138,12 @@ export const BACKGROUND_CSS = `
 .sg-background-art--low-power .sg-bg-aurora,
 .sg-background-art--low-power .sg-bg-cloud,
 .sg-background-art--low-power .sg-bg-mist,
-.sg-background-art--low-power .sg-bg-orbit { animation-play-state:paused!important; }
+.sg-background-art--low-power .sg-bg-orbit,
+.sg-background-art--low-power .sg-bg-rain-trails,
+.sg-background-art--low-power .sg-bg-rain-droplets,
+.sg-background-art--low-power .sg-bg-ocean-fish,
+.sg-background-art--low-power .sg-bg-ocean-bubbles,
+.sg-background-art--low-power .sg-bg-planetarium-map { animation-play-state:paused!important; }
 .sg-shop-category-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4;padding:4;margin:0 0 11px;background:#EEF3EB;border-radius:13px}
 .sg-shop-category-tab{min-width:0;min-height:40px;border:0;border-radius:10px;background:transparent;color:#7C887E;padding:8px 5px;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap}
 .sg-shop-category-tab--active{color:#2D6A4F;background:#fff;box-shadow:0 1px 4px rgba(35,58,42,.1)}
@@ -892,12 +1156,12 @@ export const BACKGROUND_CSS = `
 .sg-background-filter-row{display:flex;gap:6;align-items:center;margin-bottom:10px}.sg-background-filter-row button{min-height:34px;border:1px solid #DFE7DC;border-radius:18px;background:#F7F9F5;color:#718075;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer}.sg-background-filter-row button.is-active{color:#2D6A4F;background:#E9F4EA;border-color:#BFD8C2}.sg-background-filter-row .sg-background-use-default{margin-left:auto;color:#53685A;background:#fff}
 .sg-background-toast{position:sticky;top:54px;z-index:10;background:#20352A;color:#fff;border-radius:12px;padding:9px 12px;margin-bottom:10px;text-align:center;font-size:11.5px;font-weight:650;box-shadow:0 5px 18px rgba(20,40,28,.16)}
 .sg-background-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.sg-background-card{min-width:0;overflow:hidden;border:1.5px solid #E4EAE1;border-radius:16px;background:#fff;padding:7px;box-shadow:0 2px 7px rgba(29,49,35,.045);content-visibility:auto;contain-intrinsic-size:190px}
+.sg-background-card{min-width:0;overflow:hidden;border:1.5px solid #E4EAE1;border-radius:16px;background:#fff;padding:7px;box-shadow:0 2px 7px rgba(29,49,35,.045)}
 .sg-background-card--active{border-color:#75B98E;box-shadow:0 0 0 2px rgba(86,182,139,.11)}
 .sg-background-thumb{position:relative;display:block;width:100%;height:96px;overflow:hidden;border:0;border-radius:12px;padding:0;background:#EEF3EB;cursor:pointer}
 .sg-background-thumb>span{position:absolute;right:7px;bottom:7px;padding:4px 7px;border-radius:10px;background:rgba(20,32,24,.63);backdrop-filter:blur(5px);color:#fff;font-size:9px;font-weight:750}
 .sg-background-card-copy{padding:8px 3px 4px}.sg-background-card-copy h4{font-size:13px;line-height:1.2;color:#26352B;margin:5px 0 3px}.sg-background-card-copy p{font-size:10px;line-height:1.35;color:#8D978F;margin:0;min-height:27px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.sg-background-rarity{display:inline-flex;border-radius:9px;padding:2px 6px;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.45px;color:#667269;background:#EEF2EC}.sg-background-rarity--rare{color:#3A6F83;background:#E7F4F7}.sg-background-rarity--epic{color:#73549A;background:#F0E9F8}.sg-background-rarity--mythical{color:#9A672B;background:#FFF1D8}.sg-background-rarity--default{color:#55715C;background:#EAF3E9}
+.sg-background-rarity{display:inline-flex;border-radius:9px;padding:2px 6px;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.45px;color:#667269;background:#EEF2EC}.sg-background-rarity--common{color:#4F715D;background:#EAF3EC}.sg-background-rarity--rare{color:#3A6F83;background:#E7F4F7}.sg-background-rarity--epic{color:#73549A;background:#F0E9F8}.sg-background-rarity--mythical{color:#9A672B;background:#FFF1D8}.sg-background-rarity--default{color:#55715C;background:#EAF3E9}
 .sg-background-card-meta{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 3px 3px;min-height:34px}.sg-background-cost{font-size:10.5px;font-weight:800;color:#B8860B}.sg-background-free{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border-radius:10px;padding:3px 7px}.sg-background-equipped{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border:1px solid #CBE3D2;border-radius:11px;padding:5px 8px;white-space:nowrap}.sg-background-card-action{min-height:34px;border:0;border-radius:11px;background:#2D6A4F;color:#fff;padding:6px 10px;font-size:10px;font-weight:750;cursor:pointer}.sg-background-card-action:disabled{background:#C8CECA;color:#fff;cursor:not-allowed}
 .sg-background-done{display:block;width:100%;margin-top:14px;border:0;border-radius:14px;background:#F0F2EE;color:#59665C;padding:11px;font-size:13px;font-weight:700;cursor:pointer}
 .sg-background-preview{position:fixed;inset:0;z-index:390;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;padding:max(18px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));isolation:isolate}
@@ -906,7 +1170,7 @@ export const BACKGROUND_CSS = `
 .sg-background-preview-panel{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;width:min(100%,720px);padding:18px;border:1px solid rgba(255,255,255,.58);border-radius:20px;background:rgba(250,252,249,.88);backdrop-filter:blur(14px);box-shadow:0 14px 45px rgba(9,18,12,.25);color:#223128}
 .sg-background-preview-copy h3{font-size:22px;margin:6px 0 4px}.sg-background-preview-copy p{font-size:12.5px;line-height:1.45;color:#627068;margin:0;max-width:420px}.sg-background-preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.sg-background-secondary-btn,.sg-background-primary-btn{min-height:42px;border-radius:13px;padding:9px 15px;font-size:12px;font-weight:750;cursor:pointer}.sg-background-secondary-btn{border:1px solid #D8E1D7;background:#fff;color:#647168}.sg-background-primary-btn{border:0;background:#2D6A4F;color:#fff}.sg-background-primary-btn:disabled{background:#AAB5AE}
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
-@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right{display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
+@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
 @media(prefers-reduced-motion:reduce){.sg-background-art *{animation:none!important;transition:none!important}.sg-background-art--focus{filter:saturate(.82) contrast(.94)}}
 `;
