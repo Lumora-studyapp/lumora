@@ -8,7 +8,11 @@ const ENHANCEMENT_PRICING_REPLACEMENTS = [
   ['const mult = [0.25, 0.5, 1.0][tier-1] || 0;', 'const mult = [0.15, 0.3, 0.6][tier-1] || 0;'],
 ]
 
-const WEEKLY_REWARD_REPLACEMENTS = [
+// Historical build-time patches are retained as migration documentation only.
+// Lumora now owns the reward implementation directly in App.jsx and the pure
+// rewardRotation module, so rebuilding must validate that source instead of
+// rewriting it into a second, different prize policy.
+const LEGACY_WEEKLY_REWARD_REPLACEMENTS = [
   [
     '{ place:"2nd", medal:"🥈", type:"coins", coins:WEEKLY_PODIUM_REWARDS[1] },',
     '{ place:"2nd", medal:"🥈", type:"decoration", coins:0 },',
@@ -168,6 +172,16 @@ const WEEKLY_REWARD_REPLACEMENTS = [
   ],
 ]
 
+const WEEKLY_REWARD_INVARIANTS = [
+  'import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";',
+  'if(rewardMode==="classroom" && rank===0){',
+  'if(rewardMode==="classroom" && rank===1){',
+  'background = pickWeeklyBackground(weekKey,username,ownedBackgrounds);',
+  'decoration = pickWeeklyDecoration(weekKey,username,ownedDecorations);',
+  'rewardType:background?"background":decoration?"decoration":skin?"skin":reward>0?"coins":"none",',
+  '<div style={S.rewardCycleBadge}>3-week rotation</div>',
+]
+
 function applySourceReplacements(code, replacements, groupName) {
   let nextCode = code
   for (const [current, replacement] of replacements) {
@@ -177,6 +191,15 @@ function applySourceReplacements(code, replacements, groupName) {
     nextCode = nextCode.replace(current, replacement)
   }
   return nextCode
+}
+
+function assertSourceInvariants(code, invariants, groupName) {
+  for (const invariant of invariants) {
+    if (!code.includes(invariant)) {
+      throw new Error(`StudyGrove ${groupName} source changed: missing ${invariant}`)
+    }
+  }
+  return code
 }
 
 function studyGroveSourcePatches() {
@@ -191,7 +214,7 @@ function studyGroveSourcePatches() {
       // transform input rather than rewriting the checked-in source file.
       let nextCode = code.replace(/\r\n/g, '\n')
       nextCode = applySourceReplacements(nextCode, ENHANCEMENT_PRICING_REPLACEMENTS, 'enhancement pricing')
-      nextCode = applySourceReplacements(nextCode, WEEKLY_REWARD_REPLACEMENTS, 'weekly rewards')
+      nextCode = assertSourceInvariants(nextCode, WEEKLY_REWARD_INVARIANTS, 'weekly rewards')
       return { code: nextCode, map: null }
     },
   }

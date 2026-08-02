@@ -9,9 +9,10 @@ import {
 } from "./pomodoro.js";
 import {
   formatStudyDate, getPreviousStudyWeekKey, getPreviousStudyWeekStart,
-  getStudyDayOfWeek, getStudyWeekDistance, getStudyWeekKey,
+  getStudyDayOfWeek, getStudyWeekKey,
   shiftStudyDay, shiftStudyWeek, startOfStudyDay, startOfStudyWeek,
 } from "./studyWeek.js";
+import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";
 import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
@@ -775,9 +776,9 @@ const SKIN_COLLECTIONS = [
   { id:"classic",  label:"Classic",  icon:"🍂" },
   { id:"shapes",   label:"Shapes",   icon:"🌳" },
   { id:"tropical", label:"Tropical", icon:"🌴" },
+  { id:"treats",   label:"Treats",   icon:"🍰" },
   { id:"mystical", label:"Mystical", icon:"✨" },
   { id:"premium",  label:"Premium",  icon:"💠" },
-  { id:"treats",   label:"Treats",   icon:"🍰" },
 ];
 
 const TREE_SKINS = [
@@ -845,6 +846,22 @@ const TREE_SKINS = [
   { id:"cupcake",  name:"Strawberry Cupcake",cost:1200,shape:"cupcake",trunk:"#E8B4C8", canopy:"#F25C8A", desc:"Sweet & frosted 🍓", collection:"treats" },
   { id:"cake",     name:"Layer Cake",     cost:1800, shape:"cake",    trunk:"#D9B38C", canopy:"#7EC9E0", desc:"The ultimate flex 🎂", collection:"treats" },
 ];
+
+const TREE_SHOP_RARITY_ORDER = Object.freeze({
+  starter:0,
+  classic:1,
+  shapes:2,
+  tropical:2,
+  treats:3,
+  mystical:4,
+  premium:5,
+});
+const TREE_SHOP_CATALOGUE = Object.freeze([...TREE_SKINS].sort((left,right)=>
+  (TREE_SHOP_RARITY_ORDER[left.collection] ?? Number.MAX_SAFE_INTEGER)
+    - (TREE_SHOP_RARITY_ORDER[right.collection] ?? Number.MAX_SAFE_INTEGER)
+  || Number(left.cost||0)-Number(right.cost||0)
+  || left.name.localeCompare(right.name)
+));
 
 // ── Tree Enhancements ─────────────────────────────────────────────────────────
 // Three permanent tiers per skin, rendered by ONE parameterized layer engine
@@ -1337,17 +1354,17 @@ const MONTH_LABELS  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oc
 // "kind" decides which drawing routine ForestGarden uses. Owned ids are synced
 // per-account via prefs/{username}.decorations.
 const DECORATIONS = [
-  { id:"bench",   name:"Wooden Bench",  cost:250, kind:"bench",   emoji:"🪑", desc:"A spot to rest your eyes" },
-  { id:"pond",    name:"Koi Pond",      cost:400, kind:"pond",    emoji:"⛲", desc:"Calm water for the classroom" },
-  { id:"path",    name:"Stone Path",    cost:300, kind:"path",    emoji:"🪨", desc:"Winding stepping stones" },
-  { id:"fence",   name:"Picket Fence",  cost:350, kind:"fence",   emoji:"🚧", desc:"Frame your little forest" },
-  { id:"lamp",    name:"Lamp Post",     cost:450, kind:"lamp",    emoji:"🏮", desc:"A warm glow at dusk" },
-  { id:"flowers", name:"Flower Patch",  cost:200, kind:"flowers", emoji:"🌷", desc:"Cheerful pops of colour" },
-  { id:"mushroom",name:"Toadstools",    cost:220, kind:"mushroom",emoji:"🍄", desc:"A cosy fairy-tale touch" },
-  { id:"lantern", name:"Stone Lantern", cost:500, kind:"lantern", emoji:"🪨", desc:"A serene zen marker" },
-  { id:"festivaldrum", name:"Festival Drum", cost:520, kind:"festivaldrum", emoji:"🥁", desc:"A warm ceremonial rhythm" },
-  { id:"cloudstone", name:"Cloud Stone", cost:420, kind:"cloudstone", emoji:"☁️", desc:"A carved auspicious cloud" },
-  { id:"runestone", name:"Storm Rune", cost:540, kind:"runestone", emoji:"⚡", desc:"A quiet conductor for the classroom" },
+  { id:"bench",   name:"Shared Study Bench", cost:250, kind:"bench", emoji:"🪑", desc:"A warm timber seat for classmates" },
+  { id:"pond",    name:"Classroom Aquarium", cost:400, kind:"pond", emoji:"🐟", desc:"A calm blue aquarium with gentle movement" },
+  { id:"path",    name:"Floor Guide Tiles", cost:300, kind:"path", emoji:"◆", desc:"A neat path through the learning space" },
+  { id:"fence",   name:"Bookcase Divider", cost:350, kind:"fence", emoji:"📚", desc:"A low shelf that organises the room" },
+  { id:"lamp",    name:"Reading Floor Lamp", cost:450, kind:"lamp", emoji:"💡", desc:"Warm focused light for a study corner" },
+  { id:"flowers", name:"Desk Planter", cost:200, kind:"flowers", emoji:"🪴", desc:"A small living accent for the classroom" },
+  { id:"mushroom",name:"Pencil Cup Set", cost:220, kind:"mushroom",emoji:"✏️", desc:"Colourful stationery ready for class" },
+  { id:"lantern", name:"Study Lantern", cost:500, kind:"lantern", emoji:"🏮", desc:"A soft lantern for the quiet reading area" },
+  { id:"festivaldrum", name:"Music Room Drum", cost:520, kind:"festivaldrum", emoji:"🥁", desc:"A ceremonial instrument for the arts corner" },
+  { id:"cloudstone", name:"Cloud Sculpture", cost:420, kind:"cloudstone", emoji:"☁️", desc:"A carved centrepiece for the room" },
+  { id:"runestone", name:"Science Energy Display", cost:540, kind:"runestone", emoji:"⚡", desc:"A luminous experiment display" },
 ];
 
 // ── Achievements / badges ─────────────────────────────────────────────────────
@@ -1355,7 +1372,7 @@ const DECORATIONS = [
 // from the user's full history + current stats. tier sets the coin reward.
 const BADGE_REWARDS = { easy:25, mid:50, hard:100 };
 const BADGES = [
-  { id:"first_tree",   name:"First Sprout",      emoji:"🌱", tier:"easy", desc:"Plant your very first tree",
+  { id:"first_tree",   name:"First Growth",      emoji:"🌱", tier:"easy", desc:"Complete your first learner growth session",
     check:c=>c.totalSessions>=1 },
   { id:"first_5h_day", name:"Deep Work",         emoji:"🔥", tier:"mid",  desc:"Focus 5h in a single day",
     check:c=>c.maxDaySecs>=5*3600 },
@@ -1365,7 +1382,7 @@ const BADGES = [
     check:c=>c.streak>=30 },
   { id:"all_subjects", name:"Well Rounded",      emoji:"🎯", tier:"mid",  desc:"Study every subject in one week",
     check:c=>c.allSubjectsThisWeek },
-  { id:"trees_100",    name:"Forester",          emoji:"🌳", tier:"hard", desc:"Plant 100 trees in total",
+  { id:"trees_100",    name:"Study Century",     emoji:"💯", tier:"hard", desc:"Complete 100 focused growth sessions",
     check:c=>c.totalSessions>=100 },
   { id:"first_decor",  name:"Decorator",         emoji:"🪑", tier:"easy", desc:"Buy your first decoration",
     check:c=>c.decorCount>=1 },
@@ -1572,34 +1589,36 @@ migrateLumoraCache();
 const startOfDay   = d => { const x=new Date(d); x.setHours(0,0,0,0); return x; };
 const startOfWeek  = startOfStudyWeek;
 
-// Weekly prizes alternate from this launch week onward:
-// coin week → mystery-skin week → coin week → …
-// Weeks before the launch stay as coin weeks so already-finished leaderboards
-// are not retroactively changed.
-const REWARD_ROTATION_START = new Date("2026-07-18T14:00:00.000Z"); // Sun 19 Jul 2026, Melbourne
-const getWeeklyRewardMode = date => {
-  const weeksSinceLaunch = getStudyWeekDistance(REWARD_ROTATION_START,date instanceof Date ? date : new Date(date));
-  return weeksSinceLaunch>=0 && weeksSinceLaunch%2===1 ? "skin" : "coins";
-};
 const getWeeklyRewardPlan = date => {
-  const skinWeek = getWeeklyRewardMode(date)==="skin";
+  const mode = getWeeklyRewardMode(date);
+  if(mode==="classroom") return [
+    { place:"1st", medal:"🥇", type:"background", coins:0 },
+    { place:"2nd", medal:"🥈", type:"decoration", coins:0 },
+    { place:"3rd", medal:"🥉", type:"coins", coins:WEEKLY_PODIUM_REWARDS[2] },
+  ];
+  const skinWeek = mode==="skin";
   return [
     { place:"1st", medal:"🥇", type:skinWeek?"skin":"coins", coins:skinWeek?0:WEEKLY_PODIUM_REWARDS[0] },
     { place:"2nd", medal:"🥈", type:"coins", coins:WEEKLY_PODIUM_REWARDS[1] },
     { place:"3rd", medal:"🥉", type:"coins", coins:WEEKLY_PODIUM_REWARDS[2] },
   ];
 };
-const stableRewardHash = value => {
-  let h=2166136261;
-  for(let i=0;i<value.length;i++) h=Math.imul(h^value.charCodeAt(i),16777619);
-  return h>>>0;
-};
 const pickWeeklySkin = (weekKey,username,ownedSkins=[]) => {
-  const owned=new Set(Array.isArray(ownedSkins)?ownedSkins:[]);
-  const available=TREE_SKINS.filter(s=>s.cost>0&&!owned.has(s.id));
-  if(!available.length) return null;
-  return available[stableRewardHash(`${weekKey}|${username}`)%available.length];
+  return pickDeterministicUnowned({
+    weekKey,username,prizeType:"skin",items:TREE_SKINS,ownedIds:ownedSkins,
+    eligible:item=>item.cost>0,
+  });
 };
+const pickWeeklyBackground = (weekKey,username,ownedBackgrounds=[]) =>
+  pickDeterministicUnowned({
+    weekKey,username,prizeType:"background",items:BACKGROUND_CATALOGUE,ownedIds:ownedBackgrounds,
+    eligible:item=>item.cost>0,
+  });
+const pickWeeklyDecoration = (weekKey,username,ownedDecorations=[]) =>
+  pickDeterministicUnowned({
+    weekKey,username,prizeType:"decoration",items:DECORATIONS,ownedIds:ownedDecorations,
+    eligible:item=>item.cost>0,
+  });
 
 // Shared time-of-day palette — drives the garden ambiance so
 // the world stays in sync (study at dusk → golden garden AND golden window).
@@ -2064,7 +2083,9 @@ function normalizeRewardClaims(data) {
     const username = canonUsername(rawUsername);
     if(!username) continue;
     const current = normalized[username];
-    const hasPrize = value => value===true || value?.rewardType==="coins" || value?.rewardType==="skin" || Number(value?.reward)>0 || !!value?.skinId;
+    const hasPrize = value => value===true
+      || ["coins","skin","background","decoration"].includes(value?.rewardType)
+      || Number(value?.reward)>0 || !!value?.skinId || !!value?.backgroundId || !!value?.decorationId;
     if(!current || (!hasPrize(current) && hasPrize(claim))) normalized[username]=claim;
   }
   return normalized;
@@ -2092,6 +2113,8 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
       const claimed = normalizeRewardClaims(claimSnap.exists() ? claimSnap.data().claimed : {});
       const prefs = prefsSnap.exists() ? prefsSnap.data() : {};
       const ownedSkins = Array.isArray(prefs.ownedSkins) && prefs.ownedSkins.length ? prefs.ownedSkins : ["default"];
+      const ownedBackgrounds = normalizeOwnedBackgrounds(prefs.ownedBackgrounds);
+      const ownedDecorations = Array.isArray(prefs.decorations) ? [...new Set(prefs.decorations)] : [];
 
       // There is no prize outside the podium. Do not write a zero-value claim:
       // if an admin later repairs a stale weekly board, the rightful winner can
@@ -2100,18 +2123,22 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
 
       const existing = claimed[username];
       const alreadySettled = !!existing && (
-        existing===true || existing.rewardType==="coins" || existing.rewardType==="skin" ||
-        Number(existing.reward)>0 || !!existing.skinId
+        existing===true || ["coins","skin","background","decoration"].includes(existing.rewardType) ||
+        Number(existing.reward)>0 || !!existing.skinId || !!existing.backgroundId || !!existing.decorationId
       );
       if(alreadySettled) return {
         ok:true, reward:0, alreadyClaimed:true, weekKey, rank:rank+1, rewardMode,
         coinBalance:typeof prefs.coins==="number"?prefs.coins:0,
-        ownedSkins,
+        ownedSkins,ownedBackgrounds,decorations:ownedDecorations,
       };
 
       let reward = rank>=0 && rank<3 ? WEEKLY_PODIUM_REWARDS[rank] : 0;
       let skin = null;
+      let background = null;
+      let decoration = null;
       let skinFallback = false;
+      let backgroundFallback = false;
+      let decorationFallback = false;
 
       // On alternating skin weeks, first place receives one deterministic
       // random unowned shop skin instead of 300 coins. Deterministic selection
@@ -2123,25 +2150,52 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
         else skinFallback=true;
       }
 
+      // The third rotation is the classroom collection week: first place gets
+      // a deterministic random unowned background, second place gets an
+      // unowned decor item and third place keeps the 100-coin podium prize.
+      // Fully completed catalogues fall back to the normal placement coins.
+      if(rewardMode==="classroom" && rank===0){
+        background = pickWeeklyBackground(weekKey,username,ownedBackgrounds);
+        if(background) reward=0;
+        else backgroundFallback=true;
+      }
+      if(rewardMode==="classroom" && rank===1){
+        decoration = pickWeeklyDecoration(weekKey,username,ownedDecorations);
+        if(decoration) reward=0;
+        else decorationFallback=true;
+      }
+
       const claimData = {
         ts:Date.now(), rank:rank+1, reward,
-        rewardType:skin?"skin":reward>0?"coins":"none",
+        rewardType:background?"background":decoration?"decoration":skin?"skin":reward>0?"coins":"none",
         skinId:skin?.id||null, skinName:skin?.name||null,
-        skinFallback,
+        backgroundId:background?.id||null,backgroundName:background?.name||null,
+        decorationId:decoration?.id||null,decorationName:decoration?.name||null,
+        skinFallback,backgroundFallback,decorationFallback,
       };
       tx.set(claimRef, { claimed:{...claimed,[username]:claimData} });
       if(skin){
         const nextOwned=[...new Set([...ownedSkins,skin.id])];
         tx.set(prefsRef, { ownedSkins:nextOwned }, { merge:true });
+      } else if(background){
+        const nextOwned=normalizeOwnedBackgrounds([...ownedBackgrounds,background.id]);
+        tx.set(prefsRef, { ownedBackgrounds:nextOwned }, { merge:true });
+      } else if(decoration){
+        const nextOwned=[...new Set([...ownedDecorations,decoration.id])];
+        tx.set(prefsRef, { decorations:nextOwned }, { merge:true });
       } else if(reward>0){
         const current = typeof prefs.coins==="number" ? prefs.coins : 0;
         tx.set(prefsRef, { coins:current+reward }, { merge:true });
       }
       return { ok:true, reward, weekKey, rank:rank+1, rewardMode,
         skinId:skin?.id||null, skinName:skin?.name||null, skinFallback,
+        backgroundId:background?.id||null,backgroundName:background?.name||null,backgroundFallback,
+        decorationId:decoration?.id||null,decorationName:decoration?.name||null,decorationFallback,
         repaired:!!existing,
-        coinBalance:skin ? (typeof prefs.coins==="number"?prefs.coins:0) : (typeof prefs.coins==="number"?prefs.coins:0)+reward,
+        coinBalance:(skin||background||decoration) ? (typeof prefs.coins==="number"?prefs.coins:0) : (typeof prefs.coins==="number"?prefs.coins:0)+reward,
         ownedSkins:skin ? [...new Set([...ownedSkins,skin.id])] : ownedSkins,
+        ownedBackgrounds:background ? normalizeOwnedBackgrounds([...ownedBackgrounds,background.id]) : ownedBackgrounds,
+        decorations:decoration ? [...new Set([...ownedDecorations,decoration.id])] : ownedDecorations,
       };
     });
   } catch(e) { console.error("Weekly reward claim error:", e); return {ok:false,reward:0,error:e.message}; }
@@ -5087,7 +5141,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
         {isBreak&&pomodoro.awaitingNext ? "Break complete — begin when you’re ready"
           : isBreak&&paused ? "Break paused"
           : isBreak ? "Rest now — break time never earns coins"
-          : paused ? "Paused — your tree is waiting"
+          : paused ? "Paused — your learner is waiting"
           : overtime ? `🌟 Overtime! ${fmtMins(duration)} goal smashed — still counting`
           : isPomodoro ? `Focus interval · round ${pomodoro.round}`
           : isTimer ? msgs[msgIdx] : "⏱ Stopwatch running"}
@@ -5110,7 +5164,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
           </button>
           <button style={fs.endBtn} onClick={onEnd}>{isPomodoro?"Finish now":"Give Up 🥀"}</button>
         </div>}
-      <p className="sg-session-warning" style={fs.warning}>{isBreak?"Start the next round only when you’re ready.":"Leaving this screen won't kill your tree, but stay focused!"}</p>
+      <p className="sg-session-warning" style={fs.warning}>{isBreak?"Start the next round only when you’re ready.":"You can leave this screen safely, but your focused time matters."}</p>
     </div>
   );
 }
@@ -5506,7 +5560,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   const enhSkin = enhancing ? TREE_SKINS.find(s=>s.id===enhancing) : null;
 
   const q = query.trim().toLowerCase();
-  const filtered = TREE_SKINS.filter(skin => {
+  const filtered = TREE_SHOP_CATALOGUE.filter(skin => {
     if(activeCollection!=="all" && skin.collection!==activeCollection) return false;
     if(q && !skin.name.toLowerCase().includes(q) && !skin.desc.toLowerCase().includes(q)) return false;
     return true;
@@ -5761,7 +5815,7 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
             </button>
             {!canAfford && <div style={em.shortNote}>You need {short} more coins.</div>}
             {upgradeError&&<div style={em.shortNote}>{upgradeError}</div>}
-            <div style={em.applyNote}>Applies to every {skin.name} in your forest — past and future.</div>
+            <div style={em.applyNote}>Applies to every {skin.name} growth display in your classroom — past and future.</div>
           </>
         ) : (
           <div style={em.maxedCard}>✨ Fully enhanced — every {skin.name} you plant is Radiant.</div>
@@ -7298,7 +7352,7 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
         </div>
 
         {empty ? (
-          <p style={sd.empty}>No sessions yet — plant your first tree and your insights will grow here 🌱</p>
+          <p style={sd.empty}>No sessions yet — complete your first focus session and your classroom will grow here 🌱</p>
         ) : (
           <>
             {/* Hero stats */}
@@ -8415,7 +8469,7 @@ const bc = {
   segDot:{display:"inline-block",width:7,height:7,borderRadius:"50%",flexShrink:0},
 };
 
-// ── Forest Garden ─────────────────────────────────────────────────────────────
+// ── Classroom growth room ────────────────────────────────────────────────────
 // Draw a single decoration at iso anchor (x = ground centre, y = tile centre).
 // s = tScale so decorations grow/shrink with the plot density. Returned as an
 // SVG <g> so it slots into the back-to-front draw order alongside trees.
@@ -8432,15 +8486,16 @@ function drawDecoration(kind, x, y, s) {
     );
     case "pond": return (
       <g>
-        <ellipse cx={x} cy={y} rx={16*s} ry={8*s} fill="#5FA8C9"/>
-        <ellipse cx={x} cy={y-0.5*s} rx={13*s} ry={6*s} fill="#7CC0DD"/>
+        <ellipse cx={x} cy={y+3*s} rx={17*s} ry={5*s} fill="rgba(0,0,0,.12)"/>
+        <path d={`M${x-15*s} ${y-9*s} H${x+15*s} V${y+2*s} Q${x} ${y+8*s} ${x-15*s} ${y+2*s} Z`} fill="#4D8FA8" opacity=".78" stroke="#D3EDF1" strokeWidth={1.2*s}/>
+        <ellipse cx={x} cy={y-8.5*s} rx={15*s} ry={5.5*s} fill="#7CC0DD" stroke="#E7F6F7" strokeWidth={1*s}/>
         {/* shimmering surface highlight */}
-        <ellipse cx={x-4*s} cy={y-1*s} rx={3*s} ry={1.4*s} fill="#fff" opacity={0.5}>
+        <ellipse cx={x-4*s} cy={y-9*s} rx={3*s} ry={1.4*s} fill="#fff" opacity={0.5}>
           <animate attributeName="opacity" values="0.3;0.7;0.3" dur="3s" repeatCount="indefinite"/>
           <animate attributeName="cx" values={`${x-4*s};${x+2*s};${x-4*s}`} dur="6s" repeatCount="indefinite"/>
         </ellipse>
         {/* expanding ripple ring */}
-        <ellipse cx={x+2*s} cy={y} rx={2*s} ry={1*s} fill="none" stroke="#fff" strokeWidth={0.5} opacity="0.5">
+        <ellipse cx={x+2*s} cy={y-8*s} rx={2*s} ry={1*s} fill="none" stroke="#fff" strokeWidth={0.5} opacity="0.5">
           <animate attributeName="rx" values={`${1*s};${10*s}`} dur="4s" repeatCount="indefinite"/>
           <animate attributeName="ry" values={`${0.5*s};${5*s}`} dur="4s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="0.5;0" dur="4s" repeatCount="indefinite"/>
@@ -8448,11 +8503,11 @@ function drawDecoration(kind, x, y, s) {
         {/* gentle koi swimming */}
         <g>
           <animateTransform attributeName="transform" type="translate" values={`-5,1; 5,-1; -5,1`} dur="5s" repeatCount="indefinite"/>
-          <circle cx={x+5*s} cy={y+1*s} r={1.6*s} fill="#F4A23A"/>
+          <circle cx={x+5*s} cy={y-7*s} r={1.6*s} fill="#F4A23A"/>
         </g>
         <g>
           <animateTransform attributeName="transform" type="translate" values={`4,-1; -4,1; 4,-1`} dur="6s" repeatCount="indefinite"/>
-          <circle cx={x-2*s} cy={y+2*s} r={1.3*s} fill="#E8743B"/>
+          <circle cx={x-2*s} cy={y-6*s} r={1.3*s} fill="#E8743B"/>
         </g>
       </g>
     );
@@ -8465,13 +8520,10 @@ function drawDecoration(kind, x, y, s) {
     );
     case "fence": return (
       <g>
-        {[-12,-4,4,12].map((dx,i)=>(
-          <g key={i}>
-            <rect x={x+dx*s-1*s} y={y-9*s} width={2.2*s} height={11*s} rx={1*s} fill="#EFE7D6"/>
-            <polygon points={`${x+dx*s},${y-12*s} ${x+dx*s-2*s},${y-9*s} ${x+dx*s+2*s},${y-9*s}`} fill="#EFE7D6"/>
-          </g>
-        ))}
-        <rect x={x-13*s} y={y-7*s} width={26*s} height={1.6*s} fill="#E2D8C2"/>
+        <ellipse cx={x} cy={y+2*s} rx={15*s} ry={4*s} fill="rgba(0,0,0,.11)"/>
+        <rect x={x-14*s} y={y-14*s} width={28*s} height={15*s} rx={2*s} fill="#93633F" stroke="#6E492F" strokeWidth={1*s}/>
+        <path d={`M${x-13*s} ${y-7*s} H${x+13*s}`} stroke="#68452E" strokeWidth={1.8*s}/>
+        {[[-10,-12,"#C96F59"],[-5,-11,"#6B8D82"],[1,-12,"#D2A755"],[7,-11,"#7D6A9B"],[-8,-5,"#D7B36E"],[-1,-5,"#738BA5"],[6,-5,"#B86E6D"]].map(([dx,dy,fill],i)=><rect key={i} x={x+dx*s} y={y+dy*s} width={4*s} height={5*s} rx={.5*s} fill={fill}/>) }
       </g>
     );
     case "lamp": return (
@@ -8496,12 +8548,12 @@ function drawDecoration(kind, x, y, s) {
     );
     case "mushroom": return (
       <g>
-        {[[-5,1,1],[3,-1,1.3],[7,2,0.8]].map(([dx,dy,sc],i)=>(
+        {[[-7,1,1,"#D96B62"],[2,-1,1.15,"#638BA5"],[8,2,.8,"#D6A84B"]].map(([dx,dy,sc,fill],i)=>(
           <g key={i}>
-            <rect x={x+dx*s-1*s*sc} y={y+dy*s-3*s*sc} width={2*s*sc} height={4*s*sc} rx={1*s*sc} fill="#F5EFE0"/>
-            <ellipse cx={x+dx*s} cy={y+dy*s-3.5*s*sc} rx={3.4*s*sc} ry={2.4*s*sc} fill="#E2533F"/>
-            <circle cx={x+dx*s-1*s*sc} cy={y+dy*s-4*s*sc} r={0.7*s*sc} fill="#fff"/>
-            <circle cx={x+dx*s+1*s*sc} cy={y+dy*s-3.4*s*sc} r={0.6*s*sc} fill="#fff"/>
+            <path d={`M${x+dx*s-3*s*sc} ${y+dy*s-7*s*sc} L${x+dx*s-1*s*sc} ${y+dy*s+1*s*sc}`} stroke="#E2B74B" strokeWidth={1.2*s*sc}/>
+            <path d={`M${x+dx*s+2*s*sc} ${y+dy*s-8*s*sc} L${x+dx*s+1*s*sc} ${y+dy*s+1*s*sc}`} stroke="#4B6E8A" strokeWidth={1.1*s*sc}/>
+            <path d={`M${x+dx*s-4*s*sc} ${y+dy*s-3*s*sc} H${x+dx*s+4*s*sc} L${x+dx*s+3*s*sc} ${y+dy*s+3*s*sc} H${x+dx*s-3*s*sc} Z`} fill={fill}/>
+            <ellipse cx={x+dx*s} cy={y+dy*s-3*s*sc} rx={4*s*sc} ry={1.3*s*sc} fill="#F6E7D4" opacity=".82"/>
           </g>
         ))}
       </g>
@@ -8751,11 +8803,11 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const isoX = (col, row) => originX + (col - row) * (CELL * 0.6);
   const isoY = (col, row) => originY + (col + row) * (CELL * 0.28);
 
-  const grassLight = "#9CCF6B";
-  const grassLight2= "#94C863";
-  const grassDark  = "#7CB454";
-  const soilColor  = "#8B6B3E";
-  const soilDark   = "#75582F";
+  const grassLight = "#EBCB96";
+  const grassLight2= "#DDB47E";
+  const grassDark  = "#9B6C46";
+  const soilColor  = "#8B5D3C";
+  const soilDark   = "#5E3D29";
 
   // ── Time-of-day ambiance ────────────────────────────────────────────────────
   // The garden subtly shifts with the real hour.
@@ -8808,20 +8860,30 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
             <stop offset="60%" stopColor={tod.sun} stopOpacity={tod.sunGlow*0.35}/>
             <stop offset="100%" stopColor={tod.sun} stopOpacity="0"/>
           </radialGradient>
-          {/* Lit grass — brighter toward the sun side */}
+          {/* Warm classroom floor tiles. The legacy paint-server ids stay
+              stable because old captures and browser caches may reference them. */}
           <linearGradient id={`${gardenSvgId}-grass-a`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#a9da78"/><stop offset="100%" stopColor="#8cc25c"/>
+            <stop offset="0%" stopColor="#E9C993"/><stop offset="100%" stopColor="#C8955D"/>
           </linearGradient>
           <linearGradient id={`${gardenSvgId}-grass-b`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#a1d36f"/><stop offset="100%" stopColor="#83bb54"/>
+            <stop offset="0%" stopColor="#F1D6A7"/><stop offset="100%" stopColor="#D4A46E"/>
           </linearGradient>
-          {/* Soil face gradient for depth */}
+          {/* Raised classroom display platform */}
           <linearGradient id={`${gardenSvgId}-soil-r`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#9a7848"/><stop offset="100%" stopColor="#79592f"/>
+            <stop offset="0%" stopColor="#A46F45"/><stop offset="100%" stopColor="#68442D"/>
           </linearGradient>
           <linearGradient id={`${gardenSvgId}-soil-l`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#82612f"/><stop offset="100%" stopColor="#624621"/>
+            <stop offset="0%" stopColor="#8C5D3B"/><stop offset="100%" stopColor="#563823"/>
           </linearGradient>
+          <linearGradient id={`${gardenSvgId}-wall`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={tod.name==="night"?"#2A384B":tod.name==="dusk"?"#E7B79C":"#DDE9D7"}/>
+            <stop offset="100%" stopColor={tod.name==="night"?"#182536":tod.name==="dusk"?"#C98579":"#BFD3BC"}/>
+          </linearGradient>
+          <linearGradient id={`${gardenSvgId}-room-floor`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={tod.name==="night"?"#50606C":"#D7B685"}/>
+            <stop offset="100%" stopColor={tod.name==="night"?"#263640":"#9B704C"}/>
+          </linearGradient>
+          <clipPath id={`${gardenSvgId}-window-clip`}><rect x="18" y="20" width="108" height="86" rx="4"/></clipPath>
           {/* Soft blur for shadows */}
           <filter id={`${gardenSvgId}-soft`} x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="2.2"/>
@@ -8833,33 +8895,39 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           </radialGradient>
         </defs>
 
-        {/* Sky backdrop */}
-        <rect x="-20" y="-20" width={W+40} height={H+100} fill={`url(#${gardenSvgId}-sky)`}/>
+        {/* Detailed classroom shell: wall, window, board, shelving and floor.
+            Only the outside view changes with time; the learning space stays
+            readable and calm around the collectible growth markers. */}
+        <rect x="-20" y="-20" width={W+40} height={H+100} fill={`url(#${gardenSvgId}-wall)`}/>
+        <path d={`M-20 0 H${W+20} L${W-7} 18 H7 Z`} fill={tod.name==="night"?"#1C2938":"#F7EFD9"} opacity=".82"/>
+        <rect x="-20" y="111" width={W+40} height={H+20} fill={`url(#${gardenSvgId}-room-floor)`}/>
+        {[0,1,2,3,4,5].map(index=><path key={`floor-line-${index}`} d={`M${-35+index*86} ${H+70} L${88+index*48} 111`} stroke={tod.name==="night"?"#82909A":"#8C674B"} strokeWidth="1" opacity=".2"/>)}
+        <g clipPath={`url(#${gardenSvgId}-window-clip)`}>
+          <rect x="18" y="20" width="108" height="86" fill={`url(#${gardenSvgId}-sky)`}/>
+          {tod.star && Array.from({length:9}).map((_,i)=><circle key={`star${i}`} cx={25+((i*37)%94)} cy={27+((i*29)%62)} r={(i%3===0)?1.1:.7} fill="#fff" opacity={.44+((i%4)*.1)}/>)}
+          <circle cx="92" cy="47" r="38" fill={`url(#${gardenSvgId}-sun)`} opacity=".92">
+            {renderBudget.ambientSkyPulse&&<animate attributeName="opacity" values=".76;.96;.76" dur="14s" repeatCount="indefinite"/>}
+          </circle>
+          <circle cx="92" cy="47" r={tod.name==="night"?7:10} fill={tod.sun} opacity=".92"/>
+          {!tod.star&&renderBudget.ambientClouds>0&&<g opacity=".72">
+            <animateTransform attributeName="transform" type="translate" values="-8 0;10 -1;-8 0" dur="36s" repeatCount="indefinite"/>
+            {[{x:42,y:48,s:.62},{x:96,y:70,s:.5}].slice(0,renderBudget.ambientClouds).map((cl,i)=><g key={`cloud${i}`}>
+              <ellipse cx={cl.x} cy={cl.y} rx={26*cl.s} ry={9*cl.s} fill="#fff"/><ellipse cx={cl.x+13*cl.s} cy={cl.y+1} rx={15*cl.s} ry={7*cl.s} fill="#fff"/>
+            </g>)}
+          </g>}
+        </g>
+        <rect x="15" y="17" width="114" height="92" rx="5" fill="none" stroke={tod.name==="night"?"#8496A7":"#F4E4C8"} strokeWidth="7"/>
+        <path d="M72 19 V107 M17 62 H127" stroke={tod.name==="night"?"#8092A3":"#E8D4B5"} strokeWidth="3" opacity=".88"/>
+        <path d="M10 14 Q26 34 16 110 M134 14 Q118 35 128 110" fill="none" stroke={tod.name==="night"?"#495B77":"#91A985"} strokeWidth="8" opacity=".8"/>
+        <rect x="145" y="24" width="143" height="66" rx="4" fill={tod.name==="night"?"#183B39":"#315E4F"} stroke="#B88D57" strokeWidth="6"/>
+        <path d="M160 45 H213 M185 57 H266 M153 72 H228" stroke="#EDE6C9" strokeWidth="2" strokeLinecap="round" opacity=".58"/>
+        <rect x="139" y="91" width="155" height="5" rx="2" fill="#A8794E"/>
+        <rect x="312" y="28" width="58" height="88" rx="5" fill={tod.name==="night"?"#4C3A31":"#9B6B47"} stroke={tod.name==="night"?"#2A2628":"#754B32"} strokeWidth="5"/>
+        {[0,1,2].map(row=><g key={`shelf-${row}`}><path d={`M314 ${55+row*25} H368`} stroke="#4A3326" strokeWidth="4"/><rect x={319+row*3} y={35+row*25} width="8" height="17" rx="1" fill="#D89461"/><rect x={329+row*2} y={38+row*25} width="7" height="14" rx="1" fill="#6F8C7C"/><rect x={338+row*3} y={36+row*25} width="9" height="16" rx="1" fill="#D6B35F"/></g>)}
+        <circle cx="306" cy="19" r="11" fill="#F5EEDB" stroke="#8D7B6B" strokeWidth="2"/><path d="M306 19 L306 12 M306 19 L312 22" stroke="#6D675F" strokeWidth="1.6" strokeLinecap="round"/>
+        <rect x="155" y="7" width="78" height="7" rx="3.5" fill={tod.name==="night"?"#D5D7C9":"#FFF6D4"} opacity={tod.name==="night"?.44:.84}/>
 
-        {tod.star && Array.from({length:14}).map((_,i)=>(
-          <circle key={`star${i}`} cx={20+((i*89)%360)} cy={16+((i*47)%70)} r={(i%3===0)?1.3:0.8}
-            fill="#fff" opacity={0.42+((i%4)*0.1)}/>
-        ))}
-        {/* Sun / moon glow */}
-        <circle cx={sunX} cy={sunY} r="70" fill={`url(#${gardenSvgId}-sun)`} opacity="0.9">
-          {renderBudget.ambientSkyPulse&&<animate attributeName="opacity" values="0.76;0.96;0.76" dur="14s" repeatCount="indefinite"/>}
-        </circle>
-        <circle cx={sunX} cy={sunY} r={tod.name==="night"?9:13} fill={tod.sun}
-          opacity={tod.name==="night"?0.85:0.9}/>
-        {/* The cloud bank drifts as one layer, so three clouds cost one
-            timeline instead of three independent transforms. */}
-        {!tod.star&&renderBudget.ambientClouds>0&&<g>
-          <animateTransform attributeName="transform" type="translate" values="-5 0;6 -1;-5 0" dur="36s" repeatCount="indefinite"/>
-          {[{x:60,y:40,s:1},{x:300,y:30,s:0.8},{x:180,y:60,s:0.65}].slice(0,renderBudget.ambientClouds).map((cl,i)=>(
-            <g key={`cloud${i}`} opacity={0.85}>
-              <ellipse cx={cl.x} cy={cl.y} rx={26*cl.s} ry={9*cl.s} fill="#fff" opacity={0.75}/>
-              <ellipse cx={cl.x+16*cl.s} cy={cl.y+2*cl.s} rx={18*cl.s} ry={7*cl.s} fill="#fff" opacity={0.7}/>
-              <ellipse cx={cl.x-16*cl.s} cy={cl.y+2*cl.s} rx={15*cl.s} ry={6*cl.s} fill="#fff" opacity={0.7}/>
-            </g>
-          ))}
-        </g>}
-
-        {/* Whole-plot contact shadow grounds the garden */}
+        {/* Whole-platform contact shadow grounds the classroom display */}
         {(() => {
           const g = gridSize - 1;
           const cx = originX, cy = isoY(g, g) + CELL*0.28 + 30*Math.max(tScale,0.6);
@@ -8867,7 +8935,8 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="#000" opacity={0.13} filter={`url(#${gardenSvgId}-soft)`}/>;
         })()}
 
-        {/* Ground base — lit gradient tiles with a soft top highlight edge */}
+        {/* Classroom display platform — alternating warm wood tiles preserve
+            every legacy isometric saved position. */}
         {slots.map(({r,c}) => {
           const x = isoX(c, r);
           const y = isoY(c, r);
@@ -8882,13 +8951,14 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
               <polygon points={`${top} ${right} ${bottom} ${left}`}
                 fill={`url(#${gardenSvgId}-${(r+c)%2===0?"grass-a":"grass-b"})`}/>
               <polyline points={`${left} ${top} ${right}`} fill="none"
-                stroke="#c4ec98" strokeWidth={0.6} opacity={0.22}/>
+                stroke="#FFF0CF" strokeWidth={0.6} opacity={0.3}/>
             </g>
           );
         })}
 
 
-        {/* Soil skirt — right and bottom faces of the whole plot, with stones */}
+        {/* Raised timber skirt — the old soil geometry is retained so saved
+            layouts and hit areas do not move. */}
         {(() => {
           const hw = CELL * 0.6, hh = CELL * 0.28, D = 16 * Math.max(tScale, 0.6);
           const g = gridSize - 1;
@@ -8907,22 +8977,23 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           }
           return (
             <g>
-              {/* grass rim */}
+              {/* polished timber rim */}
               <polygon points={`${E.x},${E.y} ${S.x},${S.y} ${E.x},${E.y+grassRim} ${S.x},${S.y+grassRim}`} fill={grassDark}/>
               <polygon points={`${Wt.x},${Wt.y} ${S.x},${S.y} ${Wt.x},${Wt.y+grassRim} ${S.x},${S.y+grassRim}`} fill={grassDark}/>
-              {/* soil faces */}
+              {/* timber faces */}
               <polygon points={`${E.x},${E.y+grassRim} ${S.x},${S.y+grassRim} ${S.x},${S.y+grassRim+D} ${E.x},${E.y+grassRim+D}`} fill={`url(#${gardenSvgId}-soil-r)`}/>
               <polygon points={`${Wt.x},${Wt.y+grassRim} ${S.x},${S.y+grassRim} ${S.x},${S.y+grassRim+D} ${Wt.x},${Wt.y+grassRim+D}`} fill={`url(#${gardenSvgId}-soil-l)`}/>
-              {/* stones */}
+              {/* subtle brass joinery */}
               {stones.map(st=>(
                 <ellipse key={st.k} cx={st.x} cy={st.y+grassRim} rx={st.rx} ry={st.rx*0.7}
-                  fill="#A98C5B" opacity={0.55}/>
+                  fill="#D0A65C" opacity={0.38}/>
               ))}
             </g>
           );
         })()}
 
-        {/* Grass tufts on some empty tiles */}
+        {/* Books, notebooks and pencils add classroom detail to a few empty
+            positions without changing their selectable placement keys. */}
         {slots.map(({r,c}) => {
           if (slotTree.has(`${r}-${c}`)) return null;
           if (slotDecor.has(`${r}-${c}`)) return null;
@@ -8930,10 +9001,10 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           const x = isoX(c, r), y = isoY(c, r) + CELL*0.28;
           const s = tScale;
           return (
-            <g key={`tuft-${r}-${c}`} opacity={0.55}>
-              <path d={`M${x-3*s} ${y} q${1*s} ${-5*s} ${2*s} 0`} stroke="#6FA84F" strokeWidth={1.2*s} fill="none" strokeLinecap="round"/>
-              <path d={`M${x} ${y+1*s} q${1*s} ${-6*s} ${2*s} 0`} stroke="#7DB55C" strokeWidth={1.2*s} fill="none" strokeLinecap="round"/>
-              <path d={`M${x+3*s} ${y} q${1*s} ${-4*s} ${2*s} 0`} stroke="#6FA84F" strokeWidth={1.2*s} fill="none" strokeLinecap="round"/>
+            <g key={`study-detail-${r}-${c}`} opacity={0.62} transform={`rotate(${((r+c)%3-1)*7} ${x} ${y})`}>
+              <rect x={x-6*s} y={y-3.4*s} width={10*s} height={5.5*s} rx={1*s} fill={(r+c)%2?"#6F8DA5":"#B76566"}/>
+              <path d={`M${x-4.5*s} ${y-1.9*s} H${x+2.5*s}`} stroke="#F4EEDC" strokeWidth={.65*s} opacity=".7"/>
+              <rect x={x+3*s} y={y-5*s} width={1.2*s} height={9*s} rx={.6*s} fill="#E2B84E" transform={`rotate(28 ${x+3*s} ${y-5*s})`}/>
             </g>
           );
         })}
@@ -9364,13 +9435,12 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           );
         })}
 
-        {/* Foreground flock: rendered after the trees so desktop stacking
-            contexts can never bury it. Opposing routes, staggered bodies and
-            independently timed wings keep the motion organic. The wrapper
-            clips the flight to the grove card, preventing page overflow. */}
+        {/* Two small paper-plane routes replace the outdoor bird flock. They
+            reuse the bounded transform-only flight paths, keeping the room
+            lively without introducing another animation system. */}
         {renderBudget.ambientFlock&&[0,1].map(flight=>{
-          const bodyColor=tod.name==="night"?"#8FAFD3":tod.name==="dusk"?"#493F52":"#385866";
-          const wingColor=tod.name==="night"?"#A9C1DC":tod.name==="dusk"?"#665A70":"#4C7080";
+          const bodyColor=tod.name==="night"?"#D3E3F1":tod.name==="dusk"?"#FFF0D8":"#F7F2E2";
+          const foldColor=tod.name==="night"?"#8FAFD3":tod.name==="dusk"?"#C9927F":"#92A99C";
           const flockScale=(renderBudget.veryDense ? .7 : renderBudget.dense ? .76 : .84)*(flight ? .9 : 1);
           const direction=flight?-1:1;
           return <g key={`flock-${flight}`} data-garden-flock="true"
@@ -9384,15 +9454,9 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
                   "--sg-bird-bob":`${-bird.bob}px`,"--sg-bob-duration":`${bird.bobDur+flight*.45}s`,
                   "--sg-bob-delay":`${bird.bobDelay-flight*.35}s`,"--sg-bird-tilt-a":bird.tiltA,"--sg-bird-tilt-b":bird.tiltB,
                 }}>
-                  <path className="sg-garden-bird-wing-far" d="M-1 0 C-4 -2 -8 -6 -10 -6.5 C-9 -2.2 -6 1 -1 1.1 Z"
-                    fill={wingColor} opacity=".72" style={{"--sg-flap-duration":`${bird.flap+flight*.05}s`,"--sg-flap-delay":`${bird.flapDelay-.12}s`}}/>
-                  <path d="M-5 1 L-10 4.2 L-7.2 .2 Z" fill={bodyColor} opacity=".9"/>
-                  <ellipse cx="0" cy="0" rx="6" ry="2.65" fill={bodyColor}/>
-                  <circle cx="5" cy="-.7" r="2.25" fill={bodyColor}/>
-                  <path d="M7 -.9 L10 .1 L7.1 .8 Z" fill={tod.name==="night"?"#D8C48A":"#D49B53"}/>
-                  <circle cx="5.7" cy="-1.25" r=".42" fill={tod.name==="night"?"#EFF6FF":"#F7FBFA"}/>
-                  <path className="sg-garden-bird-wing" d="M1 .4 C-1 -1.2 -5 -7.4 -9 -7 C-8 -2.4 -4 1.4 .5 1.6 Z"
-                    fill={wingColor} style={{"--sg-flap-duration":`${bird.flap+flight*.05}s`,"--sg-flap-delay":`${bird.flapDelay}s`}}/>
+                  <path d="M-10 -4 L10 0 L-10 4 L-5 .2 Z" fill={bodyColor} stroke={foldColor} strokeWidth=".6" strokeLinejoin="round"/>
+                  <path d="M-5 .2 L10 0 L-1 2.3 Z" fill={foldColor} opacity=".72"/>
+                  <path d="M-9 -3.2 L-2 -.1" stroke="#fff" strokeWidth=".7" opacity=".7"/>
                 </g>
               </g>)}
             </g>
@@ -9456,16 +9520,16 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           );
         })()}
 
-        {/* Second event: one shared leaf gust instead of separately animated
-            leaves. Static rotations keep the cluster varied at one timeline. */}
+        {/* A shared sweep of sticky notes adds a brief classroom moment. */}
         {tod.name!=="night"&&renderBudget.ambientGust&&<g opacity="0.72">
           <animateTransform attributeName="transform" type="translate"
             values={`0 -90;0 -90;28 ${H+80};28 ${H+80}`}
             keyTimes={`0;${secondEventStart};${secondEventEnd};1`} dur={ambientCycle} repeatCount="indefinite"/>
           {[
-            [45,0,-28,"#E0533A"],[132,-32,18,"#F4A23A"],[226,-7,42,"#C97BA0"],[318,-44,-12,"#7FB86A"]
-          ].map(([x,y,rot,fill],i)=><path key={`gust${i}`} transform={`translate(${x} ${y}) rotate(${rot})`}
-            d="M0 0 C5 -5 5 -11 0 -15 C-5 -9 -5 -4 0 0 Z" fill={fill}/>) }
+            [45,0,-28,"#E9A987"],[132,-32,18,"#F1CF73"],[226,-7,42,"#C6A1C9"],[318,-44,-12,"#9EC7A7"]
+          ].map(([x,y,rot,fill],i)=><g key={`gust${i}`} transform={`translate(${x} ${y}) rotate(${rot})`}>
+            <rect x="-5" y="-8" width="10" height="13" rx="1.2" fill={fill}/><path d="M-3 -4 H3 M-3 -1 H2" stroke="#fff" strokeWidth=".7" opacity=".62"/>
+          </g>) }
         </g>}
 
         {/* Night events share the same schedule: fireflies rise first, then a
@@ -9603,6 +9667,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
   }));
   const [selected,setSelected]=useState(null);
   const [activePreset,setActivePreset]=useState("");
+  const [presetRowRef,presetEdge]=useHScroll(String(GARDEN_LAYOUT_PRESETS.length));
   const placement=buildGardenPlacement({sessions,decorations,layout:draft,range,enhancements});
 
   const moveItem=(item,targetSlot)=>{
@@ -9707,14 +9772,18 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
           <span>Quick layouts</span>
           <span style={ge.presetHint}>Choose, then fine-tune</span>
         </div>
-        <div style={ge.presets} role="group" aria-label="Classroom layout presets">
-          {GARDEN_LAYOUT_PRESETS.map(preset=><button type="button" key={preset.id}
-            style={{...ge.presetBtn,...(activePreset===preset.id?ge.presetBtnActive:{})}}
-            aria-pressed={activePreset===preset.id}
-            onClick={()=>applyPreset(preset.id)}>
-            <span aria-hidden="true" style={ge.presetIcon}>{preset.icon}</span>
-            <span>{preset.label}</span>
-          </button>)}
+        <div style={ge.presetScroller}>
+          <div ref={presetRowRef} style={ge.presets} role="group" aria-label="Classroom layout presets">
+            {GARDEN_LAYOUT_PRESETS.map(preset=><button type="button" key={preset.id}
+              style={{...ge.presetBtn,...(activePreset===preset.id?ge.presetBtnActive:{})}}
+              aria-pressed={activePreset===preset.id}
+              onClick={()=>applyPreset(preset.id)}>
+              <span aria-hidden="true" style={ge.presetIcon}>{preset.icon}</span>
+              <span>{preset.label}</span>
+            </button>)}
+          </div>
+          {!presetEdge.atStart&&<span style={ge.presetFadeLeft}/>}
+          {!presetEdge.atEnd&&<span style={ge.presetFadeRight}/>}
         </div>
       </div>
 
@@ -9767,12 +9836,15 @@ const ge={
   presetSection:{margin:"0 0 12px"},
   presetHeading:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontSize:11.5,fontWeight:750,color:"#526159",margin:"0 2px 7px"},
   presetHint:{fontSize:10,fontWeight:550,color:"#929B95"},
-  presets:{display:"flex",gap:7,overflowX:"auto",scrollbarWidth:"none",overscrollBehaviorInline:"contain",padding:"1px 1px 5px"},
-  presetBtn:{flex:"0 0 auto",minHeight:40,display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE7DA",borderRadius:18,background:"#fff",color:"#657169",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"},
+  presetScroller:{position:"relative",width:"100%",minWidth:0,overflow:"hidden"},
+  presets:{display:"flex",width:"100%",gap:7,overflowX:"auto",overflowY:"hidden",scrollbarWidth:"none",overscrollBehaviorInline:"contain",padding:"1px 1px 6px",cursor:"grab",scrollSnapType:"x proximity",WebkitOverflowScrolling:"touch"},
+  presetFadeLeft:{position:"absolute",left:0,top:0,bottom:6,width:28,background:"linear-gradient(90deg,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
+  presetFadeRight:{position:"absolute",right:0,top:0,bottom:6,width:28,background:"linear-gradient(270deg,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
+  presetBtn:{flex:"0 0 auto",minHeight:40,display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE7DA",borderRadius:18,background:"#fff",color:"#657169",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",scrollSnapAlign:"start"},
   presetBtnActive:{borderColor:"#77AA88",background:"#EAF5ED",color:"#2D6A4F",boxShadow:"0 0 0 2px rgba(45,106,79,.08)"},
   presetIcon:{fontSize:13,lineHeight:1},
-  grid:{display:"grid",gap:5,padding:10,background:"#EDF4E9",border:"1px solid #DDE9D8",borderRadius:16,overflow:"hidden",width:"100%",maxWidth:404,margin:"0 auto"},
-  tile:{aspectRatio:"1 / 1",minWidth:0,border:"1px solid rgba(91,132,76,0.20)",borderRadius:8,background:"linear-gradient(145deg,#A9D97B,#91C765)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"transform .12s,border-color .12s,box-shadow .12s",cursor:"pointer"},
+  grid:{display:"grid",gap:5,padding:10,background:"linear-gradient(155deg,#F1DEC1,#DAB98E)",border:"1px solid #D4B78E",borderRadius:16,overflow:"hidden",width:"100%",maxWidth:404,margin:"0 auto",boxShadow:"inset 0 0 0 1px rgba(255,255,255,.42)"},
+  tile:{aspectRatio:"1 / 1",minWidth:0,border:"1px solid rgba(132,89,50,.18)",borderRadius:8,background:"linear-gradient(145deg,#EACB98,#C99863)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"transform .12s,border-color .12s,box-shadow .12s",cursor:"pointer"},
   tileSelected:{border:"2px solid #2D6A4F",boxShadow:"0 0 0 2px rgba(45,106,79,.14)",transform:"scale(.96)"},
   item:{width:"88%",height:"88%",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",cursor:"grab",userSelect:"none"},
   treeThumb:{width:"88%",height:"88%",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",boxShadow:"inset 0 0 0 1px rgba(255,255,255,.5),0 2px 5px rgba(0,0,0,.12)",pointerEvents:"none"},
@@ -10092,6 +10164,14 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, curre
   const rewardDate = wk.weekStart;
   const rewardMode = getWeeklyRewardMode(rewardDate);
   const rewardPlan = getWeeklyRewardPlan(rewardDate);
+  const rewardTitle = rewardMode==="skin"
+    ? "Mystery character week"
+    : rewardMode==="classroom" ? "Classroom collection week" : "Coin reward week";
+  const rewardHint = rewardMode==="skin"
+    ? "First place receives a random unowned character style. If every style is owned, the prize becomes 300 coins."
+    : rewardMode==="classroom"
+      ? "First receives a random unowned background, second receives unowned classroom décor and third receives 100 coins. Completed collections fall back to placement coins."
+      : "This week all top-three places receive coins.";
   return (
     <div>
       <div style={S.toggleRow}>
@@ -10120,25 +10200,24 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, curre
       )}
       {view!=="allTime"&&<div style={S.rewardCard}>
         <div style={S.rewardCardTop}>
-          <div style={S.rewardCardTitle}>{rewardMode==="skin"?"Mystery skin week":"Coin reward week"}</div>
-          <div style={S.rewardCycleBadge}>Alternates weekly</div>
+          <div style={S.rewardCardTitle}>{rewardTitle}</div>
+          <div style={S.rewardCycleBadge}>3-week rotation</div>
         </div>
         <div style={S.rewardPrizeRow}>
           {rewardPlan.map(prize=>(
-            <div key={prize.place} style={{...S.rewardPrize,...(prize.type==="skin"?S.rewardPrizeSkin:{})}}>
+            <div key={prize.place} style={{...S.rewardPrize,...(prize.type!=="coins"?S.rewardPrizeSkin:{})}}>
               <span style={S.rewardMedal}>{prize.medal}</span>
               <span style={S.rewardPlace}>{prize.place}</span>
-              <span style={prize.type==="skin"?S.rewardSkin:S.rewardCoins}>
-                {prize.type==="skin"?"🎁 Random skin":`+${prize.coins} 🪙`}
+              <span style={prize.type!=="coins"?S.rewardSkin:S.rewardCoins}>
+                {prize.type==="skin"?"🎁 Random style"
+                  :prize.type==="background"?"🌙 Background"
+                    :prize.type==="decoration"?"🏫 Classroom décor"
+                      :`+${prize.coins} 🪙`}
               </span>
             </div>
           ))}
         </div>
-        <div style={S.rewardHint}>
-          {rewardMode==="skin"
-            ? "First place receives a random unowned shop skin. If every skin is owned, the prize becomes 300 coins."
-            : "This week all top-three places receive coins."}
-        </div>
+        <div style={S.rewardHint}>{rewardHint}</div>
       </div>}
       {showLoading&&<div>
         {[0,1,2,3,4].map(i=>(
@@ -11558,11 +11637,22 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(Array.isArray(r.ownedSkins)){
           setOwnedSkins(r.ownedSkins);lsSet("studygrove_owned_skins",r.ownedSkins);
         }
-        if(!r.alreadyClaimed && (r.reward>0 || r.skinId)){
+        if(Array.isArray(r.ownedBackgrounds)){
+          setOwnedBackgrounds(r.ownedBackgrounds);lsSet(ownedBackgroundsCacheKey(user),r.ownedBackgrounds);
+        }
+        if(Array.isArray(r.decorations)){
+          setDecorations(r.decorations);lsSet(LS_DECOR,r.decorations);
+        }
+        if(!r.alreadyClaimed && (r.reward>0 || r.skinId || r.backgroundId || r.decorationId)){
           if(r.skinId){
-            showToast(`🥇 Last week's #1 prize: ${r.skinName||"Mystery"} skin unlocked`);
+            showToast(`🥇 Last week's #1 prize: ${r.skinName||"Mystery"} character style unlocked`);
+          } else if(r.backgroundId){
+            showToast(`🥇 Last week's #1 prize: ${r.backgroundName||"Mystery"} background unlocked`);
+          } else if(r.decorationId){
+            showToast(`🥈 Last week's #2 prize: ${r.decorationName||"Mystery"} classroom décor unlocked`);
           } else {
-            showToast(`${r.rank===1?"🥇":r.rank===2?"🥈":"🥉"} Last week's #${r.rank}: +${r.reward} coins${r.skinFallback?" (all skins owned)":""}`);
+            const completedCollection=r.skinFallback||r.backgroundFallback||r.decorationFallback;
+            showToast(`${r.rank===1?"🥇":r.rank===2?"🥈":"🥉"} Last week's #${r.rank}: +${r.reward} coins${completedCollection?" (collection complete)":""}`);
           }
         }
       } finally {
