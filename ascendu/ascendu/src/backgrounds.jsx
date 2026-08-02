@@ -523,7 +523,7 @@ function ClassroomEnvironment({ art }) {
     <span className="sg-ocean-room-desk sg-ocean-room-desk--three"><i/><i/><i/></span>
   </div>;
 
-  if (art === "planetarium" || art === "celestial" || art === "moonlit") return <div className={`sg-theme-room sg-theme-room--space sg-theme-room--${art}`} aria-hidden="true">
+  if (art === "planetarium") return <div className="sg-theme-room sg-theme-room--planetarium" aria-hidden="true">
     <span className="sg-space-room-ceiling"/>
     <span className="sg-space-room-board sg-space-room-board--left"/>
     <span className="sg-space-room-board sg-space-room-board--right"/>
@@ -536,6 +536,27 @@ function ClassroomEnvironment({ art }) {
     <span className="sg-space-room-stool sg-space-room-stool--one"/>
     <span className="sg-space-room-stool sg-space-room-stool--two"/>
     <span className="sg-space-room-stool sg-space-room-stool--three"/>
+  </div>;
+
+  if (art === "celestial") return <div className="sg-theme-room sg-theme-room--celestial" aria-hidden="true">
+    <span className="sg-celestial-room-dome"/>
+    <span className="sg-celestial-room-observatory"><i/><i/><i/></span>
+    <span className="sg-celestial-room-orbit-ring"/>
+    <span className="sg-celestial-room-floor"/>
+    <span className="sg-celestial-room-pod sg-celestial-room-pod--one"><i/></span>
+    <span className="sg-celestial-room-pod sg-celestial-room-pod--two"><i/></span>
+    <span className="sg-celestial-room-pod sg-celestial-room-pod--three"><i/></span>
+  </div>;
+
+  if (art === "moonlit") return <div className="sg-theme-room sg-theme-room--moonlit" aria-hidden="true">
+    <span className="sg-moonlit-room-ceiling"/>
+    <span className="sg-moonlit-room-wall sg-moonlit-room-wall--left"/>
+    <span className="sg-moonlit-room-wall sg-moonlit-room-wall--right"/>
+    <span className="sg-moonlit-room-sill"/>
+    <span className="sg-moonlit-room-bookcase"/>
+    <span className="sg-moonlit-room-floor"/>
+    <span className="sg-moonlit-room-desk sg-moonlit-room-desk--one"><i/></span>
+    <span className="sg-moonlit-room-desk sg-moonlit-room-desk--two"><i/></span>
   </div>;
 
   if (art === "blossom") return <div className="sg-theme-room sg-theme-room--blossom" aria-hidden="true">
@@ -1014,7 +1035,23 @@ export const BACKGROUND_CSS = `
 .sg-space-room-floor{position:absolute;left:-4%;right:-4%;bottom:-4%;height:37%;background:repeating-linear-gradient(90deg,transparent 0 12%,rgba(105,119,192,.12) 12% 12.4%),linear-gradient(180deg,rgba(35,43,99,.5),rgba(6,10,35,.84));border-top:2px solid rgba(125,145,220,.2);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
 .sg-space-room-table{position:absolute;bottom:6%;width:35%;height:15%;border-top:clamp(8px,1vw,15px) solid rgba(74,91,160,.78);background:linear-gradient(180deg,rgba(56,70,131,.52),rgba(16,24,70,.72));clip-path:polygon(3% 0,97% 0,100% 72%,86% 72%,84% 100%,77% 100%,75% 72%,25% 72%,23% 100%,16% 100%,14% 72%,0 72%)}.sg-space-room-table--left{left:3%;transform:scale(.82);transform-origin:bottom left}.sg-space-room-table--right{right:3%;bottom:1%}
 .sg-space-room-stool{position:absolute;bottom:2%;width:5%;height:10%;border-radius:45% 45% 5px 5px;background:linear-gradient(180deg,#5366A8,#1C275D);box-shadow:0 7px 10px rgba(0,0,0,.22)}.sg-space-room-stool--one{left:18%}.sg-space-room-stool--two{left:59%}.sg-space-room-stool--three{right:12%}
-.sg-theme-room--moonlit .sg-space-room-board{opacity:.48}.sg-theme-room--moonlit .sg-space-room-planet--one{background:linear-gradient(145deg,#DDEAF4,#7D91B5)}.sg-theme-room--celestial .sg-space-room-floor{background:repeating-linear-gradient(90deg,transparent 0 12%,rgba(141,118,194,.14) 12% 12.4%),linear-gradient(180deg,rgba(58,50,111,.56),rgba(12,12,45,.86))}
+
+/* Celestial classroom — a curved observatory gallery with learning pods,
+   keeping its orbiting sky separate from the planetarium lab. */
+.sg-celestial-room-dome{position:absolute;left:-8%;right:-8%;top:-28%;height:73%;border-radius:0 0 50% 50%;border-bottom:clamp(7px,.9vw,13px) solid rgba(151,139,205,.36);background:radial-gradient(ellipse at 50% 94%,rgba(119,102,176,.08),rgba(8,9,31,.5) 72%);box-shadow:inset 0 -18px 45px rgba(142,124,208,.1)}
+.sg-celestial-room-observatory{position:absolute;left:14%;right:14%;top:11%;height:39%;border:clamp(5px,.65vw,10px) solid rgba(156,150,210,.32);border-bottom-width:clamp(9px,1vw,15px);border-radius:50% 50% 9px 9px/27% 27% 9px 9px;box-shadow:inset 0 0 44px rgba(177,165,231,.08),0 15px 35px rgba(3,4,20,.2)}.sg-celestial-room-observatory i{position:absolute;background:rgba(163,156,215,.22)}.sg-celestial-room-observatory i:nth-child(1){left:32.5%;top:0;bottom:0;width:3px}.sg-celestial-room-observatory i:nth-child(2){left:65.5%;top:0;bottom:0;width:3px}.sg-celestial-room-observatory i:nth-child(3){left:0;right:0;top:58%;height:3px}
+.sg-celestial-room-orbit-ring{position:absolute;left:39%;top:21%;width:22%;aspect-ratio:1;border:1px solid rgba(224,213,157,.3);border-radius:50%;transform:rotate(-18deg);animation:sgBgOrbit 44s linear infinite}.sg-celestial-room-orbit-ring::after{content:"";position:absolute;left:9%;top:10%;width:clamp(4px,.65vw,10px);aspect-ratio:1;border-radius:50%;background:#E8D793;box-shadow:0 0 11px rgba(232,215,147,.54)}
+.sg-celestial-room-floor{position:absolute;left:-5%;right:-5%;bottom:-5%;height:45%;border-top:3px solid rgba(151,137,204,.2);background:repeating-radial-gradient(ellipse at 50% 110%,transparent 0 13%,rgba(139,120,194,.11) 13.2% 13.8%,transparent 14% 24%),linear-gradient(180deg,rgba(57,48,108,.58),rgba(10,10,39,.9));clip-path:polygon(5% 0,95% 0,100% 100%,0 100%)}
+.sg-celestial-room-pod{position:absolute;bottom:4%;width:23%;height:17%;border-top:clamp(7px,.9vw,13px) solid rgba(107,91,165,.82);border-radius:50% 50% 10px 10px/22% 22% 10px 10px;background:linear-gradient(180deg,rgba(73,61,135,.68),rgba(20,18,66,.84));filter:drop-shadow(0 9px 10px rgba(2,2,18,.28))}.sg-celestial-room-pod i{position:absolute;left:33%;right:33%;top:-43%;height:38%;border:2px solid rgba(158,190,227,.36);border-radius:6px;background:linear-gradient(155deg,rgba(103,151,198,.48),rgba(31,45,105,.76));box-shadow:0 0 13px rgba(115,154,211,.14)}.sg-celestial-room-pod--one{left:7%;transform:scale(.78);transform-origin:bottom left}.sg-celestial-room-pod--two{left:38%;bottom:1%}.sg-celestial-room-pod--three{right:6%;transform:scale(.8);transform-origin:bottom right}
+
+/* Moonlit classroom — a quiet reading room framed around the existing night
+   window, with book storage and warm desk lamps instead of space displays. */
+.sg-moonlit-room-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:8%;background:linear-gradient(180deg,rgba(10,17,35,.94),rgba(34,48,76,.62));border-bottom:3px solid rgba(141,166,194,.2)}
+.sg-moonlit-room-wall{position:absolute;top:7%;bottom:34%;width:6%;background:linear-gradient(90deg,rgba(24,37,62,.92),rgba(73,91,118,.62));box-shadow:0 0 19px rgba(3,7,16,.25)}.sg-moonlit-room-wall--left{left:0}.sg-moonlit-room-wall--right{right:0;transform:scaleX(-1)}
+.sg-moonlit-room-sill{position:absolute;left:4%;right:4%;top:64%;height:2%;border-radius:3px;background:rgba(98,119,145,.58);box-shadow:0 7px 15px rgba(1,5,13,.28)}
+.sg-moonlit-room-bookcase{position:absolute;right:5%;top:18%;width:17%;height:43%;border:clamp(4px,.55vw,8px) solid rgba(71,75,99,.62);border-radius:5px;background:repeating-linear-gradient(0deg,transparent 0 27%,rgba(62,65,91,.78) 27% 30%),repeating-linear-gradient(90deg,#73819A 0 9%,#9A7790 9% 17%,#5A7790 17% 25%);opacity:.58;box-shadow:0 12px 25px rgba(2,5,13,.2)}
+.sg-moonlit-room-floor{position:absolute;left:-4%;right:-4%;bottom:-4%;height:38%;border-top:2px solid rgba(138,160,184,.14);background:repeating-linear-gradient(90deg,transparent 0 13%,rgba(112,131,161,.09) 13% 13.4%),linear-gradient(180deg,rgba(40,53,83,.64),rgba(11,17,39,.9));clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
+.sg-moonlit-room-desk{position:absolute;bottom:5%;width:31%;height:15%;border-top:clamp(8px,.9vw,13px) solid rgba(80,88,112,.86);background:linear-gradient(180deg,rgba(55,65,94,.62),rgba(22,29,58,.82));clip-path:polygon(4% 0,96% 0,100% 72%,84% 72%,82% 100%,75% 100%,73% 72%,27% 72%,25% 100%,18% 100%,16% 72%,0 72%)}.sg-moonlit-room-desk::before{content:"";position:absolute;left:12%;top:-48%;width:3px;height:48%;background:rgba(199,177,127,.62)}.sg-moonlit-room-desk::after{content:"";position:absolute;left:5%;top:-66%;width:18%;height:28%;border-radius:50% 50% 10% 10%;background:#D8C18D;box-shadow:0 0 22px rgba(230,204,147,.38);clip-path:polygon(24% 0,76% 0,100% 100%,0 100%)}.sg-moonlit-room-desk i{position:absolute;right:15%;top:-25%;width:28%;height:18%;border-radius:2px;background:linear-gradient(90deg,#7888A1,#A0A9B6);transform:rotate(3deg)}.sg-moonlit-room-desk--one{left:7%;transform:scale(.84);transform-origin:bottom left}.sg-moonlit-room-desk--two{right:7%;bottom:1%}
 
 /* Cherry-blossom classroom — the window wall and sun-cast branch shadow are
    the composition, matching the calm, almost empty reference room. */
@@ -1045,7 +1082,7 @@ export const BACKGROUND_CSS = `
 .sg-everyday-room-table{position:absolute;bottom:4%;width:31%;height:14%;border-top:clamp(8px,.9vw,13px) solid var(--room-desk);background:color-mix(in srgb,var(--room-desk),transparent 44%);clip-path:polygon(4% 0,96% 0,100% 72%,84% 72%,82% 100%,75% 100%,73% 72%,27% 72%,25% 100%,18% 100%,16% 72%,0 72%)}.sg-everyday-room-table--one{left:7%;transform:scale(.82);transform-origin:bottom left}.sg-everyday-room-table--two{right:6%}
 .sg-theme-room--forest{--room-trim:rgba(72,105,72,.36);--room-floor-a:rgba(190,197,139,.28);--room-floor-b:rgba(82,116,75,.42);--room-desk:rgba(93,110,68,.5)}.sg-theme-room--forest .sg-everyday-room-window{width:60%;border-radius:42% 42% 8px 8px/20% 20% 8px 8px}.sg-theme-room--clouds{--room-trim:rgba(94,139,157,.3);--room-floor-a:rgba(205,223,225,.3);--room-floor-b:rgba(115,151,161,.38);--room-desk:rgba(97,131,142,.45)}.sg-theme-room--sunset{--room-trim:rgba(136,85,65,.34);--room-floor-a:rgba(232,173,123,.34);--room-floor-b:rgba(139,77,66,.42);--room-desk:rgba(142,80,54,.5)}.sg-theme-room--library{opacity:.44;--room-trim:rgba(101,66,40,.36);--room-floor-a:rgba(174,126,73,.28);--room-floor-b:rgba(74,47,30,.34);--room-desk:rgba(83,50,29,.45)}.sg-theme-room--lanterns{opacity:.5;--room-trim:rgba(114,58,43,.38);--room-floor-a:rgba(179,94,60,.3);--room-floor-b:rgba(72,41,39,.38);--room-desk:rgba(109,54,37,.5)}.sg-theme-room--aurora{--room-trim:rgba(115,149,181,.25);--room-floor-a:rgba(75,105,138,.28);--room-floor-b:rgba(17,32,62,.5);--room-desk:rgba(66,89,122,.5)}.sg-theme-room--midnight{opacity:.45;--room-trim:rgba(104,142,119,.2);--room-floor-a:rgba(39,61,49,.28);--room-floor-b:rgba(9,20,16,.48);--room-desk:rgba(49,75,59,.44)}
 [data-background-mode="dark"] .sg-theme-room--everyday{filter:brightness(.72) saturate(.82);opacity:.62}
-.sg-background-art--compact .sg-theme-room{font-size:6px}.sg-background-art--compact .sg-space-room-planet--three,.sg-background-art--compact .sg-ocean-room-ship,.sg-background-art--compact .sg-everyday-room-feature{display:none}.sg-background-art--compact .sg-ocean-room-desk,.sg-background-art--compact .sg-space-room-table,.sg-background-art--compact .sg-rain-room-desk,.sg-background-art--compact .sg-everyday-room-table{border-top-width:4px}.sg-background-art--compact .sg-blossom-room-window,.sg-background-art--compact .sg-rain-room-window,.sg-background-art--compact .sg-ocean-room-arch{border-width:4px}
+.sg-background-art--compact .sg-theme-room{font-size:6px}.sg-background-art--compact .sg-space-room-planet--three,.sg-background-art--compact .sg-ocean-room-ship,.sg-background-art--compact .sg-everyday-room-feature,.sg-background-art--compact .sg-celestial-room-pod--three{display:none}.sg-background-art--compact .sg-ocean-room-desk,.sg-background-art--compact .sg-space-room-table,.sg-background-art--compact .sg-rain-room-desk,.sg-background-art--compact .sg-everyday-room-table,.sg-background-art--compact .sg-celestial-room-pod,.sg-background-art--compact .sg-moonlit-room-desk{border-top-width:4px}.sg-background-art--compact .sg-blossom-room-window,.sg-background-art--compact .sg-rain-room-window,.sg-background-art--compact .sg-ocean-room-arch,.sg-background-art--compact .sg-celestial-room-observatory{border-width:4px}
 .sg-bg-classic-leaves {
   position:absolute;width:34vw;height:34vw;max-width:420px;max-height:420px;opacity:.22;
   background:
@@ -1225,6 +1262,7 @@ export const BACKGROUND_CSS = `
 .sg-background-art--focus .sg-bg-planetarium-map,
 .sg-background-art--focus .sg-ocean-room-kelp,
 .sg-background-art--focus .sg-space-room-planet,
+.sg-background-art--focus .sg-celestial-room-orbit-ring,
 .sg-background-art--focus .sg-blossom-room-light { animation-duration:60s!important;opacity:.18 }
 .sg-background-art--focus { filter:saturate(.72) contrast(.9); }
 [data-theme="dark"] .sg-shell .sg-background-art--focus.sg-keepcolor {
@@ -1243,6 +1281,7 @@ export const BACKGROUND_CSS = `
 .sg-background-art--low-power .sg-bg-planetarium-map,
 .sg-background-art--low-power .sg-ocean-room-kelp,
 .sg-background-art--low-power .sg-space-room-planet,
+.sg-background-art--low-power .sg-celestial-room-orbit-ring,
 .sg-background-art--low-power .sg-blossom-room-light { animation-play-state:paused!important; }
 .sg-shop-category-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4;padding:4;margin:0 0 11px;background:#EEF3EB;border-radius:13px}
 .sg-shop-category-tab{min-width:0;min-height:40px;border:0;border-radius:10px;background:transparent;color:#7C887E;padding:8px 5px;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap}
