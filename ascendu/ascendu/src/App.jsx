@@ -14,8 +14,16 @@ import {
 } from "./studyWeek.js";
 import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";
 import {
-  isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations,
+  isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations, shouldReduceAnimations,
 } from "./accessSettings.js";
+import CharacterRenderer from "./characters/CharacterRenderer.jsx";
+import CharacterCustomizer from "./characters/CharacterCustomizer.jsx";
+import ClassroomScene from "./characters/ClassroomScene.jsx";
+import {
+  characterPrefsFromLegacy, normalizeCharacterBase, normalizeCharacterStyle,
+} from "./characters/characterDefinitions.js";
+import { characterStageFromEnhancement } from "./characters/characterStages.js";
+import { legacyThemeForSkin } from "./characters/characterAccessories.js";
 import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
@@ -51,6 +59,8 @@ const LS_EXAMS    = "studygrove_exams";
 const LS_SKIN     = "studygrove_skin";
 const LS_THEME    = "studygrove_theme";
 const LS_ANIMATION_MODE = "lumora_animation_mode";
+const LS_CHARACTER_BASE = "lumora_character_base";
+const LS_CHARACTER_STYLE = "lumora_character_style";
 const LS_TARGETS  = "studygrove_targets";
 const LS_DECOR    = "studygrove_decorations"; // owned garden decorations (account-level)
 const LS_BADGES   = "studygrove_badges";      // unlocked achievement ids
@@ -935,9 +945,9 @@ const getTreeVisualProfile=(skinOrId,tier=0)=>{
 const getSkinFootprint=(skinId,tier=0)=>getTreeVisualProfile(skinId,tier);
 
 const ENHANCE_TIERS = [
-  { tier:1, name:"Flourish", icon:"🌿", blurb:"A fuller, deeper canopy — richer colour, denser growth, new side branches." },
-  { tier:2, name:"Living",   icon:"🍃", blurb:"The tree comes alive — the crown breathes in the breeze and softly sheds." },
-  { tier:3, name:"Radiant",  icon:"✨", blurb:"Small visitors arrive, motes drift by, and it glows gently after dusk." },
+  { tier:1, name:"Beginning", icon:"📘", blurb:"A calm starting outfit, simple study desk and focused learning pose." },
+  { tier:2, name:"Developing", icon:"✏️", blurb:"Adds books, stationery, stronger posture and more expressive study motion." },
+  { tier:3, name:"Flourishing", icon:"✨", blurb:"A polished desk, refined aura, organised notes and a confident completion moment." },
 ];
 // Cost scales with each skin's base price (25% / 50% / 100% per tier — so
 // fully maxing a tree costs about as much as buying it once more), floored
@@ -2830,8 +2840,12 @@ async function fbPurchaseSkin(usernameRaw,skinId){
       if(owned.includes(skinId))return {ok:false,reason:"owned",coinBalance:coins,ownedSkins:owned};
       if(coins<skin.cost)return {ok:false,reason:"coins",coinBalance:coins,ownedSkins:owned};
       const ownedSkins=[...new Set([...owned,skinId])];
+      const ownedCharacterItems=[...new Set([
+        ...(Array.isArray(prefs.ownedCharacterItems)?prefs.ownedCharacterItems.filter(id=>typeof id==="string"):[]),
+        ...ownedSkins.map(id=>`theme:${id}`),
+      ])];
       const coinBalance=coins-skin.cost;
-      tx.set(prefsRef,{coins:coinBalance,ownedSkins,activeSkin:skinId},{merge:true});
+      tx.set(prefsRef,{coins:coinBalance,ownedSkins,ownedCharacterItems,activeSkin:skinId},{merge:true});
       return {ok:true,coinBalance,ownedSkins,activeSkin:skinId,skin};
     });
   }catch(e){console.error("Skin purchase error:",e);return {ok:false,reason:"network",error:e.message};}
@@ -5107,7 +5121,7 @@ function SubjectSessionAmbience({ subject, paused=false }) {
   </div>;
 }
 
-function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd, coins, skin, enhance=0,
+function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd, coins, skin, enhance=0, characterBase="female", characterStyle={},
   presence, currentUser, timerStyle="standard", pomodoro=null, task=null, onSkipBreak, onStartNext }) {
   const isPomodoro=timerStyle==="pomodoro"&&pomodoro;
   const isBreak=!!isPomodoro&&pomodoro.phase==="break";
@@ -5131,7 +5145,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
       </div>
       {!isBreak&&presence&&<StudyingNow presence={presence} currentUser={currentUser} compact/>}
       {isPomodoro&&<div style={fs.roundLabel} aria-live="polite">Round {pomodoro.round} of {pomodoro.plannedRounds} · {isBreak?"Rest":"Focus"}</div>}
-      <div className="sg-session-tree" style={fs.treeArea}><TreeSVG progress={isBreak?1:progress} color={subject.color} paused={paused||isBreak} large skin={skin} enhance={enhance}/></div>
+      <div className="sg-session-tree" style={fs.treeArea}><CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={skin} stage={characterStageFromEnhancement(enhance)} view="seated" activity={isBreak?"break":"study"} motion={paused?"quiet":"full"} size={220} title={`${subject.label} focus learner`}/></div>
       {task&&<div className="sg-focus-task" title={task.title}>Task · {task.title}</div>}
       <div className="sg-session-time" style={{...fs.time,color:bigColor}} aria-live="off">{bigTime}</div>
       <div className="sg-session-mode" style={fs.modeLabel}>
@@ -5371,7 +5385,7 @@ function FocusAmbience({ layer }) {
   );
 }
 
-function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, timerMode, pomodoro, task, onCompleteTask, onDismiss }) {
+function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, timerMode, pomodoro, task, characterBase="female", characterStyle={}, skin="default", enhance=0, onCompleteTask, onDismiss }) {
   // Coin count-up: 0 → coinsEarned over ~0.9s with ease-out, starting after the pop-in
   const [shownCoins, setShownCoins] = useState(0);
   useEffect(()=>{
@@ -5405,7 +5419,7 @@ function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, ti
           <span key={c.k} className="sg-confetti"
             style={{left:`${c.left}%`,background:c.color,animationDelay:`${c.delay}s`}}/>
         ))}
-        <div style={{fontSize:60,marginBottom:8}} className="sg-bounce-in">✨</div>
+        <div style={{height:190,display:"flex",justifyContent:"center",margin:"-24px 0 2px"}} className="sg-bounce-in"><CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={skin} stage={characterStageFromEnhancement(enhance)} view="three-quarter" activity="complete" size={155} title="Your learner celebrating a completed session"/></div>
         <h2 style={cs.title}>Growth saved!</h2>
         <p style={cs.sub}>Your {subject.label} session helped your learner grow.</p>
         <div style={{...cs.stat,color:subject.color}}>{fmtMins(secs)}</div>
@@ -5506,7 +5520,7 @@ const am = {
 // First-mount cards near the viewport, keep their SVG in the DOM afterward,
 // and freeze off-screen/scrolling animation timelines. Keeping a stable SVG
 // avoids mobile WebKit dropping a re-created skin while its sheet is scrolling.
-function LazyShopTree({ skin, enhance=0, scrolling=false }) {
+function LazyShopTree({ skin, enhance=0, scrolling=false, characterBase="female", characterStyle={} }) {
   const hostRef=useRef(null);
   const [nearViewport,setNearViewport]=useState(false);
   const [mounted,setMounted]=useState(false);
@@ -5537,14 +5551,14 @@ function LazyShopTree({ skin, enhance=0, scrolling=false }) {
   },[nearViewport,scrolling,mounted]);
   return <div ref={hostRef} style={{height:108,width:"100%",position:"relative",overflow:"hidden"}}>
     {mounted
-      ? <div style={{position:"absolute",left:"50%",bottom:0,width:160,height:180,transform:"translateX(-50%) scale(.48)",transformOrigin:"bottom center"}}>
-          <TreeSVG progress={0.7} color={skin.canopy||"#56B68B"} paused={false} skin={skin.id} enhance={enhance}/>
+      ? <div style={{position:"absolute",left:"50%",bottom:-54,transform:"translateX(-50%)",transformOrigin:"bottom center"}}>
+          <CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={skin.id} stage={characterStageFromEnhancement(enhance)} view="three-quarter" activity="idle" motion={scrolling?"quiet":"full"} size={102} decorative/>
         </div>
       : <div className="sg-skeleton" style={{width:66,height:58,borderRadius:"50% 50% 42% 42%",animation:"none",opacity:.55}}/>}
   </div>;
 }
 
-function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEquip, onEnhance,
+function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, characterBase="female", characterStyle={}, onCustomize, onBuy, onEquip, onEnhance,
   onOpenDecorations, onOpenBackgrounds, onClose, onBack }) {
   const [toast, setToast] = useState(null);
   const [enhancing, setEnhancing] = useState(null); // skin id being enhanced
@@ -5559,7 +5573,8 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   const q = query.trim().toLowerCase();
   const filtered = TREE_SHOP_CATALOGUE.filter(skin => {
     if(activeCollection!=="all" && skin.collection!==activeCollection) return false;
-    if(q && !skin.name.toLowerCase().includes(q) && !skin.desc.toLowerCase().includes(q)) return false;
+    const theme=legacyThemeForSkin(skin.id);
+    if(q && !theme.name.toLowerCase().includes(q) && !skin.desc.toLowerCase().includes(q)) return false;
     return true;
   });
   const onShopScroll=()=>{
@@ -5589,6 +5604,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
           onDecorations={onOpenDecorations}
           onBackgrounds={onOpenBackgrounds}
         />
+        <button type="button" onClick={onCustomize} style={{width:"100%",border:"1.5px solid #BFE3CE",background:"linear-gradient(135deg,#E9F6EE,#F6F0DE)",color:"#2D6A4F",borderRadius:14,padding:"11px 14px",fontSize:12.5,fontWeight:800,margin:"2px 0 10px",cursor:"pointer"}}>✦ Customise base, hair & outfit</button>
 
         {/* Search */}
         <div style={sh.searchWrap}>
@@ -5628,6 +5644,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
         ) : (
           <div style={sh.grid} className="sg-shop-grid">
             {filtered.map((skin,idx)=>{
+              const characterTheme=legacyThemeForSkin(skin.id);
               const owned   = ownedSkins.includes(skin.id);
               const active  = activeSkin === skin.id;
               const canBuy  = !owned && coins >= skin.cost;
@@ -5637,12 +5654,12 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                   {skin.flagship
                     ? <div style={sh.flagshipBadge}>FLAGSHIP</div>
                     : skin.isNew && !owned && <div style={sh.newBadge}>NEW</div>}
-                  {tier>0 && <div style={sh.tierBadge} title={`${(skin.enhanceTiers?.[tier-1]||ENHANCE_TIERS[tier-1]).name}`}>{"✦".repeat(tier)}</div>}
+                  {tier>0 && <div style={sh.tierBadge} title={ENHANCE_TIERS[tier-1].name}>{"✦".repeat(tier)}</div>}
                   <div style={sh.preview}>
-                    <LazyShopTree skin={skin} enhance={owned?tier:0} scrolling={scrolling}/>
+                    <LazyShopTree skin={skin} enhance={owned?tier:0} scrolling={scrolling} characterBase={characterBase} characterStyle={characterStyle}/>
                   </div>
-                  <div style={sh.skinName}>{skin.name}</div>
-                  <div style={sh.skinDesc}>{skin.desc}</div>
+                  <div style={sh.skinName}>{characterTheme.name}</div>
+                  <div style={sh.skinDesc}>A {skin.rarity || "classic"} learner theme with coordinated aura, outfit accents and study desk details.</div>
                   {skin.cost===0
                     ? <div style={sh.freeBadge}>Free</div>
                     : owned
@@ -5652,9 +5669,9 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                   {active
                     ? <div style={sh.equippedBtn}>✓ Equipped</div>
                     : owned
-                      ? <button style={sh.equipBtn} onClick={()=>{onEquip(skin.id);showT(`${skin.name} equipped!`);}}>Equip</button>
+                      ? <button style={sh.equipBtn} onClick={()=>{onEquip(skin.id);showT(`${characterTheme.name} equipped!`);}}>Equip</button>
                       : <button style={{...sh.buyBtn,...(!canBuy?sh.buyBtnDisabled:{})}}
-                          onClick={async()=>{ if(!canBuy){showT("Not enough coins");return;} const ok=await onBuy(skin.id,skin.cost); showT(ok?`${skin.name} unlocked! 🎉`:"Purchase couldn't be completed"); }}
+                          onClick={async()=>{ if(!canBuy){showT("Not enough coins");return;} const ok=await onBuy(skin.id,skin.cost); showT(ok?`${characterTheme.name} unlocked! 🎉`:"Purchase couldn't be completed"); }}
                           disabled={!canBuy}>
                           {canBuy?"Buy":"Need more 🪙"}
                         </button>
@@ -5662,7 +5679,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                   {owned && (
                     <button style={{...sh.enhanceBtn,...(tier>=3?sh.enhanceBtnMax:{})}}
                       onClick={()=>setEnhancing(skin.id)}>
-                      {tier>=3 ? "✨ Radiant" : `✦ Enhance${tier>0?` · ${tier}/3`:""}`}
+                      {tier>=3 ? "✨ Flourishing" : `✦ Develop${tier>0?` · ${tier}/3`:""}`}
                     </button>
                   )}
                 </div>
@@ -5673,7 +5690,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
         <button style={sh.closeBtn} onClick={onClose}>Done</button>
       </div>
       {enhSkin && (
-        <EnhanceModal skin={enhSkin} tier={enhancements[enhSkin.id]||0} coins={coins}
+        <EnhanceModal skin={enhSkin} tier={enhancements[enhSkin.id]||0} coins={coins} characterBase={characterBase} characterStyle={characterStyle}
           onUpgrade={onEnhance} onClose={()=>setEnhancing(null)} onBack={()=>setEnhancing(null)}/>
       )}
     </div>
@@ -5732,7 +5749,7 @@ const sh = {
 // Per-skin permanent upgrades. The preview is the REAL renderer (TreeSVG with
 // the enhance prop) so what you see is exactly what your forest gets — no
 // separate preview art to drift out of sync.
-function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
+function EnhanceModal({ skin, tier, coins, characterBase="female", characterStyle={}, onUpgrade, onClose, onBack }) {
   const [previewTier, setPreviewTier] = useState(tier);
   const [bloom, setBloom] = useState(0);
   const [upgrading,setUpgrading]=useState(false);
@@ -5741,7 +5758,7 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
   const cost = nextTier ? enhanceCost(skin, nextTier) : 0;
   const short = nextTier ? Math.max(0, cost - coins) : 0;
   const canAfford = nextTier && short === 0;
-  const tierMeta = n => skin.enhanceTiers?.[n-1] || ENHANCE_TIERS[n-1];
+  const tierMeta = n => ENHANCE_TIERS[n-1];
   const pv = previewTier === 0
     ? { name:"Base", icon:"🌱", blurb:`${skin.name} as it grows today.` }
     : tierMeta(previewTier);
@@ -5763,8 +5780,8 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {onBack && <button style={em.back} onClick={onBack} title="Back">←</button>}
             <div>
-              <div style={em.kicker}>ENHANCE</div>
-              <h3 style={em.title}>{skin.name}</h3>
+              <div style={em.kicker}>DEVELOP LEARNER</div>
+              <h3 style={em.title}>{legacyThemeForSkin(skin.id).name}</h3>
             </div>
           </div>
           <span style={em.coinBal}><AnimatedNumber value={coins} prefix="🪙 "/></span>
@@ -5777,7 +5794,7 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
           <div style={em.previewStage}>
             {bloom>0 && <div key={bloom} style={em.bloomRing} className="sg-bloom"/>}
             <div style={{...em.previewTree,...(locked?{filter:"grayscale(35%) opacity(0.75)"}:{})}} className="sg-preview-settle" key={`pv-${previewTier}`}>
-              <TreeSVG progress={1} color={skin.canopy||"#56B68B"} paused={false} large skin={skin.id} enhance={previewTier}/>
+              <CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={skin.id} stage={characterStageFromEnhancement(previewTier)} view="three-quarter" activity="idle" size={190}/>
             </div>
             {locked && <div style={em.lockBadge}>🔒 Tier {previewTier}</div>}
           </div>
@@ -5806,16 +5823,14 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
           <>
             <button style={{...em.upgradeBtn,...(!canAfford||upgrading?em.upgradeBtnDisabled:{})}}
               disabled={!canAfford||upgrading} onClick={doUpgrade}>
-              {upgrading ? "Enhancing…" : canAfford
-                ? `Enhance to ${tierMeta(nextTier).name} · 🪙 ${cost}`
-                : `Enhance to ${tierMeta(nextTier).name} · 🪙 ${cost}`}
+              {upgrading ? "Developing…" : `Develop to ${tierMeta(nextTier).name} · 🪙 ${cost}`}
             </button>
             {!canAfford && <div style={em.shortNote}>You need {short} more coins.</div>}
             {upgradeError&&<div style={em.shortNote}>{upgradeError}</div>}
-            <div style={em.applyNote}>Applies to every {skin.name} growth display in your classroom — past and future.</div>
+            <div style={em.applyNote}>Applies to every {legacyThemeForSkin(skin.id).name} display in your classroom — past and future.</div>
           </>
         ) : (
-          <div style={em.maxedCard}>✨ Fully enhanced — every {skin.name} you plant is Radiant.</div>
+          <div style={em.maxedCard}>✨ Fully developed — this learner theme is Flourishing.</div>
         )}
 
         <button style={em.doneBtn} onClick={onClose}>Done</button>
@@ -6100,7 +6115,7 @@ function AdminPanel({ admin, selfTools, animationMode, onAnimationModeChange, on
               <div style={hm.motionSub}>None pauses CSS and classroom SVG motion</div>
             </div>
             <div style={hm.motionOptions} role="group" aria-label="Admin animation level">
-              {[["device","Device"],["full","Full"],["off","None"]].map(([id,label])=><button key={id} type="button"
+              {[["device","Device"],["full","Full"],["reduced","Reduced"],["off","None"]].map(([id,label])=><button key={id} type="button"
                 aria-pressed={animationMode===id} style={{...hm.motionOption,...(animationMode===id?hm.motionOptionOn:{})}}
                 onClick={()=>onAnimationModeChange(id)}>{label}</button>)}
             </div>
@@ -6527,7 +6542,7 @@ const ase = {
   showMoreBtn:{display:"block",width:"100%",padding:"10px 0",background:"transparent",border:"none",fontSize:12.5,fontWeight:600,color:"#8B5CB8",cursor:"pointer",marginTop:4},
 };
 
-function AccountPanel({ user, admin, onClose, onBack }) {
+function AccountPanel({ user, admin, characterBase="female", characterStyle={}, activeSkin="default", enhance=0, onCustomize, onClose, onBack }) {
   const [adminCoins, setAdminCoins] = useState("");
   const [loading, setLoading]   = useState(true);
   const [recQ, setRecQ]         = useState(null);   // currently-set recovery question (or null)
@@ -6586,6 +6601,11 @@ function AccountPanel({ user, admin, onClose, onBack }) {
             </div>
           </div>
           <button style={ap.x} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,background:"linear-gradient(135deg,#E9F5EC,#F7EED9)",border:"1px solid #DCE9DF",borderRadius:17,padding:"10px 14px",marginBottom:14,overflow:"hidden"}}>
+          <div><div style={{fontSize:9,fontWeight:800,letterSpacing:"1.3px",color:"#649079"}}>MY LEARNER</div><div style={{fontSize:14,fontWeight:800,color:"#29473A",margin:"4px 0 8px"}}>{legacyThemeForSkin(activeSkin).name}</div><button type="button" style={{border:0,borderRadius:11,background:"#367B60",color:"#fff",padding:"7px 11px",fontSize:11,fontWeight:800}} onClick={onCustomize}>Customise</button></div>
+          <CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={activeSkin} stage={characterStageFromEnhancement(enhance)} view="front" activity="idle" size={92} title="Your profile learner"/>
         </div>
 
         {loading ? (
@@ -7259,6 +7279,7 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animation
             {[
               ["device","Device"],
               ["full","Full"],
+              ["reduced","Reduced"],
               ["off","None"],
             ].map(([id,label])=><button key={id} type="button" aria-pressed={animationMode===id}
               style={{...hm.motionOption,...(animationMode===id?hm.motionOptionOn:{})}}
@@ -8788,7 +8809,13 @@ const GARDEN_BIRD_SPECS = [
 ];
 
 // Isometric SVG grid — each session plants a tree, coloured by subject
-function ForestGarden({ sessions, subjects, range, decorations = [], enhancements = {}, layout = {} }) {
+function ForestGarden({ sessions, subjects, range, decorations = [], enhancements = {}, layout = {}, characterBase="female", characterStyle={}, activeSkin="default", onArrange }) {
+  return <ClassroomScene sessions={sessions} subjects={subjects} range={range} enhancements={enhancements} characterBase={characterBase} characterStyle={characterStyle} activeSkin={activeSkin} layout={layout} onArrange={onArrange}/>;
+}
+
+// Retained temporarily as a read-only compatibility renderer while legacy
+// gardenLayout records remain available for rollback and migration testing.
+function LegacyForestGarden({ sessions, subjects, range, decorations = [], enhancements = {}, layout = {} }) {
   const [hovered, setHovered] = useState(null);
   const svgRef=useRef(null);
   // Several groves can exist in the DOM at once (for example, the Stats grove
@@ -9698,7 +9725,7 @@ function buildGardenPresetPositions(presetId,placement){
   return {treePositions,decorPositions};
 }
 
-function GardenEditor({ sessions, subjects, decorations, layout, range, enhancements={}, onSave, onClose }) {
+function GardenEditor({ sessions, subjects, decorations, layout, range, enhancements={}, characterBase="female", characterStyle={}, activeSkin="default", onSave, onClose }) {
   const seed=buildGardenPlacement({sessions,decorations,layout,range,enhancements});
   const [draft,setDraft]=useState(()=>({
     ...layout,
@@ -9707,7 +9734,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
     removedDecor:[...new Set([...(layout?.removedDecor||[]),...(layout?.hiddenDecor||[])])],
   }));
   const [selected,setSelected]=useState(null);
-  const [activePreset,setActivePreset]=useState("");
+  const [activePreset,setActivePreset]=useState(layout?.classroomPresetSource||"");
   const [presetRowRef,presetEdge]=useHScroll(String(GARDEN_LAYOUT_PRESETS.length));
   const placement=buildGardenPlacement({sessions,decorations,layout:draft,range,enhancements});
 
@@ -9760,6 +9787,8 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
       placement.ownedDecor.forEach(decor=>delete decorPositions[decor.id]);
       return {
         ...prev,
+        classroomPresetSource:presetId,
+        classroomPreset:presetId==="ring"||presetId==="clusters"?"collaborative":presetId==="trail"?"window":presetId==="paths"||presetId==="showcase"?"presentation":"rows",
         treePositions:{...treePositions,...nextPositions.treePositions},
         decorPositions:{...decorPositions,...nextPositions.decorPositions},
         hiddenTrees:[],
@@ -9806,8 +9835,8 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
         <div><div style={sd.kicker}>CLASSROOM LAYOUT</div><h3 style={ge.title}>Arrange your classroom</h3></div>
         <button style={ge.iconBtn} onClick={onClose} aria-label="Close">×</button>
       </div>
-      <p style={ge.help}>Drag a growth marker or decor onto another grid tile. On mobile, tap an item and then tap its destination.</p>
-      <div style={ge.legend}><span>Growth markers show each style</span><span>× removes decor from view</span></div>
+      <p style={ge.help}>Drag a learner or classroom item onto another seat tile. On mobile, tap an item and then tap its destination.</p>
+      <div style={ge.legend}><span>Learners represent study moments</span><span>× removes decor from view</span></div>
       <div style={ge.presetSection}>
         <div style={ge.presetHeading}>
           <span>Quick layouts</span>
@@ -9847,7 +9876,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
               aria-label={`Move ${skinDef.name} growth marker`}
               onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseOrMove(e,item,key);}}}>
               <span style={{...ge.treeThumb,background:`linear-gradient(160deg,${subj.color}20,#F7FBF5)`}}>
-                <TreeSVG progress={1} color={subj.color} paused skin={skinDef.id} enhance={treeTier} thumbnail/>
+                <CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={skinDef.id||activeSkin} stage={characterStageFromEnhancement(treeTier)} view="seated" activity="idle" motion="quiet" detail="simple" size={52} decorative/>
               </span>
               <span style={ge.itemSub}>{subj.emoji}</span>
             </div>}
@@ -9899,7 +9928,7 @@ const ge={
 };
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
-function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={}, gardenLayout={}, onSaveGardenLayout }) {
+function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={}, gardenLayout={}, characterBase="female", characterStyle={}, activeSkin="default", onSaveGardenLayout }) {
   const [range,setRange]=useState("week");
   const [history,setHistory]=useState(null);
   const [editingGarden,setEditingGarden]=useState(false);
@@ -10008,9 +10037,8 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
             onClick={()=>setRange(id)}>{lbl}</button>
         ))}
       </div>
-      <div style={{display:"flex",justifyContent:"flex-end",margin:"0 0 9px"}}><button style={S.arrangeGardenBtn} onClick={()=>setEditingGarden(true)}><span style={{fontSize:13}}>↔</span> Arrange</button></div>
-      <ForestGarden sessions={inRange} subjects={subjects} range={range} decorations={decorations} enhancements={enhancements} layout={gardenLayout}/>
-      {editingGarden&&<GardenEditor sessions={inRange} subjects={subjects} decorations={decorations} layout={gardenLayout} range={range} enhancements={enhancements} onClose={()=>setEditingGarden(false)} onSave={next=>{onSaveGardenLayout(next);setEditingGarden(false);}}/>}
+      <ForestGarden sessions={inRange} subjects={subjects} range={range} decorations={decorations} enhancements={enhancements} layout={gardenLayout} characterBase={characterBase} characterStyle={characterStyle} activeSkin={activeSkin} onArrange={()=>setEditingGarden(true)}/>
+      {editingGarden&&<GardenEditor sessions={inRange} subjects={subjects} decorations={decorations} layout={gardenLayout} range={range} enhancements={enhancements} characterBase={characterBase} characterStyle={characterStyle} activeSkin={activeSkin} onClose={()=>setEditingGarden(false)} onSave={next=>{onSaveGardenLayout(next);setEditingGarden(false);}}/>}
       <div style={an.statRow}>
         <div style={an.statCard}><div style={an.statVal}>{fmtHrs(totalSecs)}</div><div style={an.statLbl}>Total focus</div></div>
         <div style={an.statCard}><div style={an.statVal}>{count}</div><div style={an.statLbl}>Sessions</div></div>
@@ -10063,7 +10091,10 @@ const MemoAnalyticsPanel=memo(AnalyticsPanel,(prev,next)=>
   prev.decorations===next.decorations&&
   prev.targets===next.targets&&
   prev.enhancements===next.enhancements&&
-  prev.gardenLayout===next.gardenLayout
+  prev.gardenLayout===next.gardenLayout&&
+  prev.characterBase===next.characterBase&&
+  prev.characterStyle===next.characterStyle&&
+  prev.activeSkin===next.activeSkin
 );
 
 const an = {
@@ -10128,6 +10159,9 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
         subjects:(prefs&&Array.isArray(prefs.subjects)&&prefs.subjects.length)?prefs.subjects:viewerSubjects,
         enhancements:(prefs&&prefs.enhancements&&typeof prefs.enhancements==="object"&&!Array.isArray(prefs.enhancements))?prefs.enhancements:{},
         gardenLayout:(prefs&&prefs.gardenLayout&&typeof prefs.gardenLayout==="object"&&!Array.isArray(prefs.gardenLayout))?prefs.gardenLayout:{},
+        characterBase:characterPrefsFromLegacy(prefs||{}).characterBase,
+        characterStyle:characterPrefsFromLegacy(prefs||{}).characterStyle,
+        activeSkin:typeof prefs?.activeSkin==="string"?prefs.activeSkin:"default",
       }});
     }).catch(err=>{
       if(off)return;
@@ -10170,7 +10204,7 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
           <p style={{textAlign:"center",color:"#888",padding:"36px 0",lineHeight:1.6}}>Their classroom journey is just getting started ✨</p>
         ) : (
           <>
-            <ForestGarden sessions={inMonth} subjects={data.subjects} range="month" decorations={data.decorations} enhancements={data.enhancements} layout={data.gardenLayout}/>
+            <ForestGarden sessions={inMonth} subjects={data.subjects} range="month" decorations={data.decorations} enhancements={data.enhancements} layout={data.gardenLayout} characterBase={data.characterBase} characterStyle={data.characterStyle} activeSkin={data.activeSkin}/>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
               <span style={{fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#EAF3EC",borderRadius:16,padding:"7px 13px"}}>✨ {inMonth.length} growth moments this month</span>
               <span style={{fontSize:12,fontWeight:700,color:"#666",background:"#F0F2EE",borderRadius:16,padding:"7px 13px"}}>⏳ {fmtHrs(lifeSecs)} all time</span>
@@ -10612,6 +10646,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [activeSkin,setActiveSkin]=useState(()=>lsRaw(LS_SKIN,"default"));
   const [ownedSkins,setOwnedSkins]=useState(()=>lsGet("studygrove_owned_skins",["default"]));
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
+  const [characterBase,setCharacterBase]=useState(()=>normalizeCharacterBase(lsRaw(LS_CHARACTER_BASE,"female")));
+  const [characterStyle,setCharacterStyle]=useState(()=>normalizeCharacterStyle(lsGet(LS_CHARACTER_STYLE,{}),lsRaw(LS_SKIN,"default")));
+  const [showCharacterCustomizer,setShowCharacterCustomizer]=useState(false);
   const [theme,setTheme]=useState(()=>lsRaw(LS_THEME,"light"));
   const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
   const [prefersReducedMotion,setPrefersReducedMotion]=useState(false);
@@ -10740,10 +10777,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return()=>media.removeEventListener?.("change",sync);
   },[]);
   const animationsDisabled=shouldDisableAnimations(animationMode,prefersReducedMotion);
+  const animationsReduced=shouldReduceAnimations(animationMode,prefersReducedMotion);
   useEffect(()=>{
     const root=document.documentElement;
     root.setAttribute("data-animation-mode",animationMode);
     root.setAttribute("data-animation-disabled",animationsDisabled?"true":"false");
+    root.setAttribute("data-animation-reduced",animationsReduced?"true":"false");
     const syncSvg=scope=>{
       const svgs=[];
       if(scope?.matches?.(".sg-shell svg"))svgs.push(scope);
@@ -10759,11 +10798,18 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const observer=new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(syncSvg)));
     observer.observe(document.body,{childList:true,subtree:true});
     return()=>observer.disconnect();
-  },[animationMode,animationsDisabled]);
+  },[animationMode,animationsDisabled,animationsReduced]);
   const changeAnimationMode=nextRaw=>{
     const next=normalizeAnimationMode(nextRaw);
     setAnimationMode(next);lsSetR(LS_ANIMATION_MODE,next);
     if(user)fbSavePrefs(user,{animationMode:next});
+  };
+  const changeCharacterPreferences=({characterBase:nextBase,characterStyle:nextStyle})=>{
+    const safeBase=normalizeCharacterBase(nextBase);
+    const safeStyle=normalizeCharacterStyle(nextStyle,activeSkin);
+    setCharacterBase(safeBase);setCharacterStyle(safeStyle);
+    lsSetR(LS_CHARACTER_BASE,safeBase);lsSet(LS_CHARACTER_STYLE,safeStyle);
+    if(user)fbSavePrefs(user,{characterBase:safeBase,characterStyle:safeStyle,selectedDeskTheme:safeStyle.deskTheme});
   };
 
   useEffect(()=>{
@@ -11548,7 +11594,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(typeof result.coinBalance==="number"){setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);}
     if(result.enhancements){setEnhancements(result.enhancements);lsSet("studygrove_enhancements",result.enhancements);}
     if(!result.ok)return false;
-    showToast(`✦ ${result.skin?.name||"Tree"} → ${ENHANCE_TIERS[result.tier-1].name}`);
+    showToast(`✦ ${legacyThemeForSkin(result.skin?.id||id).name} → ${ENHANCE_TIERS[result.tier-1].name}`);
     return true;
   };
   // Refresh history/streak (and coins, since a self-edit can claw coins back)
@@ -11571,7 +11617,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const nextSkins=[...new Set([...ownedSkins,...TREE_SKINS.map(s=>s.id)])];
     const nextBackgrounds=normalizeOwnedBackgrounds([...ownedBackgrounds,...BACKGROUND_CATALOGUE.map(item=>item.id)]);
     const nextDecorations=[...new Set([...decorations,...DECORATIONS.map(item=>item.id)])];
-    const ok=await fbSavePrefs(user,{ownedSkins:nextSkins,ownedBackgrounds:nextBackgrounds,decorations:nextDecorations});
+    const ok=await fbSavePrefs(user,{ownedSkins:nextSkins,ownedCharacterItems:nextSkins.map(id=>`theme:${id}`),ownedBackgrounds:nextBackgrounds,decorations:nextDecorations});
     if(!ok){showToast("Couldn’t sync admin unlocks");return false;}
     setOwnedSkins(nextSkins);lsSet("studygrove_owned_skins",nextSkins);
     setOwnedBackgrounds(nextBackgrounds);lsSet(ownedBackgroundsCacheKey(user),nextBackgrounds);
@@ -11696,6 +11742,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(prefs.enhancements && typeof prefs.enhancements==="object" && !Array.isArray(prefs.enhancements)){
           setEnhancements(prefs.enhancements); lsSet("studygrove_enhancements", prefs.enhancements);
         }
+        const characterPrefs=characterPrefsFromLegacy(prefs);
+        setCharacterBase(characterPrefs.characterBase);
+        setCharacterStyle(characterPrefs.characterStyle);
+        lsSetR(LS_CHARACTER_BASE,characterPrefs.characterBase);
+        lsSet(LS_CHARACTER_STYLE,characterPrefs.characterStyle);
         const cloudOwnedBackgrounds=normalizeOwnedBackgrounds(prefs.ownedBackgrounds);
         const cloudActiveBackground=normalizeBackgroundId(prefs.activeBackground);
         const safeActiveBackground=canEquipBackground(cloudActiveBackground,cloudOwnedBackgrounds)
@@ -11721,6 +11772,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       } else {
         // No cloud prefs yet — seed from whatever this device has
         await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, ownedSkins, activeSkin, enhancements,
+          characterBase,characterStyle,selectedDeskTheme:characterStyle.deskTheme,ownedCharacterItems:ownedSkins.map(id=>`theme:${id}`),
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
           timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode });
@@ -11904,8 +11956,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
-      {showShop&&<CoinShop coins={coins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements}
+      {showCharacterCustomizer&&<div style={{position:"fixed",inset:0,zIndex:420,background:"rgba(20,32,26,.58)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}} className="sg-overlay-anim" onClick={event=>{if(event.target===event.currentTarget)setShowCharacterCustomizer(false);}}><CharacterCustomizer base={characterBase} value={characterStyle} legacySkin={activeSkin} stage={characterStageFromEnhancement(enhancements[activeSkin]||0)} onChange={changeCharacterPreferences} onClose={()=>setShowCharacterCustomizer(false)}/></div>}
+      {showShop&&<CoinShop coins={coins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements} characterBase={characterBase} characterStyle={characterStyle}
         onBuy={handleBuySkin} onEquip={handleEquipSkin} onEnhance={handleEnhanceSkin} onClose={()=>setShowShop(false)}
+        onCustomize={()=>setShowCharacterCustomizer(true)}
         onOpenDecorations={()=>{setShowShop(false);setShowGardenShop(true);}}
         onOpenBackgrounds={()=>{setShowShop(false);setShowBackgroundShop(true);}}
         onBack={cameFromMenu?()=>{setShowShop(false);setShowMenu(true);}:null}/>}
@@ -11936,7 +11990,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}
-      {showAccount&&<AccountPanel user={user}
+      {showAccount&&<AccountPanel user={user} characterBase={characterBase} characterStyle={characterStyle} activeSkin={activeSkin} enhance={enhancements[activeSkin]||0} onCustomize={()=>setShowCharacterCustomizer(true)}
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
         onBack={accountFromMenu?()=>{setShowAccount(false);setAccountFromMenu(false);setShowMenu(true);}:null}/>}
@@ -11952,6 +12006,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {running||paused ? (
         <FocusScreen subject={subjectObj} mode={mode} elapsed={elapsed} duration={duration}
           paused={paused} onPause={pauseSession} onEnd={endSession} coins={coins} skin={activeSkin} enhance={enhancements[activeSkin]||0}
+          characterBase={characterBase} characterStyle={characterStyle}
           presence={pomodoro.phase==="break"&&timerStyle==="pomodoro"?null:presence} currentUser={user}
           timerStyle={timerStyle} pomodoro={pomodoro} task={activeTaskRef.current}
           onSkipBreak={skipPomodoroBreak} onStartNext={startNextPomodoro}/>
@@ -11962,6 +12017,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               coinsEarned={showComplete.coinsEarned}
               streak={showComplete.streak||0} streakExtended={!!showComplete.streakExtended}
               timerMode={showComplete.timerMode} pomodoro={showComplete.pomodoro} task={showComplete.task}
+              characterBase={characterBase} characterStyle={characterStyle} skin={activeSkin} enhance={enhancements[activeSkin]||0}
               onCompleteTask={async()=>{
                 if(showComplete.task){
                   const result=await updateTask(showComplete.task.id,{completed:true});
@@ -12040,8 +12096,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <>
                     <div style={S.modeBackdrop} onClick={()=>setModePickerOpen(false)}/>
                     <div style={S.modePop} className="sg-pop-anim">
-                      {[["timer","⏳","Timer","Count down and plant when done"],
-                        ["stopwatch","⏱","Stopwatch","Count up freely, plant anytime"]].map(([m,ic,lbl,desc])=>(
+                      {[["timer","⏳","Timer","Count down and grow your learner"],
+                        ["stopwatch","⏱","Stopwatch","Count up freely and save your growth"]].map(([m,ic,lbl,desc])=>(
                         <button key={m}
                           style={{...S.modeOpt,...(mode===m?{background:subjectObj.color+"14"}:{})}}
                           onClick={()=>{switchMode(m);setModePickerOpen(false);}}>
@@ -12166,7 +12222,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
                   <FocusAmbience layer="back"/>
                   <div style={S.treeWrap}>
-                    <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
+                    <CharacterRenderer base={characterBase} characterStyle={characterStyle} legacySkin={activeSkin} stage={characterStageFromEnhancement(enhancements[activeSkin]||0)} view="seated" activity="study" size={190} title="Your learner ready to study"/>
                   </div>
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                   <FocusAmbience layer="front"/>
@@ -12226,7 +12282,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {tab==="stats"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-stats">
-              <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout} currentWeekKey={studyWeekKey}/>
+              <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} characterBase={characterBase} characterStyle={characterStyle} activeSkin={activeSkin} onSaveGardenLayout={handleSaveGardenLayout} currentWeekKey={studyWeekKey}/>
             </div>
           )}
         </>

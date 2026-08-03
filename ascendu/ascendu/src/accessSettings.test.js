@@ -4,6 +4,7 @@ import {
   isAdminConsoleUsername,
   normalizeAnimationMode,
   shouldDisableAnimations,
+  shouldReduceAnimations,
 } from "./accessSettings.js";
 
 test("admin console allowlist canonicalizes the two named admins", () => {
@@ -18,8 +19,13 @@ test("configured admin usernames can supplement the built-in console admins", ()
 
 test("animation mode falls back safely and respects explicit choices", () => {
   assert.equal(normalizeAnimationMode("unknown"), "device");
-  assert.equal(shouldDisableAnimations("device", true), true);
+  assert.equal(shouldDisableAnimations("device", true), false);
   assert.equal(shouldDisableAnimations("device", false), false);
   assert.equal(shouldDisableAnimations("full", true), false);
+  assert.equal(shouldDisableAnimations("reduced", false), false);
   assert.equal(shouldDisableAnimations("off", false), true);
+  assert.equal(shouldReduceAnimations("device", true), true);
+  assert.equal(shouldReduceAnimations("device", false), false);
+  assert.equal(shouldReduceAnimations("reduced", false), true);
+  assert.equal(shouldReduceAnimations("full", true), false);
 });

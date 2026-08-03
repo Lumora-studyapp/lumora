@@ -1,6 +1,6 @@
 export const ADMIN_CONSOLE_USERNAMES = Object.freeze(["phamalam", "v2trappy"]);
 
-export const ANIMATION_MODES = Object.freeze(["device", "full", "off"]);
+export const ANIMATION_MODES = Object.freeze(["device", "full", "reduced", "off"]);
 
 export function normalizeAnimationMode(value) {
   return ANIMATION_MODES.includes(value) ? value : "device";
@@ -9,7 +9,13 @@ export function normalizeAnimationMode(value) {
 export function shouldDisableAnimations(mode, prefersReducedMotion = false) {
   const normalized = normalizeAnimationMode(mode);
   if (normalized === "off") return true;
-  if (normalized === "full") return false;
+  return false;
+}
+
+export function shouldReduceAnimations(mode, prefersReducedMotion = false) {
+  const normalized = normalizeAnimationMode(mode);
+  if (normalized === "reduced") return true;
+  if (normalized === "full" || normalized === "off") return false;
   return Boolean(prefersReducedMotion);
 }
 
