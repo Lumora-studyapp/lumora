@@ -733,7 +733,7 @@ export function BackgroundArtwork({
   );
 }
 
-export function BackgroundLayer({ backgroundId, theme = "light", focusMode = false }) {
+export function BackgroundLayer({ backgroundId, theme = "light", focusMode = false, animationMode = "device" }) {
   const [hidden, setHidden] = useState(() => typeof document !== "undefined" && document.hidden);
   const lowPower = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -750,8 +750,8 @@ export function BackgroundLayer({ backgroundId, theme = "light", focusMode = fal
     backgroundId={backgroundId}
     theme={theme}
     focusMode={focusMode}
-    paused={hidden}
-    lowPower={lowPower}
+    paused={hidden||animationMode==="off"}
+    lowPower={animationMode==="device"&&lowPower}
     className="sg-keepcolor"
   />;
   return typeof document!=="undefined"?createPortal(artwork,document.body):artwork;
@@ -1311,5 +1311,6 @@ export const BACKGROUND_CSS = `
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
 @media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
-@media(prefers-reduced-motion:reduce){.sg-background-art *{animation:none!important;transition:none!important}.sg-background-art--focus{filter:saturate(.82) contrast(.94)}}
+html[data-animation-disabled="true"] .sg-background-art *{animation:none!important;transition:none!important}
+html[data-animation-disabled="true"] .sg-background-art--focus{filter:saturate(.82) contrast(.94)}
 `;
