@@ -14,6 +14,9 @@ import {
 } from "./studyWeek.js";
 import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";
 import {
+  isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations,
+} from "./accessSettings.js";
+import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
   canEquipBackground, evaluateBackgroundPurchase, getBackgroundAppearance, normalizeBackgroundId,
@@ -47,6 +50,7 @@ const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
 const LS_EXAMS    = "studygrove_exams";
 const LS_SKIN     = "studygrove_skin";
 const LS_THEME    = "studygrove_theme";
+const LS_ANIMATION_MODE = "lumora_animation_mode";
 const LS_TARGETS  = "studygrove_targets";
 const LS_DECOR    = "studygrove_decorations"; // owned garden decorations (account-level)
 const LS_BADGES   = "studygrove_badges";      // unlocked achievement ids
@@ -630,26 +634,19 @@ const APP_CSS = `
   .sg-session-progress-label{margin-bottom:12px!important}
   .sg-session-warning{margin-top:8px!important}
 }
-@media (prefers-reduced-motion: reduce) {
-  .sg-energy-pulse,.sg-storm-arc,.sg-storm-orb,.sg-storm-float{animation:none!important}
-  .sg-shell *, .sg-overlay-anim, .sg-sheet-anim, .sg-pop-anim,
-  .sg-view-anim, .sg-card-anim, .sg-focus-anim,
-  .sg-confetti, .sg-bounce-in, .sg-streak-pop,
-  .sg-bloom, .sg-preview-settle, .sg-skeleton, .sg-tip-fade, .sg-lift-card,
-  .sg-announcement-backdrop, .sg-announcement-panel,
-  .sg-session-atmosphere, .sg-session-bubble, .sg-session-symbol-core,
-  .sg-garden-flock, .sg-garden-bird-motion, .sg-garden-bird-wing, .sg-garden-bird-wing-far,
-  .sg-tree-idle, .sg-tree-particle, .sg-task-check {
-    animation: none !important;
-    transition: none !important;
-  }
-  .sg-session-atmosphere { opacity: 1; }
-  .sg-session-bubble { opacity: .13; transform: none; will-change: auto; }
-  .sg-garden-flock--a { transform: translate3d(86px, 1px, 0); opacity: .68; }
-  .sg-garden-flock--b { transform: translate3d(310px, 7px, 0); opacity: .56; }
-  .sg-garden-flock, .sg-garden-bird-motion,
-  .sg-garden-bird-wing, .sg-garden-bird-wing-far { will-change: auto; }
+html[data-animation-disabled="true"] .sg-shell * {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
+html[data-animation-disabled="true"] .sg-session-atmosphere { opacity: 1; }
+html[data-animation-disabled="true"] .sg-session-bubble { opacity: .13; transform: none; will-change: auto; }
+html[data-animation-disabled="true"] .sg-garden-flock--a { transform: translate3d(86px, 1px, 0); opacity: .68; }
+html[data-animation-disabled="true"] .sg-garden-flock--b { transform: translate3d(310px, 7px, 0); opacity: .56; }
+html[data-animation-disabled="true"] .sg-garden-flock,
+html[data-animation-disabled="true"] .sg-garden-bird-motion,
+html[data-animation-disabled="true"] .sg-garden-bird-wing,
+html[data-animation-disabled="true"] .sg-garden-bird-wing-far { will-change: auto; }
 `;
 const LS_ACTIVE   = "studygrove_active_session";
 // Cross-tab session lock: LS_ACTIVE is a SINGLE shared localStorage slot, so
@@ -2956,9 +2953,9 @@ async function fbAwardBadges(usernameRaw,eligibleIds){
 }
 
 // ── Admin operations ──────────────────────────────────────────────────────────
-// NOTE: enforcement is client-side only (see ADMIN_USERS). This is convenience
-// tooling, NOT security — genuine protection requires server-side auth/rules.
-// Every action is logged to `adminLog/{admin}` for a lightweight audit trail.
+// The console is shown only after roles/{uid}.admin is verified. Firestore
+// rules remain authoritative for each protected write, and actions are logged
+// to `adminLog/{admin}` for a lightweight audit trail.
 async function fbAdminLog(admin, action, target, detail) {
   try {
     const ref = doc(db, "adminLog", admin);
@@ -3570,7 +3567,7 @@ function AnimatedNumber({ value, prefix="", suffix="", duration=550 }) {
   useEffect(()=>{
     const from = fromRef.current;
     if (from === value) return;
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (document.documentElement.getAttribute("data-animation-disabled")==="true") {
       fromRef.current = value; setDisplay(value); return;
     }
     const start = performance.now();
@@ -5990,10 +5987,9 @@ const bg = {
 };
 
 // ── Admin Console ─────────────────────────────────────────────────────────────
-// Cross-user moderation tools for admins. Client-side gated (see ADMIN_USERS) —
-// convenience, not security. Every action is audit-logged. Reached from the menu
-// (only rendered for admins).
-function AdminPanel({ admin, onClose, onBack }) {
+// Cross-user moderation tools plus self-only testing grants. Rendering requires
+// both the console allowlist and a verified roles/{uid}.admin document.
+function AdminPanel({ admin, selfTools, animationMode, onAnimationModeChange, onClose, onBack }) {
   const [target, setTarget]   = useState("");
   const [info, setInfo]       = useState(null);   // inspect result
   const [coinVal, setCoinVal] = useState("");
@@ -6077,15 +6073,38 @@ function AdminPanel({ admin, onClose, onBack }) {
             {onBack && <button style={ap.back} onClick={onBack} title="Back">←</button>}
             <div>
               <div style={{...ap.kicker,color:"#8B5CB8"}}>ADMIN CONSOLE</div>
-              <h3 style={ap.title}>User tools 🛠</h3>
+              <h3 style={ap.title}>Lumora controls 🛠</h3>
             </div>
           </div>
           <button style={ap.x} onClick={onClose}>✕</button>
         </div>
 
         <div style={{...ap.warn,background:"#F6F0FC",borderColor:"#D9C2F0",color:"#7A5AA0"}}>
-          <span style={{fontSize:16}}>⚠️</span>
-          <span>These tools edit other people's accounts. Actions are logged. Client-side only — not a substitute for server rules.</span>
+          <span style={{fontSize:16}}>✓</span>
+          <span>Firebase admin role verified. Cross-user actions are logged; test grants below only change your account.</span>
+        </div>
+
+        <div style={{...ap.section,border:"1.5px solid #D9C2F0"}}>
+          <div style={{...ap.secTitle,color:"#7A5AA0"}}>Background testing kit</div>
+          <div style={{fontSize:12,color:"#849087",lineHeight:1.45,marginBottom:10}}>
+            Add test currency and unlock every current character style, classroom decoration, and background without removing existing progress.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+            <button style={{...ap.saveBtn,marginTop:0,background:"#A78BC9"}} onClick={()=>selfTools.setCoins(selfTools.coins+1000)}>+1,000 🪙</button>
+            <button style={{...ap.saveBtn,marginTop:0,background:"#A78BC9"}} onClick={()=>selfTools.setCoins(selfTools.coins+10000)}>+10,000 🪙</button>
+            <button style={{...ap.saveBtn,gridColumn:"1 / -1",marginTop:0,background:"#8B5CB8"}} onClick={selfTools.unlockAll}>Unlock all test cosmetics</button>
+          </div>
+          <div style={{...hm.motionCard,padding:"14px 0 0",marginTop:12,borderTop:"1px solid #EEE6F5"}}>
+            <div>
+              <div style={hm.motionTitle}>Animation level</div>
+              <div style={hm.motionSub}>None pauses CSS and classroom SVG motion</div>
+            </div>
+            <div style={hm.motionOptions} role="group" aria-label="Admin animation level">
+              {[["device","Device"],["full","Full"],["off","None"]].map(([id,label])=><button key={id} type="button"
+                aria-pressed={animationMode===id} style={{...hm.motionOption,...(animationMode===id?hm.motionOptionOn:{})}}
+                onClick={()=>onAnimationModeChange(id)}>{label}</button>)}
+            </div>
+          </div>
         </div>
 
         {/* Target user */}
@@ -6628,9 +6647,10 @@ function AccountPanel({ user, admin, onClose, onBack }) {
               <button style={{...ap.saveBtn,width:"auto",padding:"0 18px",marginTop:0,background:"#8B5CB8"}}
                 onClick={()=>{ const n=parseInt(adminCoins,10); if(!isNaN(n)&&n>=0){ admin.setCoins(n); setAdminCoins(""); } }}>Set</button>
             </div>
-            <div style={{display:"flex",gap:8}}>
-              <button style={{...ap.saveBtn,flex:1,marginTop:0,background:"#A78BC9"}} onClick={()=>admin.setCoins(admin.coins+1000)}>+1000 🪙</button>
-              <button style={{...ap.saveBtn,flex:1,marginTop:0,background:"#A78BC9"}} onClick={admin.grantAllSkins}>Unlock all skins</button>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+              <button style={{...ap.saveBtn,marginTop:0,background:"#A78BC9"}} onClick={()=>admin.setCoins(admin.coins+1000)}>+1,000 🪙</button>
+              <button style={{...ap.saveBtn,marginTop:0,background:"#A78BC9"}} onClick={()=>admin.setCoins(admin.coins+10000)}>+10,000 🪙</button>
+              <button style={{...ap.saveBtn,gridColumn:"1 / -1",marginTop:0,background:"#8B5CB8"}} onClick={admin.grantAllSkins}>Unlock all test cosmetics</button>
             </div>
             <p style={{fontSize:11,color:"#B79FD0",marginTop:10,marginBottom:0,lineHeight:1.4}}>User tools (edit others, moderate) live in the menu → Admin Console.</p>
           </div>
@@ -7195,7 +7215,7 @@ const announceStyles = {
   preview:{border:"1px solid #E3E9E1",borderRadius:11,background:"#FAFCF9",padding:11},
 };
 
-function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onAdmin, onToggleTheme, onLogout, onClose }) {
+function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onAdmin, onToggleTheme, onLogout, onClose }) {
   const items = [
     { icon:"🧑‍🎓", label:"Character Styles", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
@@ -7230,6 +7250,21 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, onTreeSho
           ))}
         </div>
         <div style={hm.divider}/>
+        <div style={hm.motionCard}>
+          <div>
+            <div style={hm.motionTitle}>Animations</div>
+            <div style={hm.motionSub}>Reduce motion and background effects</div>
+          </div>
+          <div style={hm.motionOptions} role="group" aria-label="Animation level">
+            {[
+              ["device","Device"],
+              ["full","Full"],
+              ["off","None"],
+            ].map(([id,label])=><button key={id} type="button" aria-pressed={animationMode===id}
+              style={{...hm.motionOption,...(animationMode===id?hm.motionOptionOn:{})}}
+              onClick={()=>onAnimationModeChange(id)}>{label}</button>)}
+          </div>
+        </div>
         <button style={hm.row} onClick={onToggleTheme}>
           <span style={hm.itemIcon}>{theme==="dark"?"☀️":"🌙"}</span>
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#444"}}>
@@ -7260,6 +7295,12 @@ const hm = {
   itemSub:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
   chev:{fontSize:18,color:"#ccc",fontWeight:700},
   divider:{height:1,background:"#EEF2EC",margin:"12px 0"},
+  motionCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 8px 10px"},
+  motionTitle:{fontSize:13,fontWeight:750,color:"#33463A"},
+  motionSub:{fontSize:9.5,color:"#98A099",marginTop:2},
+  motionOptions:{display:"flex",gap:3,padding:3,borderRadius:11,background:"#EEF2EC",flexShrink:0},
+  motionOption:{border:0,borderRadius:8,background:"transparent",padding:"6px 8px",fontSize:9.5,fontWeight:750,color:"#7A867D",cursor:"pointer"},
+  motionOptionOn:{background:"#fff",color:"#2D6A4F",boxShadow:"0 1px 4px rgba(30,55,38,.12)"},
   row:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"transparent",border:"none",borderRadius:12,padding:"11px 14px",cursor:"pointer"},
   closeBtn:{display:"block",width:"100%",marginTop:10,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
@@ -8705,7 +8746,7 @@ function buildGardenPlacement({ sessions, decorations = [], layout = {}, range =
 // independent SVG animation timelines.
 function getGardenRenderBudget(treeCount) {
   const count=Math.max(0,Number(treeCount)||0);
-  const reduced=typeof window!=="undefined"&&window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const reduced=typeof document!=="undefined"&&document.documentElement.getAttribute("data-animation-disabled")==="true";
   const lowCpu=typeof navigator!=="undefined"&&Number(navigator.hardwareConcurrency)>0&&Number(navigator.hardwareConcurrency)<=4;
   const lowMemory=typeof navigator!=="undefined"&&Number(navigator.deviceMemory)>0&&Number(navigator.deviceMemory)<=4;
   const constrained=reduced||lowCpu||lowMemory;
@@ -10572,6 +10613,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [ownedSkins,setOwnedSkins]=useState(()=>lsGet("studygrove_owned_skins",["default"]));
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
   const [theme,setTheme]=useState(()=>lsRaw(LS_THEME,"light"));
+  const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
+  const [prefersReducedMotion,setPrefersReducedMotion]=useState(false);
+  const [adminRoleVerified,setAdminRoleVerified]=useState(false);
   const [activeBackground,setActiveBackground]=useState(()=>{
     const cachedUser=lsRaw(LS_USER,"");
     return normalizeBackgroundId(lsRaw(backgroundCacheKey(cachedUser),DEFAULT_BACKGROUND_ID));
@@ -10686,6 +10730,56 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(themeMeta)themeMeta.setAttribute("content",renderedBackgroundAppearance.baseColor);
   },[theme,renderedBackgroundAppearance]);
   const toggleTheme=()=>{ const t=theme==="dark"?"light":"dark"; setTheme(t); lsSetR(LS_THEME,t); };
+
+  useEffect(()=>{
+    const media=window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if(!media)return;
+    const sync=()=>setPrefersReducedMotion(media.matches);
+    sync();
+    media.addEventListener?.("change",sync);
+    return()=>media.removeEventListener?.("change",sync);
+  },[]);
+  const animationsDisabled=shouldDisableAnimations(animationMode,prefersReducedMotion);
+  useEffect(()=>{
+    const root=document.documentElement;
+    root.setAttribute("data-animation-mode",animationMode);
+    root.setAttribute("data-animation-disabled",animationsDisabled?"true":"false");
+    const syncSvg=scope=>{
+      const svgs=[];
+      if(scope?.matches?.(".sg-shell svg"))svgs.push(scope);
+      scope?.querySelectorAll?.(".sg-shell svg").forEach(svg=>svgs.push(svg));
+      svgs.forEach(svg=>{
+        try{
+          if(animationsDisabled)svg.pauseAnimations?.();
+          else svg.unpauseAnimations?.();
+        }catch{/* Older SVG implementations do not expose SMIL controls. */}
+      });
+    };
+    syncSvg(document);
+    const observer=new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(syncSvg)));
+    observer.observe(document.body,{childList:true,subtree:true});
+    return()=>observer.disconnect();
+  },[animationMode,animationsDisabled]);
+  const changeAnimationMode=nextRaw=>{
+    const next=normalizeAnimationMode(nextRaw);
+    setAnimationMode(next);lsSetR(LS_ANIMATION_MODE,next);
+    if(user)fbSavePrefs(user,{animationMode:next});
+  };
+
+  useEffect(()=>{
+    let active=true;
+    setAdminRoleVerified(false);
+    if(!user||!isAdminConsoleUsername(user,ADMIN_USERS))return()=>{active=false;};
+    const firebaseUser=auth.currentUser;
+    if(!firebaseUser)return()=>{active=false;};
+    getDoc(doc(db,"roles",firebaseUser.uid)).then(snapshot=>{
+      if(active)setAdminRoleVerified(snapshot.exists()&&snapshot.data()?.admin===true);
+    }).catch(error=>{
+      console.warn("Lumora admin role check failed:",error?.code||error?.message||error);
+      if(active)setAdminRoleVerified(false);
+    });
+    return()=>{active=false;};
+  },[user]);
 
   // Equipping in another tab updates this tab immediately. Firestore remains
   // authoritative on login/reload; localStorage is only the fast same-device
@@ -11403,7 +11497,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     firebaseSignOut(auth).catch(()=>{});
     [LS_USER,LS_PASSWORD,LS_SUBJECT,LS_SUBJECTS,LS_COINS,LS_EXAMS,LS_SKIN,
       LS_TARGETS,LS_DECOR,LS_BADGES,LS_GARDEN_LAYOUT,LS_RECAP,
-      LS_TIMER_STYLE,LS_POMODORO,LS_SELECTED_TASK,
+      LS_TIMER_STYLE,LS_POMODORO,LS_SELECTED_TASK,LS_ANIMATION_MODE,
       "studygrove_owned_skins","studygrove_enhancements"].forEach(lsRemove);
     lsRemove(backgroundKey);lsRemove(ownedBackgroundKey);
 
@@ -11415,6 +11509,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setTimerStyle("standard");const freshPomo=createPomodoroState({});setPomodoro(freshPomo);pomodoroRef.current=freshPomo;
     setSubjects(DEFAULT_SUBJECTS);setSubject("math");setCoins(0);setExams([]);setTargets({});
     setOwnedSkins(["default"]);setActiveSkin("default");setEnhancements({});
+    setAnimationMode("device");setAdminRoleVerified(false);
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
     setDecorations([]);setGardenLayout({});setTasks([]);setTasksError("");setTasksLoading(false);setSelectedTaskId("");
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
@@ -11463,10 +11558,26 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     loadHistory();
     if(r && typeof r.newCoinBalance === "number"){ setCoins(r.newCoinBalance); lsSet(LS_COINS, r.newCoinBalance); }
   };
-  // Admin tools (gated by ADMIN_USERS)
-  const isAdmin = ADMIN_USERS.includes(canonUsername(user));
-  const adminSetCoins = v => { setCoins(v); lsSet(LS_COINS,v); fbSavePrefs(user,{coins:v}); showToast(`🛠 Coins set to ${v}`); };
-  const adminUnlockAll = () => { const all=TREE_SKINS.map(s=>s.id); setOwnedSkins(all); lsSet("studygrove_owned_skins",all); fbSavePrefs(user,{ownedSkins:all}); showToast("🛠 All skins unlocked"); };
+  // Console access needs both a named Lumora admin and roles/{uid}.admin=true.
+  // Test grants only merge into the signed-in admin's own account.
+  const isAdmin = isAdminConsoleUsername(user,ADMIN_USERS)&&adminRoleVerified;
+  const adminSetCoins = async v => {
+    const safe=Math.max(0,Math.min(99_999_999,Math.floor(Number(v)||0)));
+    const ok=await fbSavePrefs(user,{coins:safe});
+    if(!ok){showToast("Couldn’t sync admin coin change");return false;}
+    setCoins(safe);lsSet(LS_COINS,safe);showToast(`🛠 Coins set to ${safe}`);return true;
+  };
+  const adminUnlockAll = async () => {
+    const nextSkins=[...new Set([...ownedSkins,...TREE_SKINS.map(s=>s.id)])];
+    const nextBackgrounds=normalizeOwnedBackgrounds([...ownedBackgrounds,...BACKGROUND_CATALOGUE.map(item=>item.id)]);
+    const nextDecorations=[...new Set([...decorations,...DECORATIONS.map(item=>item.id)])];
+    const ok=await fbSavePrefs(user,{ownedSkins:nextSkins,ownedBackgrounds:nextBackgrounds,decorations:nextDecorations});
+    if(!ok){showToast("Couldn’t sync admin unlocks");return false;}
+    setOwnedSkins(nextSkins);lsSet("studygrove_owned_skins",nextSkins);
+    setOwnedBackgrounds(nextBackgrounds);lsSet(ownedBackgroundsCacheKey(user),nextBackgrounds);
+    setDecorations(nextDecorations);lsSet(LS_DECOR,nextDecorations);
+    showToast("🛠 All test cosmetics unlocked");return true;
+  };
   const handleBuyDecoration=async(id)=>{
     const result=await fbPurchaseDecoration(user,id);
     if(typeof result.coinBalance==="number"){setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);}
@@ -11603,12 +11714,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(typeof prefs.selectedTaskId==="string"){
           setSelectedTaskId(prefs.selectedTaskId);lsSetR(LS_SELECTED_TASK,prefs.selectedTaskId);
         }
+        if(typeof prefs.animationMode==="string"){
+          const nextMode=normalizeAnimationMode(prefs.animationMode);
+          setAnimationMode(nextMode);lsSetR(LS_ANIMATION_MODE,nextMode);
+        }
       } else {
         // No cloud prefs yet — seed from whatever this device has
         await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
-          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId });
+          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode });
       }
       setPrefsReady(true);
     })();
@@ -11760,7 +11875,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   if(!user)return (
     <div className="sg-shell">
       <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
-      <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme}/>
+      <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
       <LoginScreen onLogin={handleLogin}/>
     </div>
   );
@@ -11771,7 +11886,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   if(!prefsReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
       <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
-      <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
+      <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
           <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F",marginBottom:18}}>🧑‍🎓 Lumora</div>
@@ -11786,7 +11901,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   return (
     <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
       <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
-      <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused}/>
+      <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
       {showShop&&<CoinShop coins={coins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements}
@@ -11825,7 +11940,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
         onBack={accountFromMenu?()=>{setShowAccount(false);setAccountFromMenu(false);setShowMenu(true);}:null}/>}
-      {showAdmin&&<AdminPanel admin={{ user }}
+      {showAdmin&&isAdmin&&<AdminPanel admin={{ user }}
+        selfTools={{coins,setCoins:adminSetCoins,unlockAll:adminUnlockAll}}
+        animationMode={animationMode} onAnimationModeChange={changeAnimationMode}
         onClose={()=>{setShowAdmin(false);setAdminFromMenu(false);}}
         onBack={adminFromMenu?()=>{setShowAdmin(false);setAdminFromMenu(false);setShowMenu(true);}:null}/>}
       {showExamModal&&<ExamCountdownModal exams={exams} subjects={subjects} editIndex={editingAssessmentIndex}
@@ -11869,6 +11986,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             <HeaderMenu
               user={user} coins={coins} theme={theme} streak={streak}
               badgeCount={badges.length}
+              animationMode={animationMode}
+              onAnimationModeChange={changeAnimationMode}
               onTreeShop={()=>{setShowMenu(false);setCameFromMenu(true);setShowShop(true);}}
               onGardenShop={()=>{setShowMenu(false);setCameFromMenu(true);setShowGardenShop(true);}}
               onBadges={()=>{setShowMenu(false);setShowBadges(true);}}
