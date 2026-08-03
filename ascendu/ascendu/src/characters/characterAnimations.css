@@ -1,0 +1,37 @@
+.lumora-character { overflow: visible; contain: layout style paint; }
+.lumora-character .lc-breathe { transform-box: fill-box; transform-origin: 50% 90%; animation: lcBreathe 5.6s ease-in-out infinite; }
+.lumora-character .lc-head { transform-box: fill-box; transform-origin: 50% 88%; animation: lcHead 9.4s ease-in-out infinite; }
+.lumora-character .lc-eye { transform-box: fill-box; transform-origin: center; animation: lcBlink 7.2s step-end infinite; }
+.lumora-character .lc-hair-secondary { transform-box: fill-box; transform-origin: 50% 12%; animation: lcHair 6.8s ease-in-out infinite; }
+.lumora-character .lc-writing-arm { transform-box: fill-box; transform-origin: 18% 18%; animation: lcWrite 4.3s cubic-bezier(.45,.05,.55,.95) infinite; }
+.lumora-character .lc-page { transform-box: fill-box; transform-origin: 12% 50%; animation: lcPage 11s ease-in-out infinite; }
+.lumora-character .lc-break-arm { transform-box: fill-box; transform-origin: 20% 15%; animation: lcStretch 7s ease-in-out infinite; }
+.lumora-character .lc-complete-aura { transform-box: fill-box; transform-origin: center; animation: lcCompleteAura 1.8s ease-out both; }
+.lumora-character .lc-spark { transform-box: fill-box; transform-origin: center; animation: lcSparkle 1.8s ease-out both; }
+.lumora-character[data-motion="quiet"] .lc-writing-arm,
+.lumora-character[data-motion="quiet"] .lc-head,
+.lumora-character[data-motion="quiet"] .lc-hair-secondary { animation-duration: 12s; animation-delay: var(--lc-delay, 0s); }
+.lumora-character[data-detail="simple"] .lc-detail { display: none; }
+
+@keyframes lcBreathe { 0%,100% { transform: scaleY(1) } 48% { transform: scaleY(1.012) translateY(-.35px) } }
+@keyframes lcHead { 0%,72%,100% { transform: rotate(0) } 78%,86% { transform: rotate(-1.4deg) } }
+@keyframes lcBlink { 0%,91%,93%,100% { transform: scaleY(1) } 92% { transform: scaleY(.08) } }
+@keyframes lcHair { 0%,100% { transform: rotate(0) } 50% { transform: rotate(.8deg) } }
+@keyframes lcWrite { 0%,12%,100% { transform: rotate(0) translate(0) } 31% { transform: rotate(-2.2deg) translate(-1px,.4px) } 52% { transform: rotate(1.6deg) translate(1px,-.3px) } 72% { transform: rotate(-1deg) translate(-.4px,.2px) } }
+@keyframes lcPage { 0%,74%,100% { transform: rotateY(0); opacity: 1 } 81% { transform: rotateY(58deg); opacity: .68 } 88% { transform: rotateY(0); opacity: 1 } }
+@keyframes lcStretch { 0%,68%,100% { transform: rotate(0) } 76%,86% { transform: rotate(-11deg) translateY(-2px) } }
+@keyframes lcCompleteAura { 0% { opacity:0; transform:scale(.72) } 45% { opacity:.75; transform:scale(1.08) } 100% { opacity:.4; transform:scale(1) } }
+@keyframes lcSparkle { 0% { opacity:0; transform:translateY(5px) scale(.3) } 46% { opacity:1; transform:translateY(-4px) scale(1) } 100% { opacity:0; transform:translateY(-10px) scale(.65) } }
+
+[data-animation-reduced="true"] .lumora-character * { animation-duration: 14s !important; animation-iteration-count: 1 !important; }
+[data-animation-reduced="true"] .lumora-character .lc-writing-arm,
+[data-animation-reduced="true"] .lumora-character .lc-page,
+[data-animation-reduced="true"] .lumora-character .lc-hair-secondary { animation: none !important; }
+[data-animation-disabled="true"] .lumora-character * { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  [data-animation-mode="device"] .lumora-character * { animation: none !important; }
+}
+.lc-customizer { width:min(720px,calc(100vw - 24px));max-height:min(88dvh,760px);overflow:auto;background:#FBFDFB;border:1px solid #DDE9E0;border-radius:22px;padding:20px;box-shadow:0 24px 70px rgba(31,54,42,.24);overscroll-behavior:contain }
+.lc-custom-preview { min-height:230px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:linear-gradient(135deg,#E4F2E8,#F7EED8);border-radius:18px;padding:18px 24px;overflow:hidden }.lc-custom-preview>div{max-width:320px}.lc-custom-preview span{font:800 9px/1 system-ui;letter-spacing:.18em;color:#4C8069}.lc-custom-preview h2{font:800 24px/1.1 ui-rounded,system-ui;color:#23392F;margin:7px 0}.lc-custom-preview p{font:500 12px/1.5 system-ui;color:#63736B;margin:0}.lc-custom-preview svg{flex:0 0 auto;margin-bottom:-45px}
+.lc-option-group { border:0;padding:0;margin:18px 0 0;min-width:0 }.lc-option-group legend{font:800 12px/1 system-ui;color:#34473E;margin-bottom:9px}.lc-option-row{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x proximity}.lc-option-row button{flex:0 0 auto;min-height:39px;border:1px solid #D9E4DC;border-radius:12px;background:white;color:#56655D;padding:8px 11px;font:700 11px/1.2 system-ui;scroll-snap-align:start}.lc-option-row button.is-selected{border-color:#4D9B7C;background:#E6F4EC;color:#276047;box-shadow:0 0 0 2px rgba(77,155,124,.12)}.lc-option-row i{display:inline-block;width:13px;height:13px;border-radius:50%;vertical-align:-2px;margin-right:6px;border:1px solid rgba(35,45,40,.14)}.lc-custom-done{position:sticky;bottom:0;width:100%;border:0;border-radius:13px;background:#397F63;color:white;padding:13px;font:800 13px/1 system-ui;box-shadow:0 5px 18px rgba(46,100,78,.22);margin-top:18px}
+@media(max-width:520px){.lc-customizer{padding:13px;border-radius:20px}.lc-custom-preview{min-height:190px;padding:15px}.lc-custom-preview p{display:none}.lc-custom-preview svg{width:135px;height:auto;margin-right:-15px}.lc-option-group{margin-top:14px}}
