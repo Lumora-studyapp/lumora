@@ -593,6 +593,18 @@ function ClassroomEnvironment({ art }) {
   </div>;
 }
 
+function RoomFinish({ art }) {
+  return <div className={`sg-room-finish sg-room-finish--${art}`} aria-hidden="true">
+    <span className="sg-room-finish-cove"/>
+    <span className="sg-room-finish-rail"/>
+    <span className="sg-room-pendant sg-room-pendant--left"><i/></span>
+    <span className="sg-room-pendant sg-room-pendant--right"><i/></span>
+    <span className="sg-room-study-stack sg-room-study-stack--left"><i/><i/><i/></span>
+    <span className="sg-room-study-stack sg-room-study-stack--right"><i/><i/></span>
+    <span className="sg-room-floor-sheen"/>
+  </div>;
+}
+
 function OceanField() {
   return <>
     <div className="sg-bg-ocean-window"/>
@@ -728,6 +740,7 @@ export function BackgroundArtwork({
       <div className="sg-bg-wash"/>
       <BackgroundDecor art={background.art}/>
       <ClassroomEnvironment art={background.art}/>
+      <RoomFinish art={background.art}/>
       <div className="sg-bg-vignette"/>
     </div>
   );
@@ -1014,6 +1027,25 @@ export const BACKGROUND_CSS = `
    outside the architecture instead of tinting one reusable classroom. */
 .sg-theme-room{position:absolute;inset:0;overflow:hidden;pointer-events:none}
 
+/* A restrained finishing layer gives every environment the same premium
+   material quality without turning themes into colour filters. The room art
+   beneath still defines the architecture; these details add light, books and
+   foreground depth that scale cleanly from shop cards to full-screen scenes. */
+.sg-room-finish{position:absolute;inset:0;overflow:hidden;pointer-events:none;--finish-light:rgba(255,244,201,.72);--finish-trim:rgba(77,93,83,.2);--finish-book-a:#809D8D;--finish-book-b:#D39B72;--finish-sheen:rgba(255,255,255,.13)}
+.sg-room-finish-cove{position:absolute;left:10%;right:10%;top:8.2%;height:1px;background:linear-gradient(90deg,transparent,var(--finish-light) 22% 78%,transparent);box-shadow:0 0 18px 5px color-mix(in srgb,var(--finish-light),transparent 64%);opacity:.72}
+.sg-room-finish-rail{position:absolute;left:5%;right:5%;top:62.5%;height:clamp(2px,.28vw,5px);border-radius:99px;background:linear-gradient(90deg,transparent,var(--finish-trim) 8% 92%,transparent);box-shadow:0 3px 10px rgba(22,35,29,.08)}
+.sg-room-pendant{position:absolute;top:0;width:clamp(30px,4.2vw,64px);height:20%;transform-origin:50% 0;animation:sgRoomLightBreathe 10s ease-in-out infinite}.sg-room-pendant--left{left:27%}.sg-room-pendant--right{right:25%;animation-delay:-5s}.sg-room-pendant::before{content:"";position:absolute;left:50%;top:0;width:1px;height:48%;background:var(--finish-trim)}.sg-room-pendant i{position:absolute;left:18%;right:18%;top:44%;height:23%;border-radius:50% 50% 14% 14%;background:linear-gradient(180deg,color-mix(in srgb,var(--finish-light),#fff 18%),color-mix(in srgb,var(--finish-light),#7A6B50 34%));box-shadow:0 8px 20px color-mix(in srgb,var(--finish-light),transparent 60%);clip-path:polygon(22% 0,78% 0,100% 100%,0 100%)}
+.sg-room-study-stack{position:absolute;bottom:21%;width:clamp(58px,8vw,118px);height:9%;opacity:.74;filter:drop-shadow(0 5px 6px rgba(25,33,30,.14))}.sg-room-study-stack--left{left:1.5%;transform:scale(.82);transform-origin:bottom left}.sg-room-study-stack--right{right:1.5%;transform:scale(.74);transform-origin:bottom right}.sg-room-study-stack i{position:absolute;left:4%;right:4%;height:22%;border-radius:2px;background:linear-gradient(90deg,var(--finish-book-a),color-mix(in srgb,var(--finish-book-a),#fff 32%));border-left:5px solid color-mix(in srgb,var(--finish-book-a),#17241C 18%)}.sg-room-study-stack i:nth-child(1){bottom:0;transform:rotate(-2deg)}.sg-room-study-stack i:nth-child(2){left:10%;right:0;bottom:26%;background:linear-gradient(90deg,var(--finish-book-b),color-mix(in srgb,var(--finish-book-b),#fff 30%));transform:rotate(2deg)}.sg-room-study-stack i:nth-child(3){left:18%;right:8%;bottom:52%;transform:rotate(-4deg)}
+.sg-room-floor-sheen{position:absolute;left:15%;right:15%;bottom:-3%;height:35%;background:radial-gradient(ellipse at 50% 100%,var(--finish-sheen),transparent 66%);clip-path:polygon(20% 0,80% 0,100% 100%,0 100%);opacity:.7}
+.sg-room-finish--rain{--finish-light:rgba(201,226,231,.5);--finish-trim:rgba(48,68,74,.36);--finish-book-a:#6E8794;--finish-book-b:#A78E7E;--finish-sheen:rgba(186,220,227,.12)}
+.sg-room-finish--moonlit,.sg-room-finish--midnight{--finish-light:rgba(240,214,151,.54);--finish-trim:rgba(132,153,181,.2);--finish-book-a:#667B9B;--finish-book-b:#A17C92;--finish-sheen:rgba(133,164,207,.1)}
+.sg-room-finish--ocean{--finish-light:rgba(137,235,225,.38);--finish-trim:rgba(75,175,171,.22);--finish-book-a:#4E9A8D;--finish-book-b:#D18A88;--finish-sheen:rgba(90,213,207,.13)}
+.sg-room-finish--planetarium,.sg-room-finish--celestial,.sg-room-finish--aurora{--finish-light:rgba(150,179,255,.42);--finish-trim:rgba(126,145,214,.2);--finish-book-a:#6578B8;--finish-book-b:#AD7EBC;--finish-sheen:rgba(122,149,225,.11)}
+.sg-room-finish--blossom{--finish-light:rgba(255,239,193,.68);--finish-trim:rgba(144,94,86,.18);--finish-book-a:#A47D8D;--finish-book-b:#D69775;--finish-sheen:rgba(255,226,204,.2)}
+.sg-room-finish--library,.sg-room-finish--lanterns,.sg-room-finish--sunset{--finish-light:rgba(255,211,137,.62);--finish-trim:rgba(111,66,43,.26);--finish-book-a:#738C76;--finish-book-b:#BB765D;--finish-sheen:rgba(255,211,162,.14)}
+.sg-room-finish--ocean .sg-room-pendant,.sg-room-finish--celestial .sg-room-pendant{opacity:.45}.sg-room-finish--blossom .sg-room-pendant--right{display:none}
+.sg-background-art--compact .sg-room-finish-rail,.sg-background-art--compact .sg-room-study-stack--right{display:none}.sg-background-art--compact .sg-room-pendant{transform:scale(.65);transform-origin:top center}.sg-background-art--compact .sg-room-study-stack{bottom:19%;transform:scale(.48);transform-origin:bottom left}
+
 /* Underwater classroom — arched observation glass, reef desks and sea-floor
    masonry are deliberately unlike every terrestrial room. */
 .sg-ocean-room-canopy{position:absolute;left:-4%;right:-4%;top:-2%;height:11%;background:linear-gradient(180deg,rgba(3,29,45,.84),rgba(12,58,72,.54));border-bottom:clamp(4px,.7vw,10px) solid rgba(90,169,174,.38);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
@@ -1249,6 +1281,7 @@ export const BACKGROUND_CSS = `
 @keyframes sgBgCloud{0%,100%{translate:-8px 0}50%{translate:18px -3px}}
 @keyframes sgBgAurora{0%,100%{transform:skewX(-6deg) scaleY(.9);opacity:.14}50%{transform:skewX(7deg) scaleY(1.12);opacity:.28}}
 @keyframes sgBgOrbit{to{transform:rotate(360deg)}}
+@keyframes sgRoomLightBreathe{0%,100%{opacity:.76;filter:saturate(.94)}50%{opacity:1;filter:saturate(1.06)}}
 .sg-background-art--focus .sg-bg-petals i,
 .sg-background-art--focus .sg-bg-rain-sheet i,
 .sg-background-art--focus .sg-bg-rain-trails i,
@@ -1309,7 +1342,7 @@ export const BACKGROUND_CSS = `
 .sg-background-preview-panel{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;width:min(100%,720px);padding:18px;border:1px solid rgba(255,255,255,.58);border-radius:20px;background:rgba(250,252,249,.88);backdrop-filter:blur(14px);box-shadow:0 14px 45px rgba(9,18,12,.25);color:#223128}
 .sg-background-preview-copy h3{font-size:22px;margin:6px 0 4px}.sg-background-preview-copy p{font-size:12.5px;line-height:1.45;color:#627068;margin:0;max-width:420px}.sg-background-preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.sg-background-secondary-btn,.sg-background-primary-btn{min-height:42px;border-radius:13px;padding:9px 15px;font-size:12px;font-weight:750;cursor:pointer}.sg-background-secondary-btn{border:1px solid #D8E1D7;background:#fff;color:#647168}.sg-background-primary-btn{border:0;background:#2D6A4F;color:#fff}.sg-background-primary-btn:disabled{background:#AAB5AE}
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
-@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
+@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8),.sg-background-art--full .sg-room-pendant--right,.sg-background-art--full .sg-room-study-stack--right{display:none}.sg-background-art--full .sg-room-pendant--left{left:66%;opacity:.72}.sg-background-art--full .sg-room-study-stack--left{opacity:.48}.sg-background-art--full .sg-room-finish-rail{opacity:.58}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
 html[data-animation-disabled="true"] .sg-background-art *{animation:none!important;transition:none!important}
 html[data-animation-disabled="true"] .sg-background-art--focus{filter:saturate(.82) contrast(.94)}

@@ -13,6 +13,7 @@ import {
   shiftStudyDay, shiftStudyWeek, startOfStudyDay, startOfStudyWeek,
 } from "./studyWeek.js";
 import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";
+import { isGroupInviteCode, normalizeGroupInviteCode } from "./groupLeaderboards.js";
 import {
   isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations,
 } from "./accessSettings.js";
@@ -1926,8 +1927,8 @@ async function fbCreateGroup(usernameRaw,nameRaw){
 }
 
 async function fbJoinGroup(usernameRaw,codeRaw){
-  const username=canonUsername(usernameRaw),code=(codeRaw||"").trim().toUpperCase();
-  if(!/^[A-Z2-9]{8}$/.test(code))return {ok:false,error:"Enter the 8-character invite code."};
+  const username=canonUsername(usernameRaw),code=normalizeGroupInviteCode(codeRaw);
+  if(!isGroupInviteCode(code))return {ok:false,error:"Enter the 8-character leaderboard code."};
   try{
     const group=await runTransaction(db,async tx=>{
       const inviteRef=doc(db,"leaderboard_group_invites",code);
@@ -5159,7 +5160,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
           <button style={{...fs.pauseBtn,background:paused?subject.color:"#fff",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
             {paused?"▶ Resume":"⏸ Pause"}
           </button>
-          <button style={fs.endBtn} onClick={onEnd}>{isPomodoro?"Finish now":"Give Up 🥀"}</button>
+          <button style={fs.endBtn} onClick={onEnd}>End session</button>
         </div>}
       <p className="sg-session-warning" style={fs.warning}>{isBreak?"Start the next round only when you’re ready.":"You can leave this screen safely, but your focused time matters."}</p>
     </div>
@@ -10299,11 +10300,11 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, curre
   );
 }
 
-function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey }){
-  const inviteFromUrl=()=>new URLSearchParams(window.location.search).get("group")?.toUpperCase()||"";
+function GroupLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, currentWeekKey }){
+  const inviteFromUrl=()=>normalizeGroupInviteCode(new URLSearchParams(window.location.search).get("group"));
   const [groups,setGroups]=useState(null);
   const [groupsError,setGroupsError]=useState("");
-  const [activeId,setActiveId]=useState(null);
+  const [activeId,setActiveId]=useState("world");
   const [board,setBoard]=useState([]);
   const [boardLoading,setBoardLoading]=useState(false);
   const [boardError,setBoardError]=useState("");
@@ -10311,7 +10312,6 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [invitesLoading,setInvitesLoading]=useState(true);
   const [inviteLoadError,setInviteLoadError]=useState("");
   const [pendingInvites,setPendingInvites]=useState([]);
-  const [inviteUsername,setInviteUsername]=useState("");
   const [form,setForm]=useState(inviteFromUrl()?"join":null);
   const [groupName,setGroupName]=useState("");
   const [inviteCode,setInviteCode]=useState(inviteFromUrl);
@@ -10331,7 +10331,8 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     setInvitesLoading(false);
     setActiveId(current=>{
       const wanted=preferredId||current;
-      return next.some(g=>g.id===wanted)?wanted:(next[0]?.id||null);
+      if(wanted==="world")return "world";
+      return next.some(g=>g.id===wanted)?wanted:"world";
     });
   },[currentUser]);
   useEffect(()=>{reload();},[reload]);
@@ -10375,20 +10376,13 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     const result=await run(()=>fbDeclineGroupInvite(currentUser,invite.id));
     if(result)await reload(active?.id);
   };
-  const sendTargetedInvite=async()=>{
-    if(!active)return;
-    const result=await run(()=>fbSendGroupInvite(currentUser,active.id,inviteUsername));
-    if(!result)return;
-    setInviteUsername("");await reload(active.id);
-  };
   const cancelTargetedInvite=async invite=>{
     const result=await run(()=>fbCancelGroupInvite(currentUser,active.id,invite.id));
     if(result)await reload(active.id);
   };
   const shareInvite=async()=>{
     if(!active?.inviteCode)return;
-    const url=new URL(window.location.href);url.searchParams.set("group",active.inviteCode);
-    try{await navigator.clipboard.writeText(url.toString());setCopied(true);setTimeout(()=>setCopied(false),1600);}
+    try{await navigator.clipboard.writeText(active.inviteCode);setCopied(true);setTimeout(()=>setCopied(false),1600);}
     catch{setError(`Copy this code: ${active.inviteCode}`);}
   };
   const refreshInvite=async()=>{
@@ -10421,10 +10415,45 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
-    <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Classroom Groups</div>
-      <div style={gl.introBody}>Small, invite-only weekly boards · up to {GROUP_MAX_MEMBERS} members · no effect on global prizes.</div>
+    <div style={gl.hubHeader}>
+      <div style={{minWidth:0}}>
+        <div style={gl.hubKicker}>LEADERBOARD NETWORK</div>
+        <div style={gl.hubTitle}>Choose your community</div>
+        <div style={gl.hubBody}>Compare globally or switch into a private code-based leaderboard.</div>
+      </div>
+      <div style={gl.hubActions}>
+        {groups.length<GROUP_MAX_PER_USER&&<button style={gl.joinCodeBtn} onClick={()=>{setForm("join");setError("");}}>Enter code</button>}
+        {groups.length<GROUP_MAX_PER_USER&&<button style={gl.createBoardBtn} onClick={()=>{setForm("create");setError("");}}>＋ New board</button>}
+      </div>
     </div>
+
+    <div style={gl.boardSwitcher} role="tablist" aria-label="Choose leaderboard">
+      <button role="tab" aria-selected={activeId==="world"} style={{...gl.boardSwitch,...(activeId==="world"?gl.boardSwitchOn:{})}}
+        onClick={()=>{setActiveId("world");setManaging(false);setError("");}}>
+        <span style={gl.boardSwitchIcon}>🌍</span><span><strong>World</strong><small>All Lumora learners</small></span>
+      </button>
+      {groups.map(g=><button key={g.id} role="tab" aria-selected={g.id===activeId}
+        style={{...gl.boardSwitch,...(g.id===activeId?gl.boardSwitchOn:{})}}
+        onClick={()=>{setActiveId(g.id);setManaging(false);setError("");}}>
+        <span style={gl.boardSwitchIcon}>🔐</span><span><strong>{g.name}</strong><small>{g.members?.length||0} members</small></span>
+      </button>)}
+    </div>
+
+    {error&&<div style={gl.error} role="alert">{error}</div>}
+    {form==="create"&&<div style={gl.formCard}>
+      <div style={gl.manageTitle}>Create a private leaderboard</div>
+      <div style={gl.formHint}>Choose a name and Lumora will generate a permanent eight-character code to share.</div>
+      <input style={gl.input} value={groupName} maxLength={24} onChange={e=>setGroupName(e.target.value)} placeholder="Leaderboard name" autoFocus/>
+      <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={create} disabled={busy}>{busy?"Creating…":"Create leaderboard"}</button></div>
+    </div>}
+    {form==="join"&&<div style={gl.formCard}>
+      <div style={gl.manageTitle}>Join a private leaderboard</div>
+      <div style={gl.formHint}>Enter the code shared by the leaderboard owner.</div>
+      <input style={{...gl.input,textTransform:"uppercase",letterSpacing:2,fontWeight:800}} value={inviteCode} maxLength={8}
+        onChange={e=>setInviteCode(normalizeGroupInviteCode(e.target.value))} onKeyDown={e=>e.key==="Enter"&&isGroupInviteCode(inviteCode)&&join()}
+        placeholder="8-character code" aria-label="Private leaderboard code" autoFocus/>
+      <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={join} disabled={busy||!isGroupInviteCode(inviteCode)}>{busy?"Joining…":"Join leaderboard"}</button></div>
+    </div>}
 
     {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
     {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
@@ -10443,9 +10472,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
     {groupsError&&<div style={gl.errorState} role="alert"><strong>Couldn't load groups</strong><span>{groupsError}</span><button style={gl.retryBtn} onClick={()=>reload()}>Try again</button></div>}
 
-    {!groupsError&&groups.length>1&&<div style={gl.groupTabs}>
-      {groups.map(g=><button key={g.id} style={{...gl.groupTab,...(g.id===activeId?gl.groupTabOn:{})}} onClick={()=>{setActiveId(g.id);setManaging(false);setError("");}}>{g.name}</button>)}
-    </div>}
+    {!groupsError&&activeId==="world"&&<LeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>}
 
     {active&&<>
       <div style={gl.headCard}>
@@ -10459,22 +10486,16 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
       <div style={gl.inviteCard}>
         <div>
-          <div style={gl.inviteLabel}>PERMANENT INVITE CODE</div>
+          <div style={gl.inviteLabel}>SHARE THIS LEADERBOARD CODE</div>
           <div style={gl.inviteCode}>{active.inviteCode||"—"}</div>
           <div style={gl.inviteHint}>Valid until the owner replaces it or deletes the group</div>
         </div>
-        <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy link"}</button>
+        <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy code"}</button>
       </div>
 
       {managing&&<div style={gl.manageCard}>
-        <div style={gl.manageTitle}>Invite a Lumora user</div>
-        <div style={gl.inviteUserRow}>
-          <input style={gl.input} value={inviteUsername} maxLength={20} onChange={e=>{setInviteUsername(e.target.value);setError("");}}
-            onKeyDown={e=>e.key==="Enter"&&sendTargetedInvite()} placeholder="Username" aria-label="Username to invite"/>
-          <button style={gl.smallBtn} disabled={!inviteUsername.trim()||busy} onClick={sendTargetedInvite}>{busy?"…":"Invite"}</button>
-        </div>
         {pendingInvites.length>0&&<div style={gl.pendingList}>
-          <div style={gl.sectionLabel}>PENDING</div>
+          <div style={gl.sectionLabel}>EARLIER USERNAME INVITES</div>
           {pendingInvites.map(invite=><div key={invite.id} style={gl.pendingRow}>
             <span style={gl.pendingName}>{invite.invitedUser}</span>
             <span style={gl.pendingSender}>by {invite.createdBy}</span>
@@ -10529,42 +10550,20 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
       {!boardLoading&&!boardError&&board.length>0&&<div style={gl.badgeNote}>🌱 The leaf marks members who have completed a session this week. Group boards do not award coins or skins.</div>}
     </>}
 
-    {!groupsError&&!active&&<div style={gl.emptyCard}><div style={{fontSize:30}}>🌱</div><div style={gl.emptyTitle}>Start a private group</div><div style={gl.emptyBody}>Create one for classmates or enter an invite from someone you know.</div></div>}
-
-    {error&&<div style={gl.error} role="alert">{error}</div>}
-    {form==="create"&&<div style={gl.formCard}>
-      <div style={gl.manageTitle}>Create a group</div>
-      <input style={gl.input} value={groupName} maxLength={24} onChange={e=>setGroupName(e.target.value)} placeholder="Group name" autoFocus/>
-      <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={create} disabled={busy}>{busy?"Creating…":"Create"}</button></div>
-    </div>}
-    {form==="join"&&<div style={gl.formCard}>
-      <div style={gl.manageTitle}>Join with a code</div>
-      <input style={{...gl.input,textTransform:"uppercase",letterSpacing:2,fontWeight:800}} value={inviteCode} maxLength={8} onChange={e=>setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z2-9]/g,""))} placeholder="8-character code" autoFocus/>
-      <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={join} disabled={busy}>{busy?"Joining…":"Join"}</button></div>
-    </div>}
-    {!groupsError&&!form&&groups.length<GROUP_MAX_PER_USER&&<div style={gl.actionRow}>
-      <button style={gl.secondaryBtn} onClick={()=>{setForm("create");setError("");}}>＋ Create group</button>
-      <button style={gl.secondaryBtn} onClick={()=>{setForm("join");setError("");}}>⌁ Enter invite</button>
-    </div>}
   </div>;
 }
 
 function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey}){
-  const [section,setSection]=useState(()=>new URLSearchParams(window.location.search).has("group")?"groups":"global");
-  return <div>
-    <div style={{...S.toggleRow,marginBottom:12}}>
-      <button style={{...S.toggleBtn,...(section==="global"?S.toggleBtnActive:{})}} onClick={()=>setSection("global")}>🏆 Global</button>
-      <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🌿 Groups</button>
-    </div>
-    {section==="global"
-      ? <LeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
-      : <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>}
-  </div>;
+  return <GroupLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>;
 }
 
 const MemoLeaderboardHub=memo(LeaderboardHub);
 
 const gl={
+  hubHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:11,background:"linear-gradient(135deg,#EAF6EE 0%,#F8FBF7 58%,#EEF3FA 100%)",border:"1px solid #D8E8DC",borderRadius:18,padding:"14px 15px",marginBottom:10,boxShadow:"0 8px 24px rgba(39,75,51,.06)"},
+  hubKicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.25,color:"#6E9D7E"},hubTitle:{fontSize:17,fontWeight:850,color:"#1F3828",marginTop:2},hubBody:{fontSize:10.5,color:"#7D8D82",lineHeight:1.4,marginTop:2},
+  hubActions:{display:"flex",gap:7,flexWrap:"wrap"},joinCodeBtn:{border:"1px solid #C8DDD0",background:"rgba(255,255,255,.82)",color:"#42644F",borderRadius:12,padding:"8px 11px",fontSize:10.5,fontWeight:750,cursor:"pointer"},createBoardBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:12,padding:"8px 11px",fontSize:10.5,fontWeight:750,cursor:"pointer",boxShadow:"0 5px 12px rgba(45,106,79,.16)"},
+  boardSwitcher:{display:"flex",gap:7,overflowX:"auto",maxWidth:"100%",padding:"1px 1px 9px",scrollbarWidth:"thin",scrollSnapType:"x proximity"},boardSwitch:{display:"grid",gridTemplateColumns:"30px minmax(88px,1fr)",alignItems:"center",gap:7,minWidth:152,maxWidth:210,flex:"0 0 auto",textAlign:"left",border:"1px solid #DFE7DC",background:"rgba(255,255,255,.82)",borderRadius:14,padding:"8px 10px",color:"#68776D",cursor:"pointer",scrollSnapAlign:"start"},boardSwitchOn:{background:"#FFFFFF",borderColor:"#8EC5A6",color:"#2D6A4F",boxShadow:"0 5px 15px rgba(39,83,57,.1),inset 0 -2px 0 #67AD85"},boardSwitchIcon:{width:30,height:30,display:"grid",placeItems:"center",borderRadius:10,background:"#EFF5EE",fontSize:15},
   intro:{background:"linear-gradient(135deg,#EDF7F0,#F8FBF6)",border:"1px solid #DCEBDD",borderRadius:14,padding:"11px 13px",marginBottom:10},
   introTitle:{fontSize:13.5,fontWeight:800,color:"#2D6A4F"},introBody:{fontSize:10.75,color:"#718076",lineHeight:1.45,marginTop:2},
   sectionLabel:{fontSize:9,fontWeight:800,letterSpacing:1,color:"#849188",marginBottom:6},
@@ -10577,7 +10576,7 @@ const gl={
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
   boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"#fff",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"#F0F8F3",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"#2D6A4F",background:"#DCEFE3",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
-  emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
+  emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #DDE8DA",borderRadius:15,padding:13,margin:"0 0 10px",boxShadow:"0 8px 22px rgba(37,69,46,.06)"},formHint:{fontSize:10.5,color:"#849087",lineHeight:1.45,margin:"-2px 0 9px"},input:{display:"block",width:"100%",minWidth:0,padding:"10px 11px",border:"1.5px solid #D4E1D1",borderRadius:11,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
 };
 
 // ── Main App ──────────────────────────────────────────────────────────────────
