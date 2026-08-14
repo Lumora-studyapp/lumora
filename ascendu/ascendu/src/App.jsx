@@ -17,6 +17,10 @@ import {
   isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations,
 } from "./accessSettings.js";
 import {
+  filterBoardForFriends, friendConnectionId, friendNetworkFromConnections,
+  normalizeFriendUsername, normalizePresenceRecord,
+} from "./friendships.js";
+import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
   canEquipBackground, evaluateBackgroundPurchase, getBackgroundAppearance, normalizeBackgroundId,
@@ -1745,9 +1749,104 @@ async function fbLoadLeaderboard() {
       getDoc(doc(db, "leaderboard_weekly", weekKey)),
       getDoc(doc(db, "leaderboard_alltime", "data")),
     ]);
-    const toArr = snap => snap.exists() ? normalizeBoardEntries(snap.data()).slice(0,20) : [];
+    // The aggregate documents are already downloaded in full. Keep every row
+    // in memory so a friend who is outside the former public top 20 can still
+    // appear in the private friends leaderboard.
+    const toArr = snap => snap.exists() ? normalizeBoardEntries(snap.data()) : [];
     return { weekly: toArr(wSnap), allTime: toArr(aSnap) };
   } catch(e) { console.error("Firebase LB error:", e); return { weekly: [], allTime: [] }; }
+}
+
+// ── Accepted friendships ─────────────────────────────────────────────────────
+// Friend connections are keyed by the two Firebase UIDs, not usernames, so a
+// later display-name change cannot create duplicate relationships. Username
+// snapshots are retained for the current UI and existing username-keyed data.
+async function fbSendFriendRequest(currentUsernameRaw,targetUsernameRaw){
+  const currentUsername=canonUsername(currentUsernameRaw);
+  const targetUsername=normalizeFriendUsername(targetUsernameRaw);
+  const currentUid=auth.currentUser?.uid;
+  if(!currentUid)return {ok:false,error:"Sign in again before adding a friend."};
+  if(!targetUsername)return {ok:false,error:"Enter a username."};
+  if(targetUsername===currentUsername)return {ok:false,error:"You can't add yourself."};
+  try{
+    const targetSnap=await getDoc(doc(db,"usernames",targetUsername));
+    const targetUid=targetSnap.exists()?String(targetSnap.data()?.uid||""):"";
+    if(!targetUid)return {ok:false,error:"No Lumora account uses that username."};
+    const connectionId=friendConnectionId(currentUid,targetUid);
+    if(!connectionId)return {ok:false,error:"That account can't be added right now."};
+    await runTransaction(db,async tx=>{
+      const ref=doc(db,"friend_connections",connectionId),snap=await tx.get(ref);
+      if(snap.exists()){
+        const status=snap.data()?.status;
+        if(status==="accepted")throw new Error("You're already friends.");
+        if(status==="pending")throw new Error("A friend request is already pending.");
+      }
+      const now=Date.now();
+      tx.set(ref,{requesterUid:currentUid,requesterUsername:currentUsername,
+        recipientUid:targetUid,recipientUsername:targetUsername,
+        userUids:[currentUid,targetUid],status:"pending",createdAt:now,updatedAt:now});
+    });
+    return {ok:true};
+  }catch(e){return {ok:false,error:e.message||"Couldn't send that friend request."};}
+}
+
+async function fbRespondFriendRequest(currentUsernameRaw,connectionId,accept){
+  const currentUsername=canonUsername(currentUsernameRaw),currentUid=auth.currentUser?.uid;
+  if(!currentUid)return {ok:false,error:"Sign in again to respond."};
+  try{
+    await runTransaction(db,async tx=>{
+      const ref=doc(db,"friend_connections",connectionId),snap=await tx.get(ref);
+      if(!snap.exists())throw new Error("That request is no longer available.");
+      const connection=snap.data();
+      if(connection.status!=="pending"||connection.recipientUid!==currentUid)throw new Error("That request can't be changed.");
+      if(!accept){tx.delete(ref);return;}
+      const now=Date.now();
+      tx.update(ref,{status:"accepted",acceptedAt:now,updatedAt:now});
+      tx.set(doc(db,"friend_access",currentUsername,"viewers",connection.requesterUid),{
+        connectionId,ownerUsername:currentUsername,viewerUid:connection.requesterUid,
+        viewerUsername:connection.requesterUsername,createdAt:now,
+      });
+      tx.set(doc(db,"friend_access",connection.requesterUsername,"viewers",currentUid),{
+        connectionId,ownerUsername:connection.requesterUsername,viewerUid:currentUid,
+        viewerUsername:currentUsername,createdAt:now,
+      });
+    });
+    return {ok:true};
+  }catch(e){return {ok:false,error:e.message||"Couldn't update that request."};}
+}
+
+async function fbCancelFriendRequest(connectionId){
+  const currentUid=auth.currentUser?.uid;
+  if(!currentUid)return {ok:false,error:"Sign in again to cancel this request."};
+  try{
+    await runTransaction(db,async tx=>{
+      const ref=doc(db,"friend_connections",connectionId),snap=await tx.get(ref);
+      if(!snap.exists())return;
+      const connection=snap.data();
+      if(connection.status!=="pending"||connection.requesterUid!==currentUid)throw new Error("That request can't be cancelled.");
+      tx.delete(ref);
+    });
+    return {ok:true};
+  }catch(e){return {ok:false,error:e.message||"Couldn't cancel that request."};}
+}
+
+async function fbRemoveFriend(currentUsernameRaw,friend){
+  const currentUsername=canonUsername(currentUsernameRaw),currentUid=auth.currentUser?.uid;
+  if(!currentUid||!friend?.id)return {ok:false,error:"That friendship couldn't be found."};
+  try{
+    await runTransaction(db,async tx=>{
+      const ref=doc(db,"friend_connections",friend.id),snap=await tx.get(ref);
+      if(!snap.exists())return;
+      const connection=snap.data();
+      if(connection.status!=="accepted"||!(connection.userUids||[]).includes(currentUid))throw new Error("That friendship can't be removed.");
+      const otherUsername=connection.requesterUid===currentUid?connection.recipientUsername:connection.requesterUsername;
+      const otherUid=connection.requesterUid===currentUid?connection.recipientUid:connection.requesterUid;
+      tx.delete(ref);
+      tx.delete(doc(db,"friend_access",currentUsername,"viewers",otherUid));
+      tx.delete(doc(db,"friend_access",otherUsername,"viewers",currentUid));
+    });
+    return {ok:true};
+  }catch(e){return {ok:false,error:e.message||"Couldn't remove that friend."};}
 }
 
 // Load a leaderboard for a specific (past) week key
@@ -1956,7 +2055,7 @@ async function fbCreateGroup(usernameRaw,nameRaw){
 
 async function fbJoinGroup(usernameRaw,codeRaw){
   const username=canonUsername(usernameRaw),code=(codeRaw||"").trim().toUpperCase();
-  if(!/^[A-Z2-9]{8}$/.test(code))return {ok:false,error:"Enter the 8-character invite code."};
+  if(!/^[A-HJ-NP-Z2-9]{8}$/.test(code))return {ok:false,error:"Enter the 8-character group code."};
   try{
     const group=await runTransaction(db,async tx=>{
       const inviteRef=doc(db,"leaderboard_group_invites",code);
@@ -2227,25 +2326,32 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
   } catch(e) { console.error("Weekly reward claim error:", e); return {ok:false,reward:0,error:e.message}; }
 }
 
-// ── Presence ("Studying now") ──────────────────────────────────────────────────
-// Each active studier writes a heartbeat doc; stale ones (>2 min) are ignored.
+// ── Friend presence ────────────────────────────────────────────────────────────
+// Signed-in users publish a small online heartbeat. Active focus replaces the
+// status with "studying" plus the selected subject. Reads are performed only
+// for accepted friends, which also matches the hardened Firestore rules.
 const PRESENCE_TTL = 120 * 1000;
-async function fbHeartbeat(username, subjLabel, subjEmoji, subjColor) {
+async function fbHeartbeat(username, status="online", subjLabel="", subjEmoji="", subjColor="") {
   try {
     await setDoc(doc(db, "presence", username), {
-      username, subjLabel, subjEmoji, subjColor, ts: Date.now()
+      username,status:status==="studying"?"studying":"online",
+      subjLabel:status==="studying"?subjLabel:"",
+      subjEmoji:status==="studying"?subjEmoji:"",
+      subjColor:status==="studying"?subjColor:"",
+      ts:Date.now()
     });
   } catch(e) {}
 }
 async function fbClearPresence(username) {
   try { await deleteDoc(doc(db, "presence", username)); } catch(e) {}
 }
-async function fbLoadPresence() {
+async function fbLoadFriendPresence(friends) {
   try {
-    const snap = await getDocs(collection(db, "presence"));
+    const usernames=[...new Set((Array.isArray(friends)?friends:[]).map(friend=>normalizeFriendUsername(friend?.username||friend)).filter(Boolean))];
+    const snaps=await Promise.all(usernames.map(username=>getDoc(doc(db,"presence",username))));
     const now = Date.now();
-    const out = [];
-    snap.forEach(d => { const v = d.data(); if (v && now - v.ts < PRESENCE_TTL) out.push(v); });
+    const out=snaps.filter(snap=>snap.exists()).map(snap=>normalizePresenceRecord(snap.data()))
+      .filter(record=>record.username&&now-record.ts<PRESENCE_TTL);
     return out.sort((a,b)=>a.username.localeCompare(b.username));
   } catch(e) { console.error("Presence load error:", e); return []; }
 }
@@ -7949,23 +8055,28 @@ const taskStyles={
   error:{fontSize:11,color:"#A34C42",background:"#FFF2EF",border:"1px solid #F3D4CE",borderRadius:9,padding:"7px 9px",marginBottom:7},
 };
 
-// ── "Studying now" presence strip ─────────────────────────────────────────────
+// ── Accepted-friend presence strip ────────────────────────────────────────────
 function StudyingNow({ presence, currentUser, compact=false }) {
   const [chipRowRef, chipEdge] = useHScroll();
   const others = presence.filter(p=>p.username!==currentUser);
   if(!others.length) return null;
+  const studyingCount=others.filter(p=>p.status==="studying").length;
+  const summary=studyingCount
+    ? `${others.length} friend${others.length===1?"":"s"} online · ${studyingCount} studying`
+    : `${others.length} friend${others.length===1?"":"s"} online`;
   if(compact){
     return (
       <div style={sn.compactWrap}>
         <div style={sn.compactHeader}>
           <span style={sn.pulse}/>
-          <span style={sn.compactLabel}>{others.length===1?"1 person studying with you":`${others.length} people studying with you`}</span>
+          <span style={sn.compactLabel}>{summary}</span>
         </div>
         <div style={sn.compactRowWrap}>
           <div style={sn.compactRow} ref={chipRowRef}>
             {others.map(p=>(
-              <span key={p.username} style={{...sn.compactChip,borderColor:p.subjColor||"#56B68B"}} title={p.subjLabel}>
-                <span>{p.subjEmoji||"📚"}</span>
+              <span key={p.username} style={{...sn.compactChip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):"#C8D0CA"}}
+                title={p.status==="studying"?`Studying ${p.subjLabel}`:"Online"}>
+                <span>{p.status==="studying"?(p.subjEmoji||"📚"):"●"}</span>
                 <span style={sn.compactChipName}>{p.username}</span>
               </span>
             ))}
@@ -7979,11 +8090,12 @@ function StudyingNow({ presence, currentUser, compact=false }) {
   return (
     <div style={sn.wrap}>
       <span style={sn.pulse}/>
-      <span style={sn.label}>{others.length===1?"1 person studying now":`${others.length} studying now`}</span>
+      <span style={sn.label}>{summary}</span>
       <div style={sn.avatars}>
         {others.slice(0,6).map(p=>(
-          <span key={p.username} style={{...sn.chip,borderColor:p.subjColor||"#56B68B"}} title={`${p.username} · ${p.subjLabel}`}>
-            <span>{p.subjEmoji||"📚"}</span>
+          <span key={p.username} style={{...sn.chip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):"#C8D0CA"}}
+            title={p.status==="studying"?`${p.username} · studying ${p.subjLabel}`:`${p.username} · online`}>
+            <span style={{color:p.status==="studying"?"inherit":"#8FA098"}}>{p.status==="studying"?(p.subjEmoji||"📚"):"●"}</span>
             <span style={sn.chipName}>{p.username}</span>
           </span>
         ))}
@@ -10235,84 +10347,70 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
   );
 }
 
-function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, currentWeekKey }) {
+function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network }) {
   const [view,setView]=useState("weekly");
-  const [weekOffset,setWeekOffset]=useState(0);
-  const [pastEntries,setPastEntries]=useState(null);
-  const [pastLoading,setPastLoading]=useState(false);
-
-  // Load a past week's board when browsing history
-  useEffect(()=>{
-    if(view!=="past") return;
-    let active=true; setPastLoading(true);
-    fbLoadWeekBoard(weekKeyForOffset(weekOffset).key).then(e=>{ if(active){setPastEntries(e);setPastLoading(false);} });
-    return ()=>{active=false;};
-  },[view,weekOffset,currentWeekKey]);
-
-  const isPast = view==="past";
-  const entries = isPast ? (pastEntries||[]) : (data[view]||[]);
-  const showLoading = isPast ? pastLoading : loading;
+  const [friendUsername,setFriendUsername]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const entries=useMemo(()=>filterBoardForFriends(data[view]||[],currentUser,network.friends),[data,view,currentUser,network.friends]);
   const medals=["🥇","🥈","🥉"];
-  const wk = weekKeyForOffset(weekOffset);
-  const rewardDate = wk.weekStart;
-  const rewardMode = getWeeklyRewardMode(rewardDate);
-  const rewardPlan = getWeeklyRewardPlan(rewardDate);
-  const rewardTitle = rewardMode==="skin"
-    ? "Mystery character week"
-    : rewardMode==="classroom" ? "Classroom collection week" : "Coin reward week";
-  const rewardHint = rewardMode==="skin"
-    ? "First place receives a random unowned character style. If every style is owned, the prize becomes 300 coins."
-    : rewardMode==="classroom"
-      ? "First receives a random unowned background, second receives unowned classroom décor and third receives 100 coins. Completed collections fall back to placement coins."
-      : "This week all top-three places receive coins.";
+  const run=async action=>{
+    if(busy)return false;
+    setBusy(true);setError("");
+    try{const result=await action();if(!result?.ok){setError(result?.error||"Something went wrong.");return false;}return true;}
+    finally{setBusy(false);}
+  };
+  const send=async()=>{
+    if(await run(()=>fbSendFriendRequest(currentUser,friendUsername)))setFriendUsername("");
+  };
+  const respond=async(request,accept)=>{await run(()=>fbRespondFriendRequest(currentUser,request.id,accept));};
+  const cancel=async request=>{await run(()=>fbCancelFriendRequest(request.id));};
+  const remove=async friend=>{
+    if(!window.confirm(`Remove ${friend.username} from your friends?`))return;
+    await run(()=>fbRemoveFriend(currentUser,friend));
+  };
   return (
     <div>
+      <div style={fr.hero}>
+        <div><div style={fr.kicker}>YOUR STUDY CIRCLE</div><div style={fr.title}>Friends</div><div style={fr.subtitle}>Only accepted friends can see your status, subject and rankings.</div></div>
+        <div style={fr.count}>{network.friends.length}<span style={{fontSize:7,fontWeight:750,letterSpacing:.4}}>friends</span></div>
+      </div>
+      <div style={fr.addRow}>
+        <input style={gl.input} value={friendUsername} maxLength={20} onChange={event=>{setFriendUsername(event.target.value);setError("");}}
+          onKeyDown={event=>event.key==="Enter"&&friendUsername.trim()&&send()} placeholder="Add by username" aria-label="Friend username"/>
+        <button style={fr.addBtn} onClick={send} disabled={busy||!friendUsername.trim()}>{busy?"…":"Add"}</button>
+      </div>
+      {error&&<div style={/permission/i.test(error)?fr.notice:gl.error} role="status">
+        {/permission/i.test(error)?"Friend requests are temporarily unavailable.":error}
+      </div>}
+      {network.error&&<div style={fr.notice} role="status">Friends are temporarily unavailable.</div>}
+
+      {network.incoming.length>0&&<div style={fr.requestCard}>
+        <div style={gl.sectionLabel}>FRIEND REQUESTS</div>
+        {network.incoming.map(request=><div key={request.id} style={fr.requestRow}>
+          <span style={fr.avatar}>{request.username.slice(0,1).toUpperCase()}</span><strong style={fr.requestName}>{request.username}</strong>
+          <button style={gl.acceptBtn} disabled={busy} onClick={()=>respond(request,true)}>Accept</button>
+          <button style={gl.declineBtn} disabled={busy} onClick={()=>respond(request,false)} aria-label={`Decline ${request.username}`}>×</button>
+        </div>)}
+      </div>}
+      {network.outgoing.length>0&&<div style={fr.outgoing}>
+        <span>Pending:</span>{network.outgoing.map(request=><span key={request.id} style={fr.pendingChip}>{request.username}<button onClick={()=>cancel(request)} disabled={busy} aria-label={`Cancel request to ${request.username}`}>×</button></span>)}
+      </div>}
+      {network.friends.length>0&&<div style={fr.friendList}>
+        {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}>
+          <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><span style={fr.friendDot}/>{friend.username}</button>
+          <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
+        </div>)}
+      </div>}
+
       <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,lbl])=>(
+        {[["weekly","This Week"],["allTime","All Time"]].map(([id,lbl])=>(
           <button key={id} style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}}
-            onClick={()=>{setView(id);if(id==="past"&&weekOffset===0)setWeekOffset(1);}}>{lbl}</button>
+            onClick={()=>setView(id)}>{lbl}</button>
         ))}
       </div>
-      {isPast&&(
-        <div style={S.weekNav}>
-          <button style={S.weekNavBtn} onClick={()=>setWeekOffset(o=>o+1)}
-            aria-label="Show an older week" title="Older week">
-            <span style={S.weekNavArrow} aria-hidden="true">‹</span>
-            <span>Older</span>
-          </button>
-          <div style={S.weekNavCenter}>
-            <span style={S.weekNavLabel}>{wk.label}</span>
-            <span style={S.weekNavRange}>{wk.rangeLabel}</span>
-          </div>
-          <button style={{...S.weekNavBtn,...(weekOffset<=1?S.weekNavBtnDisabled:{})}} disabled={weekOffset<=1}
-            onClick={()=>setWeekOffset(o=>Math.max(1,o-1))} aria-label="Show a newer week" title="Newer week">
-            <span>Newer</span>
-            <span style={S.weekNavArrow} aria-hidden="true">›</span>
-          </button>
-        </div>
-      )}
-      {view!=="allTime"&&<div style={S.rewardCard}>
-        <div style={S.rewardCardTop}>
-          <div style={S.rewardCardTitle}>{rewardTitle}</div>
-          <div style={S.rewardCycleBadge}>3-week rotation</div>
-        </div>
-        <div style={S.rewardPrizeRow}>
-          {rewardPlan.map(prize=>(
-            <div key={prize.place} style={{...S.rewardPrize,...(prize.type!=="coins"?S.rewardPrizeSkin:{})}}>
-              <span style={S.rewardMedal}>{prize.medal}</span>
-              <span style={S.rewardPlace}>{prize.place}</span>
-              <span style={prize.type!=="coins"?S.rewardSkin:S.rewardCoins}>
-                {prize.type==="skin"?"🎁 Random style"
-                  :prize.type==="background"?"🌙 Background"
-                    :prize.type==="decoration"?"🏫 Classroom décor"
-                      :`+${prize.coins} 🪙`}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div style={S.rewardHint}>{rewardHint}</div>
-      </div>}
-      {showLoading&&<div>
+      <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(0).rangeLabel}</div>
+      {loading&&<div>
         {[0,1,2,3,4].map(i=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",marginBottom:8}}>
             <div className="sg-skeleton" style={{width:26,height:26,borderRadius:"50%",flexShrink:0,animationDelay:`${i*0.08}s`}}/>
@@ -10324,8 +10422,8 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, curre
           </div>
         ))}
       </div>}
-      {!showLoading&&entries.length===0&&<p style={S.empty}>{isPast?"No records for this week.":"No data yet — finish a session to appear!"}</p>}
-      {!showLoading&&entries.map((entry,i)=>{
+      {!loading&&entries.length===0&&<div style={fr.empty}><div>👥</div><strong>{network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}</strong><span>{network.friends.length?"Complete a session to appear in this ranking.":"Send a username request above. They must accept before either account appears."}</span></div>}
+      {!loading&&entries.map((entry,i)=>{
         const isMe=entry.username===currentUser;
         const topId=entry.subjects?Object.entries(entry.subjects).sort((a,b)=>b[1]-a[1])[0]?.[0]:null;
         const topSubj=subjects.find(s=>s.id===topId);
@@ -10351,6 +10449,13 @@ function LeaderboardPanel({ data, currentUser, loading, subjects, onVisit, curre
   );
 }
 
+const fr={
+  hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"linear-gradient(135deg,#EAF6EE,#F7F4FD)",border:"1px solid #D9E8DD",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"#6E9D7E"},title:{fontSize:18,fontWeight:850,color:"#20372A",marginTop:1},subtitle:{fontSize:10.5,color:"#7C8A81",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.82)",color:"#2D6A4F",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px rgba(45,106,79,.08)"},
+  addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"#2D6A4F",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"#fff",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",gap:7,alignItems:"center",padding:"4px 0"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"#EAF4EC",color:"#2D6A4F",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
+  outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px",scrollbarWidth:"thin"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"#fff",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"#4E6255",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
+  notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
+};
+
 function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey }){
   const inviteFromUrl=()=>new URLSearchParams(window.location.search).get("group")?.toUpperCase()||"";
   const [groups,setGroups]=useState(null);
@@ -10363,7 +10468,6 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [invitesLoading,setInvitesLoading]=useState(true);
   const [inviteLoadError,setInviteLoadError]=useState("");
   const [pendingInvites,setPendingInvites]=useState([]);
-  const [inviteUsername,setInviteUsername]=useState("");
   const [form,setForm]=useState(inviteFromUrl()?"join":null);
   const [groupName,setGroupName]=useState("");
   const [inviteCode,setInviteCode]=useState(inviteFromUrl);
@@ -10427,20 +10531,13 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     const result=await run(()=>fbDeclineGroupInvite(currentUser,invite.id));
     if(result)await reload(active?.id);
   };
-  const sendTargetedInvite=async()=>{
-    if(!active)return;
-    const result=await run(()=>fbSendGroupInvite(currentUser,active.id,inviteUsername));
-    if(!result)return;
-    setInviteUsername("");await reload(active.id);
-  };
   const cancelTargetedInvite=async invite=>{
     const result=await run(()=>fbCancelGroupInvite(currentUser,active.id,invite.id));
     if(result)await reload(active.id);
   };
   const shareInvite=async()=>{
     if(!active?.inviteCode)return;
-    const url=new URL(window.location.href);url.searchParams.set("group",active.inviteCode);
-    try{await navigator.clipboard.writeText(url.toString());setCopied(true);setTimeout(()=>setCopied(false),1600);}
+    try{await navigator.clipboard.writeText(active.inviteCode);setCopied(true);setTimeout(()=>setCopied(false),1600);}
     catch{setError(`Copy this code: ${active.inviteCode}`);}
   };
   const refreshInvite=async()=>{
@@ -10474,8 +10571,8 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
     <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Classroom Groups</div>
-      <div style={gl.introBody}>Small, invite-only weekly boards · up to {GROUP_MAX_MEMBERS} members · no effect on global prizes.</div>
+      <div style={gl.introTitle}>Private Group Leaderboards</div>
+      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
     </div>
 
     {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
@@ -10511,22 +10608,16 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
       <div style={gl.inviteCard}>
         <div>
-          <div style={gl.inviteLabel}>PERMANENT INVITE CODE</div>
+          <div style={gl.inviteLabel}>PERMANENT GROUP CODE</div>
           <div style={gl.inviteCode}>{active.inviteCode||"—"}</div>
           <div style={gl.inviteHint}>Valid until the owner replaces it or deletes the group</div>
         </div>
-        <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy link"}</button>
+        <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy code"}</button>
       </div>
 
       {managing&&<div style={gl.manageCard}>
-        <div style={gl.manageTitle}>Invite a Lumora user</div>
-        <div style={gl.inviteUserRow}>
-          <input style={gl.input} value={inviteUsername} maxLength={20} onChange={e=>{setInviteUsername(e.target.value);setError("");}}
-            onKeyDown={e=>e.key==="Enter"&&sendTargetedInvite()} placeholder="Username" aria-label="Username to invite"/>
-          <button style={gl.smallBtn} disabled={!inviteUsername.trim()||busy} onClick={sendTargetedInvite}>{busy?"…":"Invite"}</button>
-        </div>
         {pendingInvites.length>0&&<div style={gl.pendingList}>
-          <div style={gl.sectionLabel}>PENDING</div>
+          <div style={gl.sectionLabel}>EARLIER USERNAME INVITES</div>
           {pendingInvites.map(invite=><div key={invite.id} style={gl.pendingRow}>
             <span style={gl.pendingName}>{invite.invitedUser}</span>
             <span style={gl.pendingSender}>by {invite.createdBy}</span>
@@ -10585,13 +10676,15 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
     {error&&<div style={gl.error} role="alert">{error}</div>}
     {form==="create"&&<div style={gl.formCard}>
-      <div style={gl.manageTitle}>Create a group</div>
+      <div style={gl.manageTitle}>Create a group leaderboard</div>
+      <div style={gl.formHint}>Choose a name. Lumora will create the permanent eight-character code for you.</div>
       <input style={gl.input} value={groupName} maxLength={24} onChange={e=>setGroupName(e.target.value)} placeholder="Group name" autoFocus/>
       <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={create} disabled={busy}>{busy?"Creating…":"Create"}</button></div>
     </div>}
     {form==="join"&&<div style={gl.formCard}>
-      <div style={gl.manageTitle}>Join with a code</div>
-      <input style={{...gl.input,textTransform:"uppercase",letterSpacing:2,fontWeight:800}} value={inviteCode} maxLength={8} onChange={e=>setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z2-9]/g,""))} placeholder="8-character code" autoFocus/>
+      <div style={gl.manageTitle}>Join a group leaderboard</div>
+      <div style={gl.formHint}>Enter the code shared by the group owner.</div>
+      <input style={{...gl.input,textTransform:"uppercase",letterSpacing:2,fontWeight:800}} value={inviteCode} maxLength={8} onChange={e=>setInviteCode(e.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g,""))} placeholder="8-character code" autoFocus/>
       <div style={gl.formActions}><button style={gl.mutedBtn} onClick={()=>{setForm(null);setError("");}}>Cancel</button><button style={gl.primaryBtn} onClick={join} disabled={busy}>{busy?"Joining…":"Join"}</button></div>
     </div>}
     {!groupsError&&!form&&groups.length<GROUP_MAX_PER_USER&&<div style={gl.actionRow}>
@@ -10601,16 +10694,16 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   </div>;
 }
 
-function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey}){
-  const [section,setSection]=useState(()=>new URLSearchParams(window.location.search).has("group")?"groups":"global");
+function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network}){
+  const [section,setSection]=useState("groups");
   return <div>
     <div style={{...S.toggleRow,marginBottom:12}}>
-      <button style={{...S.toggleBtn,...(section==="global"?S.toggleBtnActive:{})}} onClick={()=>setSection("global")}>🏆 Global</button>
-      <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🌿 Groups</button>
+      <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🔐 Groups</button>
+      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>👥 Friends</button>
     </div>
-    {section==="global"
-      ? <LeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
-      : <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>}
+    {section==="groups"
+      ? <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
+      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network}/>}
   </div>;
 }
 
@@ -10629,7 +10722,7 @@ const gl={
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
   boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"#fff",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"#F0F8F3",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"#2D6A4F",background:"#DCEFE3",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
-  emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
+  emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},formHint:{fontSize:10.5,color:"#849087",lineHeight:1.45,margin:"-2px 0 9px"},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
 };
 
 // ── Progress level (lifetime-hours stages) ────────────────────────────────────
@@ -10887,7 +10980,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   });
   const [previewBackgroundId,setPreviewBackgroundId]=useState(null);
   const [targets,setTargets]=useState(()=>lsGet(LS_TARGETS,{}));   // { subjId: hoursPerWeek }
-  const [presence,setPresence]=useState([]);                        // who's studying now
+  const [presence,setPresence]=useState([]);                        // accepted friends online now
+  const [friendNetwork,setFriendNetwork]=useState({friends:[],incoming:[],outgoing:[],loading:true,error:""});
   const [showTargets,setShowTargets]=useState(false);
   const [decorations,setDecorations]=useState(()=>lsGet(LS_DECOR,[]));   // owned decoration ids
   const [gardenLayout,setGardenLayout]=useState(()=>lsGet(LS_GARDEN_LAYOUT,{}));
@@ -11065,24 +11159,37 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return()=>window.removeEventListener("storage",sync);
   },[user,ownedBackgrounds]);
 
-  // ── Presence: write a heartbeat while actively studying, clear when not ──
+  // One filtered listener keeps accepted friends and requests current without
+  // polling the entire user base. Firestore evaluates every returned document
+  // against the signed-in Firebase UID.
+  useEffect(()=>{
+    const currentUid=auth.currentUser?.uid;
+    if(!user||!prefsReady||!currentUid){setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:!!user,error:""});return;}
+    const connections=query(collection(db,"friend_connections"),where("userUids","array-contains",currentUid));
+    return onSnapshot(connections,snapshot=>{
+      const next=friendNetworkFromConnections(snapshot.docs.map(item=>({id:item.id,...item.data()})),currentUid);
+      setFriendNetwork({...next,loading:false,error:""});
+    },error=>{
+      console.error("Friend network load error:",error);
+      setFriendNetwork(current=>({...current,loading:false,error:"Friends couldn't be loaded. Try reopening this page."}));
+    });
+  },[user,prefsReady]);
+
+  // ── Presence: publish online or studying while this signed-in tab is open ──
   useEffect(()=>{
     // Wait for the account's cloud preferences before publishing a subject.
     // Otherwise a fast login switch can briefly advertise the previous
     // account's cached subject under the newly logged-in username.
     if(!user || !prefsReady) return;
     const earningFocus=timerStyle!=="pomodoro"||pomodoroRef.current.phase==="focus";
-    if(running && !paused && earningFocus){
+    const publish=()=>{
+      const studying=running&&!paused&&earningFocus;
       const subj = subjects.find(s=>s.id===subject) || subjects[0];
-      fbHeartbeat(user, subj.label, subj.emoji, subj.color);
-      const hb = setInterval(()=>{
-        const s = subjects.find(x=>x.id===subject) || subjects[0];
-        fbHeartbeat(user, s.label, s.emoji, s.color);
-      }, 45*1000);
-      return ()=>clearInterval(hb);
-    } else {
-      fbClearPresence(user);
-    }
+      fbHeartbeat(user,studying?"studying":"online",subj?.label,subj?.emoji,subj?.color);
+    };
+    publish();
+    const hb=setInterval(publish,45*1000);
+    return()=>clearInterval(hb);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[running, paused, subject, user, prefsReady, timerStyle, pomodoro.phase]);
 
@@ -11094,15 +11201,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return ()=>window.removeEventListener("pagehide", onUnload);
   },[user]);
 
-  // Poll who's studying now (every 30s while on the focus or board tab)
+  // Poll only accepted friends' small presence documents. This remains a
+  // bounded read even when Lumora grows to many users.
   useEffect(()=>{
     if(!user || !prefsReady) return;
     let active = true;
-    const load = async ()=>{ const p = await fbLoadPresence(); if(active) setPresence(p); };
+    const load = async ()=>{ const p = await fbLoadFriendPresence(friendNetwork.friends); if(active) setPresence(p); };
     load();
     const iv = setInterval(load, 30*1000);
     return ()=>{ active=false; clearInterval(iv); };
-  },[user, prefsReady, tab, running]);
+  },[user,prefsReady,tab,running,friendNetwork.friends]);
   const intervalRef  = useRef(null);
   const startTimeRef = useRef(null);
   const baseElapsed  = useRef(0);
@@ -11774,7 +11882,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
     setDecorations([]);setGardenLayout({});setTasks([]);setTasksError("");setTasksLoading(false);setSelectedTaskId("");
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
-    setLb({weekly:[],allTime:[]});setPresence([]);setOtherTabActive(false);setLoading(false);setTab("timer");
+    setLb({weekly:[],allTime:[]});setPresence([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
     setShowSessions(false);setShowAccount(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
   };
@@ -12493,7 +12601,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           {tab==="leaderboard"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-board">
               <StudyingNow presence={presence} currentUser={user}/>
-              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey}/>
+              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}/>
             </div>
           )}
 

@@ -33,6 +33,25 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
 
+    function isFriendParticipant(data) {
+      return signedIn()
+        && data.userUids is list
+        && request.auth.uid in data.userUids;
+    }
+
+    function validFriendAccess(ownerUsername, viewerUid, data) {
+      let connection = getAfter(/databases/$(database)/documents/friend_connections/$(data.connectionId)).data;
+      return signedIn()
+        && data.ownerUsername == ownerUsername
+        && data.viewerUid == viewerUid
+        && connection.status == 'accepted'
+        && request.auth.uid in connection.userUids
+        && ((connection.requesterUsername == ownerUsername
+              && connection.recipientUid == viewerUid)
+            || (connection.recipientUsername == ownerUsername
+              && connection.requesterUid == viewerUid));
+    }
+
     match /roles/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -85,10 +104,50 @@ service cloud.firestore {
     }
 
     match /presence/{username} {
-      allow read: if signedIn();
+      // Presence is deliberately not listable. Clients fetch the small known
+      // set of accepted friends individually, and the access grant is created
+      // atomically when a friend request is accepted.
+      allow get: if ownsUsername(username)
+        || (signedIn() && exists(/databases/$(database)/documents/friend_access/$(username)/viewers/$(request.auth.uid)));
+      allow list: if false;
       allow create, update: if ownsUsername(username)
-        && request.resource.data.username == username;
+        && request.resource.data.username == username
+        && request.resource.data.ts is int
+        // Older clients did not send status; retain that narrow transition
+        // path while all saved users receive the new bundle.
+        && (!('status' in request.resource.data)
+          || request.resource.data.status in ['online', 'studying']);
       allow delete: if ownsUsername(username);
+    }
+
+    match /friend_connections/{connectionId} {
+      allow get, list: if isFriendParticipant(resource.data);
+      allow create: if signedIn()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requesterUid == request.auth.uid
+        && request.resource.data.requesterUid != request.resource.data.recipientUid
+        && ownsUsername(request.resource.data.requesterUsername)
+        && get(/databases/$(database)/documents/usernames/$(request.resource.data.recipientUsername)).data.uid
+          == request.resource.data.recipientUid
+        && request.resource.data.userUids is list
+        && request.resource.data.userUids.size() == 2
+        && request.resource.data.requesterUid in request.resource.data.userUids
+        && request.resource.data.recipientUid in request.resource.data.userUids;
+      allow update: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.status == 'accepted'
+        && onlyChanges(['status', 'acceptedAt', 'updatedAt']);
+      allow delete: if isFriendParticipant(resource.data);
+    }
+
+    match /friend_access/{ownerUsername}/viewers/{viewerUid} {
+      allow get: if ownsUsername(ownerUsername)
+        || (signedIn() && request.auth.uid == viewerUid);
+      allow list: if false;
+      allow create, update: if validFriendAccess(ownerUsername, viewerUid, request.resource.data);
+      allow delete: if ownsUsername(ownerUsername)
+        || (signedIn() && request.auth.uid == viewerUid);
     }
 
     // StudyGrove-compatible aggregate boards are retained. Client-side

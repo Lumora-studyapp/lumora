@@ -179,7 +179,7 @@ const WEEKLY_REWARD_INVARIANTS = [
   'background = pickWeeklyBackground(weekKey,username,ownedBackgrounds);',
   'decoration = pickWeeklyDecoration(weekKey,username,ownedDecorations);',
   'rewardType:background?"background":decoration?"decoration":skin?"skin":reward>0?"coins":"none",',
-  '<div style={S.rewardCycleBadge}>3-week rotation</div>',
+  'const getWeeklyRewardPlan = date => {',
 ]
 
 function applySourceReplacements(code, replacements, groupName) {
