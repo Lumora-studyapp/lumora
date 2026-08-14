@@ -1858,7 +1858,9 @@ async function fbLoadWeekBoard(wk) {
   try {
     const snap = await getDoc(doc(db, "leaderboard_weekly", wk));
     if (!snap.exists()) return [];
-    return normalizeBoardEntries(snap.data()).slice(0,20);
+    // Keep the full aggregate so private friends outside the public top 20
+    // remain visible when browsing historical weeks.
+    return normalizeBoardEntries(snap.data());
   } catch(e) { console.error("Firebase week board error:", e); return []; }
 }
 
@@ -1892,11 +1894,11 @@ async function fbLoadGroups(usernameRaw){
   }catch(e){console.error("Group load error:",e);return {ok:false,groups:[],error:"Your groups couldn't be loaded. Try again."};}
 }
 
-async function fbLoadGroupBoard(group,view="weekly"){
+async function fbLoadGroupBoard(group,view="weekly",weekKey=getWeekKey()){
   try{
     const ref=view==="allTime"
       ? doc(db,"leaderboard_alltime","data")
-      : doc(db,"leaderboard_weekly",getWeekKey());
+      : doc(db,"leaderboard_weekly",weekKey);
     const snap=await getDoc(ref);
     const ranked=snap.exists()?normalizeBoardEntries(snap.data()):[];
     const rows=groupRows(group,ranked);
@@ -10392,10 +10394,27 @@ function LeaderboardRows({entries,currentUser,subjects,onVisit,loading=false,emp
   });
 }
 
-function WeeklyGroupRewardCard({group,weeklyEntries}){
+function LeaderboardWeekNavigator({weekOffset,onChange}){
+  const week=weekKeyForOffset(weekOffset);
+  return <div style={S.weekNav} aria-label="Leaderboard week">
+    <button style={S.weekNavBtn} onClick={()=>onChange(weekOffset+1)} aria-label="Show an older week" title="Older week">
+      <span style={S.weekNavArrow} aria-hidden="true">‹</span><span>Older</span>
+    </button>
+    <div style={S.weekNavCenter}>
+      <span style={S.weekNavLabel}>{week.label}</span>
+      <span style={S.weekNavRange}>{week.rangeLabel}</span>
+    </div>
+    <button style={{...S.weekNavBtn,...(weekOffset<=1?S.weekNavBtnDisabled:{})}} disabled={weekOffset<=1}
+      onClick={()=>onChange(Math.max(1,weekOffset-1))} aria-label="Show a newer week" title="Newer week">
+      <span>Newer</span><span style={S.weekNavArrow} aria-hidden="true">›</span>
+    </button>
+  </div>;
+}
+
+function WeeklyGroupRewardCard({group,weeklyEntries,rewardDate=new Date(),historical=false}){
   const eligibility=groupRewardEligibility(group,weeklyEntries);
-  const rewardMode=getWeeklyRewardMode(new Date());
-  const rewardPlan=getWeeklyRewardPlan(new Date());
+  const rewardMode=getWeeklyRewardMode(rewardDate);
+  const rewardPlan=getWeeklyRewardPlan(rewardDate);
   const title=rewardMode==="skin"?"Mystery character week":rewardMode==="classroom"?"Classroom collection week":"Coin reward week";
   return <div style={{...S.rewardCard,marginBottom:10}}>
     <div style={S.rewardCardTop}><div style={S.rewardCardTitle}>{title}</div><div style={S.rewardCycleBadge}>3-week rotation</div></div>
@@ -10404,19 +10423,35 @@ function WeeklyGroupRewardCard({group,weeklyEntries}){
       <span style={prize.type!=="coins"?S.rewardSkin:S.rewardCoins}>{prize.type==="skin"?"🎁 Random style":prize.type==="background"?"🌙 Background":prize.type==="decoration"?"🏫 Classroom décor":`+${prize.coins} 🪙`}</span>
     </div>)}</div>
     <div style={{...gl.rewardEligibility,...(eligibility.eligible?gl.rewardEligible:{})}}>
-      {eligibility.eligible?"✓ Reward eligible":`${eligibility.participantCount}/${eligibility.minimum} participating members`}
-      <span>{eligibility.eligible?" Prizes settle after the Sunday reset.":" Five members must study this week to unlock prizes."}</span>
+      {eligibility.eligible?(historical?"✓ Eligibility reached":"✓ Reward eligible"):`${eligibility.participantCount}/${eligibility.minimum} participating members`}
+      <span>{eligibility.eligible
+        ? historical?" This group's podium qualified for that week's prizes.":" Prizes settle after the Sunday reset."
+        : historical?" This group did not reach the five-participant minimum.":" Five members must study this week to unlock prizes."}</span>
     </div>
   </div>;
 }
 
-function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network }) {
+function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network, currentWeekKey }) {
   const [view,setView]=useState("weekly");
+  const [weekOffset,setWeekOffset]=useState(1);
+  const [pastEntries,setPastEntries]=useState([]);
+  const [pastLoading,setPastLoading]=useState(false);
   const [managing,setManaging]=useState(false);
   const [friendUsername,setFriendUsername]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
-  const entries=useMemo(()=>filterBoardForFriends(data[view]||[],currentUser,network.friends),[data,view,currentUser,network.friends]);
+  useEffect(()=>{
+    if(view!=="past")return;
+    let live=true;
+    setPastLoading(true);
+    fbLoadWeekBoard(weekKeyForOffset(weekOffset).key).then(rows=>{
+      if(live){setPastEntries(rows);setPastLoading(false);}
+    });
+    return()=>{live=false;};
+  },[view,weekOffset,currentWeekKey]);
+  const sourceEntries=view==="past"?pastEntries:(data[view]||[]);
+  const entries=useMemo(()=>filterBoardForFriends(sourceEntries,currentUser,network.friends),[sourceEntries,currentUser,network.friends]);
+  const showLoading=view==="past"?pastLoading:loading;
   const run=async action=>{
     if(busy)return false;
     setBusy(true);setError("");
@@ -10467,15 +10502,16 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
       </div>}</div>}
 
       <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"]].map(([id,lbl])=>(
+        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,lbl])=>(
           <button key={id} style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}}
             onClick={()=>setView(id)}>{lbl}</button>
         ))}
       </div>
-      <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(0).rangeLabel}</div>
-      <LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={loading}
+      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
+      <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(view==="past"?weekOffset:0).rangeLabel}</div>
+      <LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showLoading}
         emptyTitle={network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}
-        emptyBody={network.friends.length?"Complete a session to appear in this ranking.":"Open Friend settings to send a username request."}/>
+        emptyBody={network.friends.length?(view==="past"?"No accepted friends recorded study time in this week.":"Complete a session to appear in this ranking."):"Open Friend settings to send a username request."}/>
     </div>
   );
 }
@@ -10493,9 +10529,14 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [groupsError,setGroupsError]=useState("");
   const [activeId,setActiveId]=useState(null);
   const [view,setView]=useState("weekly");
+  const [weekOffset,setWeekOffset]=useState(1);
   const [boards,setBoards]=useState({weekly:[],allTime:[]});
   const [boardLoading,setBoardLoading]=useState(false);
   const [boardError,setBoardError]=useState("");
+  const [pastBoard,setPastBoard]=useState([]);
+  const [pastLoading,setPastLoading]=useState(false);
+  const [pastError,setPastError]=useState("");
+  const [pastAttempt,setPastAttempt]=useState(0);
   const [incomingInvites,setIncomingInvites]=useState([]);
   const [invitesLoading,setInvitesLoading]=useState(true);
   const [inviteLoadError,setInviteLoadError]=useState("");
@@ -10537,6 +10578,16 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     });
     return()=>{live=false;};
   },[active,currentWeekKey]);
+  useEffect(()=>{
+    let live=true;
+    if(view!=="past"||!active){setPastBoard([]);setPastError("");return;}
+    setPastLoading(true);setPastError("");
+    const selectedWeek=weekKeyForOffset(weekOffset);
+    fbLoadGroupBoard(active,"weekly",selectedWeek.key).then(result=>{
+      if(live){setPastBoard(result.rows||[]);setPastError(result.ok?"":result.error);setPastLoading(false);}
+    });
+    return()=>{live=false;};
+  },[active,view,weekOffset,currentWeekKey,pastAttempt]);
 
   const run=async action=>{
     if(busy)return null;
@@ -10602,8 +10653,12 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     if(result)await reload();
   };
   const owner=active&&canonUsername(active.owner)===canonUsername(currentUser);
-  const board=boards[view]||[];
+  const board=view==="past"?pastBoard:(boards[view]||[]);
+  const showBoardLoading=view==="past"?pastLoading:boardLoading;
+  const showBoardError=view==="past"?pastError:boardError;
   const weeklyEligibility=groupRewardEligibility(active,boards.weekly);
+  const displayedWeek=view==="past"?weekKeyForOffset(weekOffset):weekKeyForOffset(0);
+  const displayedEligibility=groupRewardEligibility(active,view==="past"?pastBoard:boards.weekly);
 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
@@ -10680,24 +10735,29 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
       </div>}
 
       <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"]].map(([id,label])=><button key={id}
+        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
           style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
       </div>
-      {view==="weekly"&&<WeeklyGroupRewardCard group={active} weeklyEntries={boards.weekly}/>}
-      <div style={gl.boardBar}>
-        <span>{view==="weekly"?"Weekly standings":"All-time standings"}</span>
-        <span>{view==="weekly"?weekKeyForOffset(0).rangeLabel:"Since joining Lumora"}</span>
-      </div>
-      {!boardLoading&&boardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{boardError}</span><button style={gl.retryBtn} onClick={()=>reload(active.id)}>Try again</button></div>}
-      {!boardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={boardLoading}
-        emptyTitle={view==="weekly"?"No focus time this week":"No all-time focus time yet"}
-        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":"Group members appear here after completing a session."}/>
+      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
+      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
+        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
       }
-      {!boardLoading&&!boardError&&<div style={{...gl.badgeNote,...(view==="weekly"&&weeklyEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view==="weekly"
-          ? weeklyEligibility.eligible
-            ? "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${weeklyEligibility.participantCount}/${weeklyEligibility.minimum} members have studied. Five participating members unlock this week's rewards.`
+      <div style={gl.boardBar}>
+        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
+        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
+      </div>
+      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
+      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
+        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
+        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
+      }
+      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
+        {view!=="allTime"
+          ? displayedEligibility.eligible
+            ? view==="past"
+              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
+            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
           : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
       </div>}
     </>}
@@ -10733,7 +10793,7 @@ function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKe
     </div>
     {section==="groups"
       ? <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
-      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network}/>}
+      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network} currentWeekKey={currentWeekKey}/>}
   </div>;
 }
 
