@@ -10380,8 +10380,10 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
           onKeyDown={event=>event.key==="Enter"&&friendUsername.trim()&&send()} placeholder="Add by username" aria-label="Friend username"/>
         <button style={fr.addBtn} onClick={send} disabled={busy||!friendUsername.trim()}>{busy?"…":"Add"}</button>
       </div>
-      {error&&<div style={gl.error} role="alert">{error}</div>}
-      {network.error&&<div style={gl.error} role="alert">{network.error}</div>}
+      {error&&<div style={/permission/i.test(error)?fr.notice:gl.error} role="status">
+        {/permission/i.test(error)?"Friend requests are temporarily unavailable.":error}
+      </div>}
+      {network.error&&<div style={fr.notice} role="status">Friends are temporarily unavailable.</div>}
 
       {network.incoming.length>0&&<div style={fr.requestCard}>
         <div style={gl.sectionLabel}>FRIEND REQUESTS</div>
@@ -10451,6 +10453,7 @@ const fr={
   hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"linear-gradient(135deg,#EAF6EE,#F7F4FD)",border:"1px solid #D9E8DD",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"#6E9D7E"},title:{fontSize:18,fontWeight:850,color:"#20372A",marginTop:1},subtitle:{fontSize:10.5,color:"#7C8A81",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.82)",color:"#2D6A4F",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px rgba(45,106,79,.08)"},
   addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"#2D6A4F",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"#fff",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",gap:7,alignItems:"center",padding:"4px 0"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"#EAF4EC",color:"#2D6A4F",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
   outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px",scrollbarWidth:"thin"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"#fff",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"#4E6255",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
+  notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
 };
 
 function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey }){
@@ -10692,15 +10695,15 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 }
 
 function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network}){
-  const [section,setSection]=useState(()=>new URLSearchParams(window.location.search).has("group")?"groups":"friends");
+  const [section,setSection]=useState("groups");
   return <div>
     <div style={{...S.toggleRow,marginBottom:12}}>
-      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>👥 Friends</button>
       <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🔐 Groups</button>
+      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>👥 Friends</button>
     </div>
-    {section==="friends"
-      ? <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network}/>
-      : <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>}
+    {section==="groups"
+      ? <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
+      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network}/>}
   </div>;
 }
 
