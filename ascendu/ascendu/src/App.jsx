@@ -7401,7 +7401,7 @@ const LEGAL_SECTIONS = {
     ["Information we collect","Account details such as your username, display name, email address (where provided), Firebase account identifier and authentication information; study sessions, subjects, goals, assessments and checklist items; coins, rewards, characters, classroom layouts and preferences; friends, groups, invitations, leaderboard results and friend-only online or studying status; announcement replies and reactions; and basic device, security, diagnostic and usage information needed to operate and protect Lumora. Lumora does not offer private or direct messaging."],
     ["Why we use it","To create and secure accounts; save study progress; provide focus, statistics, rewards, friends, groups and leaderboards; sync across devices; respond to support and privacy requests; prevent misuse; diagnose faults; and comply with law. We do not sell personal information or use it for targeted advertising."],
     ["Who can see it","Leaderboard users may see your username, focused time, sessions and subject summaries. Accepted friends may also see your current online or studying status and active subject when presence sharing is enabled. Group members can see information needed for group rankings and rewards. Announcement replies and reactions are visible to signed-in users. Private checklist items, assessments, account credentials and detailed session records are not intentionally made public."],
-    ["Service providers and overseas processing","Lumora uses Google Firebase and Vercel for authentication, database, hosting, security and delivery. These providers may process information in Australia and overseas under their own security and privacy terms. Future payment providers will receive only the information needed to process purchases; Lumora will not store complete card details."],
+    ["Service providers and overseas processing","Lumora uses Google Firebase and trusted cloud hosting, security and delivery providers to operate the service. These providers may process information in Australia and overseas under their own security and privacy terms. Future payment providers will receive only the information needed to process purchases; Lumora will not store complete card details."],
     ["Storage and retention","Account and study data is kept while your account is active and for a reasonable period needed for security, backups, disputes and legal obligations. Deleted information may remain temporarily in protected backups before being overwritten. Browser local storage keeps preferences and session-recovery data on your device."],
     ["Your choices and rights","You can hide presence, download a copy of the main account data currently loaded in Lumora, correct certain information and request access, correction or deletion. Some public ranking records or de-identified aggregate information may need separate cleanup or may be retained where legally required."],
     ["Young users","Lumora is designed for students. If you are under 16, review these terms with a parent or guardian. Lumora uses privacy-protective defaults, does not run targeted advertising and asks users not to place real names, contact details or sensitive information in usernames, group names or announcement replies."],
@@ -7419,6 +7419,15 @@ const LEGAL_SECTIONS = {
     ["Availability and liability","We aim to keep Lumora available but cannot promise uninterrupted or error-free operation. Nothing in these terms excludes rights or remedies that cannot legally be excluded, including Australian Consumer Law guarantees. To the extent permitted by law, Lumora is not responsible for indirect loss that was not reasonably foreseeable."],
     ["Changes and law",`Material changes will be communicated reasonably. These terms are governed by applicable Australian law. Effective ${LEGAL_EFFECTIVE_DATE}.`],
   ]},
+  accessibility:{label:"Accessibility & AI",title:"Accessibility & AI",intro:"How Lumora uses AI during development and the accessibility checks completed so far.",sections:[
+    ["AI-assisted development","Lumora was created with help from generative AI tools, including assistance with planning, interface ideas, code drafting, debugging and written content. AI-generated work is reviewed and selected by Lumora's human operator, who remains responsible for the service. Lumora does not currently include an AI assistant that reads your account, study sessions or private information simply because AI helped build the site."],
+    ["Accessibility approach","Lumora aims to follow the principles of the Web Content Accessibility Guidelines: content should be perceivable, operable, understandable and robust. Accessibility is an ongoing process, not a one-time certification."],
+    ["Visual access needs","The interface has been reviewed for readable text, clear hierarchy, responsive layouts, visible control states and contrast that does not rely only on colour. These checks are intended to help people with low vision and colour-vision differences, but they are not a substitute for testing every device, zoom level or display setting."],
+    ["Motor and keyboard access","Interactive controls use native buttons, links and form inputs where practical, with labels for many icon-only controls and visible keyboard-focus styling in key areas. This supports keyboard-only use and users with limited fine-motor control. Some complex classroom arrangement interactions may still work best with a pointer and remain an area for improvement."],
+    ["Motion and vestibular access","Lumora provides Full animation, Reduced animation, Animation off and device-setting options. Reduced-motion behaviour is used to limit non-essential movement for people who experience motion sensitivity or vestibular symptoms."],
+    ["Screen readers and cognitive access","Important dialogs, status messages and form controls include semantic roles or accessible labels, and this section uses short headings and plain-language summaries. These choices are intended to support screen-reader users and people with attention, learning or cognitive access needs."],
+    ["Testing limits and feedback",`Checks so far include code review, browser and responsive-layout checks, keyboard and labelled-control review, and motion-setting review. Lumora has not yet completed an independent accessibility audit, does not claim full WCAG conformance, and has not claimed that testing was performed by people with each disability listed above. If something is difficult to use, contact ${LEGAL_CONTACT_EMAIL} with the page, device and issue so it can be investigated.`],
+  ]},
 };
 
 function PrivacyDataPanel({user,privacyPrefs,onPrivacyChange,exportData,onClose,onBack}){
@@ -7431,51 +7440,61 @@ function PrivacyDataPanel({user,privacyPrefs,onPrivacyChange,exportData,onClose,
     setTimeout(()=>setSaved(""),2400);
   };
   const contactHref=LEGAL_CONTACT_EMAIL?`mailto:${LEGAL_CONTACT_EMAIL}?subject=${encodeURIComponent(`Lumora privacy request — ${user}`)}`:"";
+  const documentIcon=view==="privacy"?"🛡️":view==="terms"?"📄":"♿";
   return <div style={pd.overlay} className="sg-overlay-anim" onClick={onClose}>
-    <div style={pd.sheet} className="sg-sheet-anim" onClick={event=>event.stopPropagation()}>
+    <div style={pd.sheet} className="sg-sheet-anim" onClick={event=>event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="privacy-data-title">
       <div style={pd.header}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <button style={ap.back} onClick={view==="overview"?(onBack||onClose):()=>setView("overview")} aria-label="Back">←</button>
-          <div><div style={ap.kicker}>PRIVACY & DATA</div><h3 style={ap.title}>{document?.title||"Your information"}</h3></div>
+          <div><div style={ap.kicker}>PRIVACY & DATA</div><h3 id="privacy-data-title" style={ap.title}>{document?.title||"Your information"}</h3></div>
         </div>
         <button style={ap.x} onClick={onClose} aria-label="Close">✕</button>
       </div>
       {view==="overview"?<>
-        <div style={pd.summary}>Control what friends see, understand how Lumora uses information and manage your data.</div>
+        <div style={pd.hero}>
+          <div style={pd.heroIcon}>🛡️</div>
+          <div><b style={pd.heroTitle}>Your information, clearly explained</b><span style={pd.summary}>Choose what friends see, manage your data and read Lumora's policies without legal clutter.</span></div>
+        </div>
+        <div style={pd.trustRow}>{["Private by design","No targeted ads","Export available"].map(item=><span key={item} style={pd.trustPill}>{item}</span>)}</div>
         {saved&&<div style={pd.notice} role="status">{saved}</div>}
-        <section style={ap.section}>
-          <div style={ap.secTitle}>Friend visibility</div>
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><span style={pd.sectionIcon}>👥</span><div><b>Friend visibility</b><small>Control live activity sharing</small></div></div>
           <label style={pd.toggleRow}>
             <span><b style={pd.toggleTitle}>Online and studying status</b><small style={pd.toggleSub}>Accepted friends can see when you are online and, during focus, your selected subject.</small></span>
             <input type="checkbox" checked={privacyPrefs.sharePresence!==false} onChange={event=>updatePresence(event.target.checked)} style={pd.checkbox}/>
           </label>
           <p style={pd.helper}>Your username and study totals can still appear in leaderboards and groups. Detailed sessions, assessments and checklist items stay private.</p>
         </section>
-        <section style={ap.section}>
-          <div style={ap.secTitle}>Your data</div>
-          <button style={pd.action} onClick={exportData}><span>⬇️</span><span><b>Download my data</b><small>Export account progress and settings as JSON</small></span></button>
-          {contactHref?<a style={{...pd.action,textDecoration:"none"}} href={contactHref}><span>✉️</span><span><b>Access, correct or delete data</b><small>Email Lumora's privacy contact</small></span></a>:
-            <div style={{...pd.action,cursor:"default",opacity:.75}}><span>✉️</span><span><b>Access, correct or delete data</b><small>Privacy contact is being configured before public release</small></span></div>}
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><span style={pd.sectionIcon}>🗂️</span><div><b>Your data</b><small>Access, export or request changes</small></div></div>
+          <div style={pd.actionGrid}>
+            <button style={pd.action} onClick={exportData}><span style={pd.actionIcon}>↓</span><span><b>Download data</b><small>Account progress and settings as JSON</small></span></button>
+            {contactHref?<a style={{...pd.action,textDecoration:"none"}} href={contactHref}><span style={pd.actionIcon}>✉</span><span><b>Privacy request</b><small>Access, correct or delete your information</small></span></a>:
+              <div style={{...pd.action,cursor:"default",opacity:.75}}><span style={pd.actionIcon}>✉</span><span><b>Privacy request</b><small>Contact is being configured</small></span></div>}
+          </div>
         </section>
-        <section style={ap.section}>
-          <div style={ap.secTitle}>Legal documents</div>
-          {Object.entries(LEGAL_SECTIONS).map(([id,item])=><button key={id} style={pd.documentRow} onClick={()=>setView(id)}><span>{id==="privacy"?"🛡️":"📄"}</span><span style={{flex:1,textAlign:"left"}}><b>{item.label}</b><small>Effective {LEGAL_EFFECTIVE_DATE}</small></span><span style={hm.chev}>›</span></button>)}
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><span style={pd.sectionIcon}>📚</span><div><b>Policies & transparency</b><small>Plain-language documents</small></div></div>
+          <div style={pd.documentList}>
+            {Object.entries(LEGAL_SECTIONS).map(([id,item])=><button key={id} style={pd.documentRow} onClick={()=>setView(id)}><span style={pd.documentIcon}>{id==="privacy"?"🛡️":id==="terms"?"📄":"♿"}</span><span style={{flex:1,textAlign:"left"}}><b>{item.label}</b><small>{id==="accessibility"?"AI disclosure and access checks":`Effective ${LEGAL_EFFECTIVE_DATE}`}</small></span><span style={hm.chev}>›</span></button>)}
+          </div>
           <div style={pd.paymentNote}><b>Purchases and subscriptions</b><br/>Not active yet. Full price, renewal, cancellation and refund details must appear before any paid checkout launches.</div>
         </section>
       </>:<>
-        <p style={pd.legalIntro}>{document.intro}</p>
-        {document.sections.map(([heading,body])=><section key={heading} style={pd.legalSection}><h4>{heading}</h4><p>{body}</p></section>)}
+        <div style={pd.documentHero}><span style={pd.documentHeroIcon}>{documentIcon}</span><p style={pd.legalIntro}>{document.intro}</p></div>
+        <div style={pd.legalList}>{document.sections.map(([heading,body],index)=><section key={heading} style={pd.legalSection}><span style={pd.sectionNumber}>{String(index+1).padStart(2,"0")}</span><div><h4 style={pd.legalHeading}>{heading}</h4><p style={pd.legalBody}>{body}</p></div></section>)}</div>
         {LEGAL_CONTACT_EMAIL&&<a href={contactHref} style={pd.contact}>Contact: {LEGAL_CONTACT_EMAIL}</a>}
       </>}
     </div>
   </div>;
 }
 const pd={
-  overlay:{...ap.overlay,zIndex:355},sheet:{...ap.modal,maxHeight:"94vh"},header:{...ap.header,position:"sticky",top:-22,zIndex:2,background:"#F7FAF6",paddingTop:22,paddingBottom:10},
-  summary:{fontSize:13,color:"#657069",lineHeight:1.55,margin:"-4px 2px 14px"},notice:{background:"#EAF5ED",color:"#2D6A4F",borderRadius:10,padding:"9px 11px",fontSize:12.5,fontWeight:700,marginBottom:12},
-  toggleRow:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,cursor:"pointer"},toggleTitle:{display:"block",fontSize:13.5,color:"#27332B"},toggleSub:{display:"block",fontSize:11.5,color:"#89928C",lineHeight:1.45,marginTop:3},checkbox:{width:22,height:22,accentColor:"#2D6A4F",flexShrink:0},helper:{fontSize:10.8,color:"#98A099",lineHeight:1.45,margin:"12px 0 0"},
-  action:{display:"flex",alignItems:"center",gap:11,width:"100%",boxSizing:"border-box",border:0,borderBottom:"1px solid #EDF1EB",background:"transparent",padding:"11px 2px",cursor:"pointer",color:"#27332B",fontFamily:"inherit",fontSize:17,textAlign:"left"},documentRow:{display:"flex",alignItems:"center",gap:11,width:"100%",border:0,borderBottom:"1px solid #EDF1EB",background:"transparent",padding:"12px 2px",cursor:"pointer",fontFamily:"inherit",fontSize:17},paymentNote:{fontSize:11.5,color:"#737D76",lineHeight:1.5,background:"#F4F7F2",borderRadius:10,padding:"10px 11px",marginTop:12},
-  legalIntro:{fontSize:13,color:"#657069",lineHeight:1.55,margin:"0 2px 14px"},legalSection:{background:"#fff",borderRadius:14,padding:"14px 15px",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.04)"},contact:{display:"block",color:"#2D6A4F",fontSize:12.5,fontWeight:700,margin:"16px 3px"},
+  overlay:{...ap.overlay,zIndex:355},sheet:{...ap.modal,maxWidth:590,maxHeight:"94vh",padding:"20px 22px 24px",background:"#F8FAF7"},header:{...ap.header,position:"sticky",top:-20,zIndex:2,background:"rgba(248,250,247,.96)",backdropFilter:"blur(12px)",paddingTop:20,paddingBottom:14,marginBottom:4},
+  hero:{display:"flex",alignItems:"center",gap:13,background:"linear-gradient(135deg,#EAF4EC,#F7F3E8)",border:"1px solid #DDEADD",borderRadius:18,padding:"16px 17px",margin:"2px 0 10px"},heroIcon:{width:42,height:42,borderRadius:14,display:"grid",placeItems:"center",background:"#fff",fontSize:20,boxShadow:"0 4px 12px rgba(52,86,62,.09)",flexShrink:0},heroTitle:{display:"block",fontSize:14.5,color:"#25352A",marginBottom:3},summary:{display:"block",fontSize:11.7,color:"#69756D",lineHeight:1.45},trustRow:{display:"flex",flexWrap:"wrap",gap:6,margin:"0 1px 15px"},trustPill:{fontSize:9.8,fontWeight:750,color:"#5B6D61",background:"#EFF4EE",border:"1px solid #E1E9DF",borderRadius:999,padding:"5px 8px"},notice:{background:"#EAF5ED",color:"#2D6A4F",borderRadius:11,padding:"9px 11px",fontSize:12.5,fontWeight:700,marginBottom:12},
+  section:{background:"#fff",border:"1px solid #E6ECE4",borderRadius:17,padding:"15px 16px",marginBottom:11,boxShadow:"0 4px 16px rgba(42,65,48,.035)"},sectionHeading:{display:"flex",alignItems:"center",gap:9,marginBottom:12,color:"#2C3B31",fontSize:13.5},sectionIcon:{width:30,height:30,display:"grid",placeItems:"center",borderRadius:10,background:"#F0F5EF",fontSize:14},
+  toggleRow:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:18,cursor:"pointer",padding:"2px 0"},toggleTitle:{display:"block",fontSize:13.2,color:"#27332B"},toggleSub:{display:"block",fontSize:11.3,color:"#7E8982",lineHeight:1.48,marginTop:4,maxWidth:420},checkbox:{width:22,height:22,accentColor:"#2D6A4F",flexShrink:0},helper:{fontSize:10.7,color:"#8C9790",lineHeight:1.5,margin:"12px 0 0",paddingTop:10,borderTop:"1px solid #EEF2ED"},
+  actionGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:8},action:{display:"flex",alignItems:"center",gap:10,width:"100%",boxSizing:"border-box",border:"1px solid #E4EBE2",borderRadius:12,background:"#FBFCFA",padding:"11px 12px",cursor:"pointer",color:"#27332B",fontFamily:"inherit",fontSize:15,textAlign:"left"},actionIcon:{width:29,height:29,borderRadius:9,background:"#EAF3EB",display:"grid",placeItems:"center",fontSize:14,flexShrink:0},documentList:{border:"1px solid #E6ECE4",borderRadius:13,overflow:"hidden"},documentRow:{display:"flex",alignItems:"center",gap:10,width:"100%",border:0,borderBottom:"1px solid #E9EEE8",background:"#FCFDFC",padding:"11px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:15},documentIcon:{width:29,height:29,borderRadius:9,background:"#F1F5EF",display:"grid",placeItems:"center",fontSize:14},paymentNote:{fontSize:11.2,color:"#6D7871",lineHeight:1.5,background:"#F3F6F1",borderRadius:12,padding:"11px 12px",marginTop:10,border:"1px solid #E7ECE5"},
+  documentHero:{display:"flex",alignItems:"center",gap:12,background:"linear-gradient(135deg,#EDF5EE,#F8F9F4)",border:"1px solid #E1EAE0",borderRadius:16,padding:"14px 15px",margin:"2px 0 12px"},documentHeroIcon:{fontSize:22,width:39,height:39,borderRadius:12,display:"grid",placeItems:"center",background:"#fff"},legalIntro:{fontSize:12.3,color:"#5F6D64",lineHeight:1.5,margin:0},legalList:{background:"#fff",border:"1px solid #E5EBE3",borderRadius:16,overflow:"hidden"},legalSection:{display:"grid",gridTemplateColumns:"30px 1fr",gap:8,padding:"15px 16px",borderBottom:"1px solid #EDF1EC"},sectionNumber:{fontSize:9.5,fontWeight:800,letterSpacing:1,color:"#8CA092",paddingTop:3},legalHeading:{fontSize:13.2,color:"#2B3A30",margin:"0 0 5px",lineHeight:1.3},legalBody:{fontSize:11.7,color:"#66736B",lineHeight:1.6,margin:0},contact:{display:"inline-flex",color:"#2D6A4F",fontSize:11.8,fontWeight:750,margin:"15px 3px 2px",padding:"9px 11px",background:"#EAF3EB",borderRadius:10,textDecoration:"none"},
 };
 
 function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onToggleTheme, onLogout, onClose }) {
