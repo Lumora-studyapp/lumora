@@ -1,5 +1,5 @@
 // STUDYGROVE PREMIUM SKINS BUILD: Moon Tree, Dragon Tree, King's Oak, Diamond Tree, Lion Tree
-import { useState, useEffect, useRef, useCallback, useId, useMemo, memo } from "react";
+import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { auth, db, functions } from "./firebase.js";
 import {
@@ -647,6 +647,29 @@ html[data-animation-disabled="true"] .sg-garden-flock,
 html[data-animation-disabled="true"] .sg-garden-bird-motion,
 html[data-animation-disabled="true"] .sg-garden-bird-wing,
 html[data-animation-disabled="true"] .sg-garden-bird-wing-far { will-change: auto; }
+@media (max-width:520px){
+  .sg-milestone-layout{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+}
+@media (max-width:350px){
+  .sg-milestone-layout{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+@keyframes sgMilestoneSlideNext{
+  from{opacity:.2;transform:translateX(18px) scale(.97)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+@keyframes sgMilestoneSlidePrev{
+  from{opacity:.2;transform:translateX(-18px) scale(.97)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+@keyframes sgMilestoneDetails{
+  from{opacity:0;transform:translateY(7px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.sg-milestone-art-next{animation:sgMilestoneSlideNext .38s cubic-bezier(.22,1,.36,1) both}
+.sg-milestone-art-prev{animation:sgMilestoneSlidePrev .38s cubic-bezier(.22,1,.36,1) both}
+.sg-milestone-details{animation:sgMilestoneDetails .32s ease-out both}
 `;
 const LS_ACTIVE   = "studygrove_active_session";
 // Cross-tab session lock: LS_ACTIVE is a SINGLE shared localStorage slot, so
@@ -1549,6 +1572,12 @@ const fmtMins = s => {
 const fmtHrs = s => {
   const h = s/3600;
   return h >= 1 ? `${h.toFixed(1)}h` : `${Math.floor(s/60)}m`;
+};
+// Format a remaining duration (given in hours) as "Xh Ym" / "Xh" / "Ym".
+const fmtRemaining = hours => {
+  const mins = Math.max(0, Math.round(hours*60));
+  const h = Math.floor(mins/60), m = mins%60;
+  return h>0 && m>0 ? `${h}h ${m}m` : h>0 ? `${h}h` : `${m}m`;
 };
 const lsGet  = (k,fb) => { try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;} };
 const lsSet  = (k,v)  => { try{localStorage.setItem(k,JSON.stringify(v));}catch{} };
@@ -2461,6 +2490,29 @@ async function fbSavePrefs(usernameRaw, patch) {
     else await setDoc(ref, ownedPatch);
     return true;
   } catch(e) { console.error("Firebase prefs save error:", e); return false; }
+}
+
+async function fbClaimMilestoneReward(usernameRaw, stageIndex) {
+  const username=canonUsername(usernameRaw);
+  const index=Math.max(0,Math.min(MILESTONE_STAGES.length-1,Math.trunc(Number(stageIndex)||0)));
+  const stage=MILESTONE_STAGES[index];
+  const reward=getMilestoneReward(stage);
+  try{
+    return await runTransaction(db,async tx=>{
+      const prefsRef=doc(db,"prefs",username),historyRef=doc(db,"history",username);
+      const [prefsSnap,historySnap]=await Promise.all([tx.get(prefsRef),tx.get(historyRef)]);
+      const prefs=prefsSnap.exists()?prefsSnap.data():{};
+      const claimed=Array.isArray(prefs.claimedMilestoneRewards)?prefs.claimedMilestoneRewards:[];
+      const currentCoins=typeof prefs.coins==="number"?prefs.coins:0;
+      if(claimed.includes(index))return {ok:true,alreadyClaimed:true,claimed,coinBalance:currentCoins,reward};
+      const sessions=historySnap.exists()&&Array.isArray(historySnap.data().sessions)?historySnap.data().sessions:[];
+      const totalHours=sessions.reduce((sum,session)=>sum+(Number(session.secs)||0),0)/3600;
+      if(totalHours<stage.max)return {ok:false,reason:"locked",claimed,coinBalance:currentCoins,reward};
+      const nextClaimed=[...claimed,index].sort((a,b)=>a-b),coinBalance=currentCoins+reward;
+      tx.set(prefsRef,{coins:coinBalance,claimedMilestoneRewards:nextClaimed},{merge:true});
+      return {ok:true,claimed:nextClaimed,coinBalance,reward};
+    });
+  }catch(e){console.error("Milestone reward claim error:",e);return {ok:false,reason:"network",error:e.message};}
 }
 
 // ── Private checklist ────────────────────────────────────────────────────────
@@ -4445,11 +4497,11 @@ function TreeSVG({ progress, color, paused, large, skin, enhance=0, thumbnail=fa
     fill={`rgba(25,43,31,${visualProfile.shadowOpacity||.14})`} opacity=".58"/>;
   const sparkle = progress>=1&&!paused&&(
     <>
-      <text x={cx-30} y={cy-trunkH-canopyR*1.8} fontSize={large?18:13}>✨</text>
-      <text x={cx+18} y={cy-trunkH-canopyR*2.1} fontSize={large?15:11}>🌟</text>
+      <path d={sgStarPath(cx-30,cy-trunkH-canopyR*1.8,large?6.5:4.7)} fill="#FFD34D"/>
+      <path d={sgStarPath(cx+18,cy-trunkH-canopyR*2.1,large?5.4:3.9)} fill="#FFF0A0"/>
     </>
   );
-  const pauseIcon = paused&&!thumbnail&&<text x={cx} y={cy-trunkH-canopyR*1.5} fontSize={large?28:18} textAnchor="middle" opacity={0.7}>⏸</text>;
+  const pauseIcon = paused&&!thumbnail&&<g opacity={0.7} transform={`translate(${cx},${cy-trunkH-canopyR*1.5})`}><rect x={large?-8:-5} y={large?-19:-12} width={large?7:4.5} height={large?19:12} rx={large?2:1.2} fill="#666"/><rect x={large?1:0.5} y={large?-19:-12} width={large?7:4.5} height={large?19:12} rx={large?2:1.2} fill="#666"/></g>;
 
   // Each shape draws its "crown" once the sprout has grown a little, and
   // records exactly where a Radiant-tier companion should rest — a real
@@ -4497,8 +4549,8 @@ function TreeSVG({ progress, color, paused, large, skin, enhance=0, thumbnail=fa
         ))}
         {progress>=1 && !paused && (
           <>
-            <text x={cx-canopyR*1.3} y={cy-trunkH-canopyR*0.2} fontSize={large?16:11}>🌸</text>
-            <text x={cx+canopyR*0.9} y={cy-trunkH+canopyR*0.4} fontSize={large?13:9}>🌸</text>
+            <g transform={`translate(${cx-canopyR*1.3},${cy-trunkH-canopyR*0.2})`}><g transform="rotate(0)"><ellipse cx="0" cy="-5" rx="4.620000000000001" ry="2.604" fill="#F89CC8"/></g><g transform="rotate(72)"><ellipse cx="0" cy="-5" rx="4.620000000000001" ry="2.604" fill="#F89CC8"/></g><g transform="rotate(144)"><ellipse cx="0" cy="-5" rx="4.620000000000001" ry="2.604" fill="#F89CC8"/></g><g transform="rotate(216)"><ellipse cx="0" cy="-5" rx="4.620000000000001" ry="2.604" fill="#F89CC8"/></g><g transform="rotate(288)"><ellipse cx="0" cy="-5" rx="4.620000000000001" ry="2.604" fill="#F89CC8"/></g><circle r="2.52" fill="#FFD34D"/></g>
+            <g transform={`translate(${cx+canopyR*0.9},${cy-trunkH+canopyR*0.4})`}><g transform="rotate(0)"><ellipse cx="0" cy="-5" rx="3.5200000000000005" ry="1.984" fill="#F89CC8"/></g><g transform="rotate(72)"><ellipse cx="0" cy="-5" rx="3.5200000000000005" ry="1.984" fill="#F89CC8"/></g><g transform="rotate(144)"><ellipse cx="0" cy="-5" rx="3.5200000000000005" ry="1.984" fill="#F89CC8"/></g><g transform="rotate(216)"><ellipse cx="0" cy="-5" rx="3.5200000000000005" ry="1.984" fill="#F89CC8"/></g><g transform="rotate(288)"><ellipse cx="0" cy="-5" rx="3.5200000000000005" ry="1.984" fill="#F89CC8"/></g><circle r="1.92" fill="#FFD34D"/></g>
           </>
         )}
       </g>
@@ -4516,7 +4568,7 @@ function TreeSVG({ progress, color, paused, large, skin, enhance=0, thumbnail=fa
         <circle cx={cx-canopyR*0.45} cy={cy-trunkH-canopyR*0.8} r={canopyR*0.7} fill={canopyColor} opacity={opacity*0.8}/>
         <circle cx={cx+canopyR*0.45} cy={cy-trunkH-canopyR*0.85} r={canopyR*0.7} fill={canopyColor} opacity={opacity*0.85}/>
         <circle cx={cx} cy={cy-trunkH-canopyR*1.1} r={canopyR*0.6} fill={canopyColor} opacity={opacity}/>
-        {progress>=1 && !paused && <text x={cx+canopyR*0.7} y={cy-trunkH-canopyR*0.3} fontSize={large?16:11}>🍁</text>}
+        {progress>=1 && !paused && <g transform={`translate(${cx+canopyR*0.7},${cy-trunkH-canopyR*0.3})`}><path d={sgStarPath(0,0,large?9:6)} fill="#E0533A" opacity={0.95}/><path d={`M-1.6 0 Q0 3.6 0 8 Q0 3.6 1.6 0 Z`} fill="#C23B22"/></g>}
       </g>
     );
   } else if(shape==="muffin" || shape==="cupcake" || shape==="cake"){
@@ -5098,7 +5150,7 @@ function SubjectSessionAmbience({ subject, paused=false }) {
       <span className="sg-session-symbol-core" style={{
         fontSize:visual.kind==="glyph"?18:15,
         fontWeight:visual.kind==="glyph"?750:500,
-        fontFamily:visual.kind==="emoji"?'"Apple Color Emoji","Segoe UI Emoji",sans-serif':"Inter,system-ui,sans-serif",
+        fontFamily:visual.kind==="emoji"?'"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif':"Inter,system-ui,sans-serif",
         "--sg-symbol-duration":`${8.5+index*1.1}s`,"--sg-symbol-delay":`${-index*2.3}s`,
       }}>{visual.kind==="dumbbell"?"🏋️":visual.value}</span>
     </span>)}
@@ -5159,7 +5211,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
           <button style={{...fs.pauseBtn,background:paused?subject.color:"#fff",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
             {paused?"▶ Resume":"⏸ Pause"}
           </button>
-          <button style={fs.endBtn} onClick={onEnd}>{isPomodoro?"Finish now":"Give Up 🥀"}</button>
+          <button style={fs.endBtn} onClick={onEnd}>{isPomodoro?"Finish now":"End session"}</button>
         </div>}
       <p className="sg-session-warning" style={fs.warning}>{isBreak?"Start the next round only when you’re ready.":"You can leave this screen safely, but your focused time matters."}</p>
     </div>
@@ -10580,6 +10632,214 @@ const gl={
   emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
 };
 
+// ── Progress level (lifetime-hours stages) ────────────────────────────────────
+// Ten stages, each tied to a TOTAL lifetime study-hour threshold. A dot turns a
+// light, gently glowing green once the user's lifetime hours pass that stage's
+// upper bound — and every stage before it lights up with it. Connecting segments
+// are green only when both neighbouring dots are green. Hovering a dot shows a
+// small tab with the stage name and the hour range that unlocks it.
+const MILESTONE_STAGES = [
+  { name:"Infant",              min:0,    max:5, image:"/Images/Infant.png", displayScale:1.62 },
+  { name:"Primary School Student", min:5, max:15, image:"/Images/Primary school student.png", displayScale:1.74 },
+  { name:"High School Student", min:15,   max:40, image:"/Images/High school student.png", displayScale:1.18 },
+  { name:"Uni Student",         min:40,   max:100, image:"/Images/Uni student.png" },
+  { name:"School Teacher",      min:100,  max:200, image:"/Images/School teacher.png" },
+  { name:"Researcher",          min:200,  max:500, image:"/Images/Researcher.png" },
+  { name:"Professor",           min:500,  max:1000, image:"/Images/Professor.png" },
+  { name:"Scholar",             min:1000, max:2500, image:"/Images/Scholar.png" },
+  { name:"Philosopher",         min:2500, max:5000, image:"/Images/Philosopher.png" },
+  { name:"Sage",                min:5000, max:10000, image:"/Images/Sage.png" },
+];
+const getMilestoneReward = stage => Math.max(5,Math.round(stage.max));
+const MILESTONE_GREEN = "#1FA34D"; // vivid saturated green
+const MILESTONE_GREY  = "#C6CEC7"; // fully greyed-out locked stage
+const MILESTONE_TIP_W = 40; // speech-bubble width as a percentage of the track
+const mp = {
+  cardOpen:{ position:"relative", background:"linear-gradient(155deg,#FFFFFF 0%,#FBFDFB 62%,#F5FAF6 100%)", border:"1px solid #DDE8DE", borderRadius:20, padding:"13px 14px 12px", marginTop:7, marginBottom:9, boxShadow:"0 8px 24px rgba(36,75,48,.075), inset 0 1px 0 rgba(255,255,255,.9)", overflow:"hidden" },
+  cardClosed:{ position:"relative", background:"transparent", border:"none", borderRadius:15, padding:"0 2px 0", marginBottom:0 },
+  header:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:10 },
+  title:{ fontSize:11, fontWeight:850, color:"#5B6B60", textTransform:"uppercase", letterSpacing:".7px" },
+  hours:{ fontSize:11, fontWeight:850, color:"#245C43", background:"linear-gradient(135deg,#E4F4E9,#F4FAF5)", border:"1px solid #CFE7D6", borderRadius:12, padding:"6px 10px", marginTop:-3, marginRight:-4, whiteSpace:"nowrap", boxShadow:"0 2px 7px rgba(45,106,79,.09)" },
+  track:{ position:"relative", display:"flex", alignItems:"center", padding:"12px 4px 13px" },
+  dividerOpen:{ height:0, margin:"10px 0 0" },
+  dividerClosed:{ height:0, margin:"5px 0 0" },
+  seg:{ flex:"1 1 auto", minWidth:7, height:3, margin:"0 -8.5px", transition:"background .25s ease, box-shadow .25s ease" },
+  dot:{ position:"relative", flex:"0 0 auto", width:17, height:17, borderRadius:"50%", cursor:"pointer", border:"none", padding:0, outline:"none", transition:"transform .15s ease, box-shadow .15s ease" },
+  dotGreen:{ background:`radial-gradient(circle at 35% 30%, #63D68C, ${MILESTONE_GREEN} 62%)`, boxShadow:"0 0 8px rgba(55,165,91,.85), 0 0 16px rgba(55,165,91,.38)" },
+  dotGrey:{ background:MILESTONE_GREY, opacity:.82 },
+  dotSelected:{ boxShadow:"0 0 0 2px #fff, 0 0 0 4px rgba(45,106,79,.55)" },
+  tipWrap:{ position:"absolute", top:"calc(100% + 9px)", width:`${MILESTONE_TIP_W}%`, zIndex:45, pointerEvents:"none" },
+  tipBox:(unlocked)=>({ position:"relative", borderRadius:14, padding:"12px 14px", boxShadow:"0 10px 28px rgba(20,40,28,.18)", border:`1px solid ${unlocked?"#8AD0A0":"#BCC4BD"}`, background:unlocked?"#B4E7C4":"#DBE0DB", textAlign:"left" }),
+  tipName:(unlocked)=>({ display:"block", fontSize:13, fontWeight:800, lineHeight:1.25, color:unlocked?"#163A25":"#39423B" }),
+  tipRange:(unlocked)=>({ display:"block", fontSize:10.5, fontWeight:650, marginTop:3, color:unlocked?"#2E5A40":"#59625B" }),
+  tipStatus:(unlocked)=>({ display:"block", fontSize:10.5, fontWeight:800, marginTop:4, color:unlocked?"#1F6B3A":"#A35D1F" }),
+  tipArrow:(unlocked)=>({ position:"absolute", top:-9, width:0, height:0, borderLeft:"9px solid transparent", borderRight:"9px solid transparent", borderBottom:`9px solid ${unlocked?"#B4E7C4":"#DBE0DB"}` }),
+  // Stages with artwork show it centred in the middle of the bubble:
+  // title on top, hour range underneath, image in the middle, status below.
+  tipBoxImage:(unlocked)=>({ ...mp.tipBox(unlocked), textAlign:"center" }),
+    tipImageWrap:{ display:"block", width:"58%", maxWidth:132, margin:"10px auto 0" },
+    tipImage:{ display:"block", width:"100%", height:"auto", borderRadius:12, boxShadow:"0 4px 10px rgba(20,40,28,.18)", border:"2px solid rgba(255,255,255,.75)" },
+    carouselLayout:{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", alignItems:"center", gap:10, padding:"2px 0 3px", minHeight:246, touchAction:"pan-y" },
+    stageRail:{ display:"flex", flexDirection:"column", justifyContent:"center", width:"100%", minWidth:0, padding:"10px 4px", borderRadius:15, background:"rgba(239,247,241,.72)" },
+    railStages:{ display:"flex", alignItems:"center", justifyContent:"center", gap:3, minWidth:0 },
+    railStage:{ border:"none", background:"transparent", padding:3, cursor:"pointer", display:"grid", placeItems:"center", minWidth:0 },
+    railCircle:{ width:20, height:20, borderRadius:"50%", border:"none", background:MILESTONE_GREY, opacity:.82, display:"grid", placeItems:"center", color:"#5D6860", fontSize:8.5, fontWeight:900, lineHeight:1, transition:"all .2s ease" },
+    railCircleComplete:{ background:`radial-gradient(circle at 35% 30%, #63D68C, ${MILESTONE_GREEN} 62%)`, color:"#fff", opacity:1, textShadow:"0 1px 2px rgba(13,83,37,.42)", boxShadow:"0 0 7px rgba(55,165,91,.72), 0 0 13px rgba(55,165,91,.28)" },
+    railCircleSelected:{ transform:"scale(1.18)", boxShadow:"0 0 0 2px #fff, 0 0 0 4px rgba(45,106,79,.42), 0 4px 10px rgba(45,106,79,.2)" },
+    railCircleLocked:{ background:MILESTONE_GREY, opacity:.72 },
+    railConnector:{ height:3, flex:"1 1 12px", minWidth:7, maxWidth:22, borderRadius:2, background:"#D5DDD4", transition:"background .2s ease, box-shadow .2s ease" },
+    railConnectorComplete:{ background:MILESTONE_GREEN, boxShadow:"0 0 6px rgba(55,165,91,.35)" },
+    railArrows:{ display:"flex", justifyContent:"center", gap:7, marginTop:13 },
+    navBtn:{ border:"1px solid #D4E7D9", background:"#fff", color:"#2D6A4F", width:29, height:29, borderRadius:"50%", fontSize:16, fontWeight:800, cursor:"pointer", display:"grid", placeItems:"center", transition:"all .2s ease", boxShadow:"0 3px 8px rgba(45,106,79,.1)" },
+    artColumn:{ display:"grid", gridTemplateRows:"198px auto", gap:8, width:"100%", minWidth:0, alignSelf:"center" },
+    artPanel:{ position:"relative", display:"grid", justifyItems:"center", alignItems:"start", minWidth:0, borderRadius:18, background:"#fff", border:"1px solid #DDE7DE", overflow:"hidden", padding:"7px 5px 0", boxShadow:"0 8px 20px rgba(38,72,48,.09)" },
+    // Preserve the entire source image. Anchoring the square artwork at the top
+    // gives every stage identical 7px headroom without cropping any character.
+    stageImage:{ display:"block", width:"100%", height:"auto", maxHeight:184, objectFit:"contain", objectPosition:"center top", transformOrigin:"center top", borderRadius:14, transition:"filter .25s ease, opacity .25s ease, transform .3s cubic-bezier(.22,1,.36,1)" },
+    stageImageLocked:{ opacity:.68 },
+    currentBadge:{ position:"absolute", left:9, top:9, background:"#2D6A4F", color:"#fff", fontSize:8, fontWeight:850, letterSpacing:".45px", textTransform:"uppercase", borderRadius:8, padding:"4px 7px" },
+    detailPanel:{ display:"flex", flexDirection:"column", alignSelf:"center", width:"100%", minWidth:0, minHeight:170, borderRadius:16, background:"rgba(255,255,255,.86)", border:"1px solid #DEE8DF", padding:"14px 12px", boxShadow:"0 5px 14px rgba(38,72,48,.055)" },
+    detailName:{ fontSize:16, fontWeight:850, lineHeight:1.16, color:"#213A29", marginTop:0 },
+    detailRange:{ fontSize:10.5, fontWeight:650, color:"#7B887F", lineHeight:1.35, marginTop:5 },
+    detailStatus:{ marginTop:"auto", fontSize:10.5, fontWeight:800, lineHeight:1.4, color:"#2D6A4F", background:"linear-gradient(135deg,#EAF6ED,#F4FAF5)", border:"1px solid #D9EBDE", borderRadius:11, padding:"8px 9px" },
+    detailStatusLocked:{ color:"#895F35", background:"#F8F1E8" },
+    rewardPanel:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:7, minWidth:0, border:"1px solid #E9DDAE", background:"linear-gradient(135deg,#FFFDF5,#FFF8DF)", borderRadius:12, padding:"7px 8px", color:"#6F5D25", boxShadow:"0 3px 9px rgba(145,105,15,.07)" },
+    rewardCopy:{ minWidth:0, fontSize:9, fontWeight:800, lineHeight:1.25 },
+    rewardAmount:{ display:"block", color:"#A67812", fontSize:10.5, whiteSpace:"nowrap" },
+    rewardBtn:{ border:"none", borderRadius:9, background:"#DFAE37", color:"#fff", padding:"6px 8px", fontSize:9, fontWeight:850, cursor:"pointer", whiteSpace:"nowrap", boxShadow:"0 2px 5px rgba(145,105,15,.18)" },
+    rewardBtnDisabled:{ background:"#E4E1D7", color:"#98958B", boxShadow:"none", cursor:"default" },
+    rewardLockedLabel:{ width:8, height:8, borderRadius:"50%", background:"#A9ADA8", display:"block" },
+    allStageDots:{ display:"flex", gap:6, justifyContent:"center", alignItems:"center", marginTop:9, padding:"2px 4px" },
+    allStageDot:{ width:7, height:7, borderRadius:"50%", border:"none", background:"#D0D8D1", cursor:"pointer", padding:0, transition:"all .2s ease" },
+    allStageDotActive:{ width:20, borderRadius:4, background:"#2D6A4F" },
+    allStageDotLocked:{ filter:"grayscale(1)", opacity:.5 },
+  };
+
+function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [transitionDirection,setTransitionDirection] = useState("next");
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [claiming,setClaiming] = useState(false);
+  const totalHours = Array.isArray(history)
+    ? history.reduce((a,s)=>a+(Number(s.secs)||0),0)/3600
+    : 0;
+  const stageCount = MILESTONE_STAGES.length;
+  const currentStageIndex = MILESTONE_STAGES.findIndex(stage => totalHours >= stage.min && totalHours < stage.max);
+  const userCurrentStage = currentStageIndex === -1 ? stageCount - 1 : currentStageIndex;
+
+  useEffect(() => {
+    setCarouselIndex(userCurrentStage);
+  }, [userCurrentStage]);
+
+  // Always show three markers: selected in the middle where possible, and the
+  // first/last three stages at the ends of the path.
+  const railStart = Math.max(0, Math.min(carouselIndex - 1, stageCount - 3));
+  const visibleStages = MILESTONE_STAGES.slice(railStart, railStart + 3)
+    .map((stage, offset) => ({...stage, index:railStart + offset}));
+  const selectedStage = MILESTONE_STAGES[carouselIndex];
+  const selectedCompleted = totalHours >= selectedStage.max;
+  const selectedLocked = totalHours < selectedStage.min;
+  const rewardClaimed = claimedRewards.includes(carouselIndex);
+  const rewardLocked = !selectedCompleted;
+  const rewardAmount = getMilestoneReward(selectedStage);
+  const stageSpan=Math.max(.001,selectedStage.max-selectedStage.min);
+  const rawStageProgress=Math.max(0,Math.min(1,(totalHours-selectedStage.min)/stageSpan));
+  // Colour arrives in deliberate 10% milestones; completed stages are fully vivid.
+  const stageSaturation=selectedCompleted?1:Math.floor(rawStageProgress*10)/10;
+  const stageColourFilter=`saturate(${stageSaturation})`;
+  const selectStage=index=>{
+    const nextIndex=Math.max(0,Math.min(stageCount-1,index));
+    if(nextIndex===carouselIndex)return;
+    setTransitionDirection(nextIndex>carouselIndex?"next":"prev");
+    setCarouselIndex(nextIndex);
+  };
+  const goToPrev = () => selectStage(carouselIndex - 1);
+  const goToNext = () => selectStage(carouselIndex + 1);
+  const minSwipeDistance = 50;
+  const onTouchStart = e => { setTouchEnd(null); setTouchStart(e.targetTouches[0].clientX); };
+  const onTouchMove = e => setTouchEnd(e.targetTouches[0].clientX);
+  const onTouchEnd = () => {
+    if (touchStart === null || touchEnd === null) return;
+    const distance = touchStart - touchEnd;
+    if (distance > minSwipeDistance) goToNext();
+    else if (distance < -minSwipeDistance) goToPrev();
+  };
+
+  const statusText = selectedCompleted
+    ? "✓ Completed"
+    : `${fmtRemaining(selectedStage.max - totalHours)} needed to complete`;
+  const claimReward=async()=>{
+    if(rewardLocked||rewardClaimed||claiming||!onClaimReward)return;
+    setClaiming(true);
+    try{await onClaimReward(carouselIndex);}finally{setClaiming(false);}
+  };
+
+  return (
+    <section style={mp.cardOpen} aria-label="Progress level carousel">
+      <div style={mp.header}>
+        <span style={mp.title}>Progress level</span>
+        <span style={mp.hours}>⏳ {fmtHrs(totalHours*3600)} lifetime</span>
+      </div>
+      <div className="sg-milestone-layout" style={mp.carouselLayout}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        <div style={mp.stageRail}>
+          <div style={mp.railStages}>
+            {visibleStages.map((stage, index) => {
+              const completed = totalHours >= stage.max;
+              const locked = totalHours < stage.min;
+              const selected = stage.index === carouselIndex;
+              return <Fragment key={stage.index}>
+                {index > 0 && <span style={{...mp.railConnector, ...(totalHours >= stage.min ? mp.railConnectorComplete : {})}} aria-hidden="true"/>}
+                <button type="button" style={mp.railStage} onClick={() => selectStage(stage.index)}
+                  aria-label={`View ${stage.name}`} aria-pressed={selected}>
+                  <span style={{...mp.railCircle, ...(completed ? mp.railCircleComplete : {}), ...(locked ? mp.railCircleLocked : {}), ...(selected ? mp.railCircleSelected : {})}}>{stage.index+1}</span>
+                </button>
+              </Fragment>;
+            })}
+          </div>
+          <div style={mp.railArrows}>
+            <button type="button" style={{...mp.navBtn, opacity:carouselIndex===0?.3:1}} onClick={goToPrev}
+              disabled={carouselIndex===0} aria-label="Previous stage">←</button>
+            <button type="button" style={{...mp.navBtn, opacity:carouselIndex===stageCount-1?.3:1}} onClick={goToNext}
+              disabled={carouselIndex===stageCount-1} aria-label="Next stage">→</button>
+          </div>
+        </div>
+
+        <div key={`art-${carouselIndex}`} className={transitionDirection==="next"?"sg-milestone-art-next":"sg-milestone-art-prev"} style={mp.artColumn}>
+          <div style={mp.artPanel}>
+            <img className="sg-keepcolor" src={selectedStage.image} alt={selectedStage.name}
+              style={{...mp.stageImage, transform:`scale(${selectedStage.displayScale||1})`, filter:stageColourFilter, ...(!selectedCompleted ? mp.stageImageLocked : {})}} />
+          </div>
+          <div style={{...mp.rewardPanel, filter:stageColourFilter}}>
+            <span style={mp.rewardCopy}>Stage reward <b style={mp.rewardAmount}>🪙 {rewardAmount.toLocaleString()}</b></span>
+            <button type="button" onClick={claimReward} disabled={rewardLocked||rewardClaimed||claiming}
+              style={{...mp.rewardBtn, ...((rewardLocked||rewardClaimed||claiming) ? mp.rewardBtnDisabled : {})}}>
+              {rewardClaimed ? "Claimed" : rewardLocked ? <span style={mp.rewardLockedLabel} aria-label="Reward locked"/> : claiming ? "Claiming…" : "Claim"}
+            </button>
+          </div>
+        </div>
+
+        <div key={`details-${carouselIndex}`} className="sg-milestone-details" style={mp.detailPanel}>
+          <strong style={mp.detailName}>{selectedStage.name}</strong>
+          <span style={mp.detailRange}>({selectedStage.min}–{selectedStage.max} lifetime hours required)</span>
+          <span style={{...mp.detailStatus, ...(selectedLocked ? mp.detailStatusLocked : {})}}>{statusText}</span>
+        </div>
+      </div>
+
+      <div style={mp.allStageDots} aria-label="All milestone stages">
+        {MILESTONE_STAGES.map((stage, index) => {
+          const locked = totalHours < stage.min;
+          return <button key={stage.name} type="button" onClick={() => selectStage(index)}
+            aria-label={`View ${stage.name}`} aria-current={index===carouselIndex ? "step" : undefined}
+            style={{...mp.allStageDot, ...(index===carouselIndex ? mp.allStageDotActive : {}), ...(locked ? mp.allStageDotLocked : {})}}/>;
+        })}
+      </div>
+      <div aria-hidden="true" style={mp.dividerOpen}/>
+    </section>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [user,setUser]=useState(null);
@@ -10604,6 +10864,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [modePickerOpen,setModePickerOpen]=useState(false); // timer/stopwatch chooser popover
   const [subjScrollRef, subjScrollEdge, scrollSubjects] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|")); // wheel, drag and arrow access on desktop
   const [coins,setCoins]=useState(()=>lsGet(LS_COINS,0));
+  const [claimedMilestoneRewards,setClaimedMilestoneRewards]=useState([]);
   const [showShop,setShowShop]=useState(false);
   const [showExamModal,setShowExamModal]=useState(false);
   const [editingAssessmentIndex,setEditingAssessmentIndex]=useState(null);
@@ -11507,7 +11768,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     rewardCheckedWeekRef.current="";rewardClaimBusyRef.current=false;
     setPrefsReady(false);setUser(null);setRunning(false);setPaused(false);setElapsed(0);setDuration(25*60);
     setTimerStyle("standard");const freshPomo=createPomodoroState({});setPomodoro(freshPomo);pomodoroRef.current=freshPomo;
-    setSubjects(DEFAULT_SUBJECTS);setSubject("math");setCoins(0);setExams([]);setTargets({});
+    setSubjects(DEFAULT_SUBJECTS);setSubject("math");setCoins(0);setClaimedMilestoneRewards([]);setExams([]);setTargets({});
     setOwnedSkins(["default"]);setActiveSkin("default");setEnhancements({});
     setAnimationMode("device");setAdminRoleVerified(false);
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
@@ -11652,6 +11913,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return true;
   };
   const handleSaveTargets=obj=>{ setTargets(obj); lsSet(LS_TARGETS,obj); fbSavePrefs(user,{targets:obj}); };
+  const handleClaimMilestoneReward=async stageIndex=>{
+    const result=await fbClaimMilestoneReward(user,stageIndex);
+    if(!result.ok){showToast(result.reason==="locked"?"Reach this stage to unlock its reward":"Couldn’t claim that reward yet");return false;}
+    if(Array.isArray(result.claimed))setClaimedMilestoneRewards(result.claimed);
+    if(typeof result.coinBalance==="number"){setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);}
+    showToast(result.alreadyClaimed?"This stage reward was already claimed":`🪙 ${result.reward.toLocaleString()} stage reward claimed`);
+    return true;
+  };
 
   // Load subjects + exams from Firebase on login (cloud is source of truth).
   // Seeds the cloud from local data on first-ever login so nothing is lost.
@@ -11687,6 +11956,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(typeof prefs.coins==="number"){
           setCoins(prefs.coins); lsSet(LS_COINS, prefs.coins);
         }
+        if(Array.isArray(prefs.claimedMilestoneRewards)){
+          setClaimedMilestoneRewards(prefs.claimedMilestoneRewards.filter(index=>Number.isInteger(index)&&index>=0&&index<MILESTONE_STAGES.length));
+        }
         if(Array.isArray(prefs.ownedSkins) && prefs.ownedSkins.length){
           setOwnedSkins(prefs.ownedSkins); lsSet("studygrove_owned_skins", prefs.ownedSkins);
         }
@@ -11720,7 +11992,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         }
       } else {
         // No cloud prefs yet — seed from whatever this device has
-        await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, ownedSkins, activeSkin, enhancements,
+        await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
           timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode });
@@ -12011,6 +12283,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {tab==="timer"&&(
             <div style={S.timerView} className="sg-view-anim" key="view-timer">
+              <MilestonePath history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward}/>
               <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
                 onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
                 onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
@@ -12237,7 +12510,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
-  app:{minHeight:"100vh",background:"var(--sg-shell-surface,#F5F7F2)",fontFamily:"'Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderLeft:"1px solid rgba(255,255,255,.32)",borderRight:"1px solid rgba(255,255,255,.32)",boxShadow:"0 0 34px rgba(24,45,31,.08)"},
+  app:{minHeight:"100vh",background:"var(--sg-shell-surface,#F5F7F2)",fontFamily:"'Noto Color Emoji','Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderLeft:"1px solid rgba(255,255,255,.32)",borderRight:"1px solid rgba(255,255,255,.32)",boxShadow:"0 0 34px rgba(24,45,31,.08)"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 16px 0"},
   logo:{fontSize:17,fontWeight:700,color:"#2D6A4F",letterSpacing:"-0.3px"},
   userChip:{fontSize:11,color:"#555",background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
@@ -12246,10 +12519,10 @@ const S = {
   menuAvatar:{width:22,height:22,borderRadius:"50%",background:"#2D6A4F",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
   menuBars:{fontSize:13,color:"#888",lineHeight:1},
   logoutBtn:{background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
-  nav:{display:"flex",gap:4,padding:"12px 12px",borderBottom:"1px solid #E8EDE4"},
+  nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},
   navBtnActive:{background:"#fff",color:"#2D6A4F",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"},
-  timerView:{padding:"14px 16px 40px"},
+  timerView:{padding:"0 16px 40px"},
   modeRow:{display:"flex",gap:8,marginBottom:12},
   modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
   modeBtnActive:{fontWeight:700},
