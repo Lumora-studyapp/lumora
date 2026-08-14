@@ -61,6 +61,8 @@ const LS_THEME    = "studygrove_theme";
 const LS_ANIMATION_MODE = "lumora_animation_mode";
 const LS_TARGETS  = "studygrove_targets";
 const LS_DECOR    = "studygrove_decorations"; // owned garden decorations (account-level)
+const LEGAL_EFFECTIVE_DATE = "14 August 2026";
+const LEGAL_CONTACT_EMAIL = String(import.meta.env.VITE_LEGAL_CONTACT_EMAIL||"lumora.studyapp@gmail.com").trim();
 const LS_BADGES   = "studygrove_badges";      // unlocked achievement ids
 const LS_GARDEN_LAYOUT = "studygrove_garden_layout"; // exact tree/decor tile positions
 const LS_TIMER_STYLE = "studygrove_timer_style";
@@ -7394,7 +7396,107 @@ const announceStyles = {
   preview:{border:"1px solid #E3E9E1",borderRadius:11,background:"#FAFCF9",padding:11},
 };
 
-function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onAdmin, onToggleTheme, onLogout, onClose }) {
+const LEGAL_SECTIONS = {
+  privacy:{label:"Privacy Policy",title:"Privacy Policy",intro:"This policy states exactly how Lumora will collect, use, disclose and protect personal information.",sections:[
+    ["Information Lumora collects","Lumora will collect only the information required to operate and protect the service. This includes account details; study sessions, subjects, goals, assessments and checklist items; coins, rewards, characters, classroom layouts and preferences; friends, groups, invitations and leaderboard results; optional friend-only presence; announcement replies and reactions; and essential device, security and diagnostic information. Lumora does not provide private or direct messaging."],
+    ["How information will be used","Lumora will use personal information only to secure accounts, save study progress, provide requested features, synchronise devices, respond to requests, prevent misuse, diagnose faults and meet legal obligations. Lumora will not sell personal information and will not use it for targeted advertising."],
+    ["Who will see information","Leaderboard participants will see usernames, focused time, session totals and subject summaries. Accepted friends will see online or studying status and the active subject only when presence sharing is enabled. Group members will see information required for group rankings and rewards. Signed-in users will see announcement replies and reactions. Lumora will keep credentials, detailed session records, assessments and checklist items private unless disclosure is required by law."],
+    ["Service providers and overseas processing","Lumora will use Google Firebase and trusted cloud hosting, security and delivery providers only where required to operate the service. These providers may process information in Australia or overseas under their own privacy and security obligations. Future payment providers will receive only the information required to process a transaction. Lumora will not store complete card details."],
+    ["Storage and retention","Lumora will retain account and study data only while required to operate the account, maintain security, manage backups, resolve disputes or meet legal obligations. Deleted information may remain temporarily in protected backups until those backups are overwritten. Local storage will retain preferences and session-recovery information on the user's device."],
+    ["Your rights and controls","Users may disable presence sharing and download the main account data currently loaded in Lumora. Users may request access, correction or deletion by contacting Lumora. Lumora must action valid requests within a reasonable period, subject only to identity verification and legal retention requirements."],
+    ["Young users","Users under 16 must review these documents with a parent or guardian. Lumora will maintain privacy-protective defaults and will not use targeted advertising. Users must not place real names, contact details or sensitive information in usernames, group names or announcement replies."],
+    ["Security and incidents","Lumora will use Firebase Authentication, encrypted connections and access rules to restrict account data. No online service can guarantee absolute security. Lumora will investigate suspected incidents and will notify affected users and regulators whenever the law requires notification."],
+    ["Changes and complaints",`Lumora may update this policy only when the service or legal requirements change. Lumora will clearly identify material changes in the app. Users must send access, correction, deletion and privacy complaints to the contact listed below. Effective ${LEGAL_EFFECTIVE_DATE}.`],
+  ]},
+  terms:{label:"Terms of Use",title:"Terms of Use",intro:"These terms govern your use of Lumora.",sections:[
+    ["Eligibility and accounts","Users must be legally able to accept these terms. Users under 16 must have a parent or guardian review them. Every user must protect their sign-in details, provide accurate account information and must never access another person's account."],
+    ["Acceptable use","Users must not bully, harass or impersonate another person; publish personal or unlawful material; interfere with security; manipulate study time, rankings, rewards or purchases; distribute malicious code; infringe intellectual property; or use Lumora in any way that harms another user or the service."],
+    ["Study information","Lumora is a productivity tool and is not educational, medical or professional advice. Users must not rely on timers, streaks, statistics or insights for high-stakes decisions because those features may contain errors."],
+    ["Virtual items","Coins, characters, backgrounds, decorations, rewards and achievements are limited licences for use inside Lumora. They have no cash value, cannot be transferred or redeemed, and do not constitute property or an investment. Lumora may change free rewards and catalogues, but will not remove paid entitlements contrary to applicable consumer law."],
+    ["Future purchases and subscriptions","Lumora does not currently process purchases. Before any paid feature launches, Lumora must display the full price, billing period, renewal terms, included features, cancellation method and trial conditions before confirmation. A minor must obtain permission from a parent or guardian before purchasing. Refunds and remedies will comply with Australian Consumer Law and applicable store rules."],
+    ["Content and intellectual property","Lumora's original software, branding and artwork remain protected by intellectual-property law. Users retain ownership of submitted content but grant Lumora the limited right to host, display and process that content only as required to operate, secure and improve the service."],
+    ["Moderation and termination","Lumora may remove content, restrict features or suspend accounts when required for safety, security, legal compliance or serious or repeated breaches. Lumora will provide notice and a review process when reasonably appropriate. Users may stop using Lumora and may request account deletion."],
+    ["Availability and liability","Lumora cannot guarantee uninterrupted or error-free operation. Nothing in these terms will exclude rights or remedies that cannot legally be excluded, including Australian Consumer Law guarantees. To the extent permitted by law, Lumora will not be liable for indirect loss that was not reasonably foreseeable."],
+    ["Changes and law",`Lumora will provide reasonable notice of material changes. Australian law will govern these terms where applicable. Effective ${LEGAL_EFFECTIVE_DATE}.`],
+  ]},
+  accessibility:{label:"Accessibility & AI",title:"Accessibility & AI",intro:"How Lumora uses AI during development and the accessibility checks completed so far.",sections:[
+    ["AI-assisted development","Lumora was created with assistance from generative AI tools for planning, interface concepts, code drafting, debugging and written content. Lumora's human operator must review and select AI-assisted work and remains responsible for the service. AI development assistance does not give an AI system automatic access to user accounts, study sessions or private information."],
+    ["Accessibility standard","Lumora will work toward the Web Content Accessibility Guidelines principles of perceivable, operable, understandable and robust content. Accessibility must remain an ongoing development requirement. Lumora does not claim formal WCAG certification."],
+    ["Visual access","Lumora must maintain readable text, clear hierarchy, responsive layouts, visible control states and information that does not rely on colour alone. These requirements support users with low vision and colour-vision differences. Lumora must continue testing across devices, zoom levels and display settings."],
+    ["Motor and keyboard access","Lumora must use native buttons, links and form controls where practical. Icon-only controls must have accessible labels and key interfaces must show visible keyboard focus. Complex classroom arrangement controls must be improved where they cannot yet be operated effectively without a pointer."],
+    ["Motion and vestibular access","Lumora will provide Full animation, Reduced animation, Animation off and device-setting options. Reduced and disabled motion settings must limit non-essential movement for users with motion sensitivity or vestibular conditions."],
+    ["Screen readers and cognitive access","Important dialogs, status messages and form controls must use semantic roles or accessible labels. Instructions and policies must use clear headings, consistent structure and plain language to support screen-reader users and users with attention, learning or cognitive access needs."],
+    ["Testing and accountability",`Lumora must continue browser, responsive-layout, keyboard, labelled-control and motion-setting checks. Lumora has not completed an independent accessibility audit and must not claim that people with every listed disability performed the testing. Accessibility barriers must be reported to ${LEGAL_CONTACT_EMAIL}; Lumora will investigate and prioritise reasonable fixes.`],
+  ]},
+};
+
+function PrivacyDataPanel({user,privacyPrefs,onPrivacyChange,exportData,onClose,onBack}){
+  const [view,setView]=useState("overview");
+  const [saved,setSaved]=useState("");
+  const document=LEGAL_SECTIONS[view];
+  const updatePresence=async enabled=>{
+    const ok=await onPrivacyChange({sharePresence:enabled});
+    setSaved(ok?"Privacy setting saved":"Could not sync that setting. Try again.");
+    setTimeout(()=>setSaved(""),2400);
+  };
+  const contactHref=LEGAL_CONTACT_EMAIL?`mailto:${LEGAL_CONTACT_EMAIL}?subject=${encodeURIComponent(`Lumora privacy request — ${user}`)}`:"";
+  return <div style={pd.overlay} className="sg-overlay-anim" onClick={onClose}>
+    <div style={pd.sheet} className="sg-sheet-anim" onClick={event=>event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="privacy-data-title">
+      <div style={pd.header}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button style={ap.back} onClick={view==="overview"?(onBack||onClose):()=>setView("overview")} aria-label="Back">←</button>
+          <div><div style={ap.kicker}>PRIVACY & DATA</div><h3 id="privacy-data-title" style={ap.title}>{document?.title||"Your information"}</h3></div>
+        </div>
+        <button style={ap.x} onClick={onClose} aria-label="Close">✕</button>
+      </div>
+      {view==="overview"?<>
+        <div style={pd.hero}>
+          <b style={pd.heroTitle}>Privacy without the fine-print feel.</b>
+          <span style={pd.summary}>Control visibility, manage your information and read every policy in one place.</span>
+        </div>
+        {saved&&<div style={pd.notice} role="status">{saved}</div>}
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><b style={pd.sectionTitle}>Friend visibility</b><small style={pd.sectionSub}>Control live activity sharing.</small></div>
+          <label style={pd.toggleRow}>
+            <span><b style={pd.toggleTitle}>Online and studying status</b><small style={pd.toggleSub}>Accepted friends can see when you are online and, during focus, your selected subject.</small></span>
+            <input type="checkbox" checked={privacyPrefs.sharePresence!==false} onChange={event=>updatePresence(event.target.checked)} style={pd.checkbox}/>
+          </label>
+          <p style={pd.helper}>Your username and study totals can still appear in leaderboards and groups. Detailed sessions, assessments and checklist items stay private.</p>
+        </section>
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><b style={pd.sectionTitle}>Your data</b><small style={pd.sectionSub}>Access, export or request changes.</small></div>
+          <div style={pd.actionGrid}>
+            <button style={pd.action} onClick={exportData}><span style={pd.actionCopy}><b style={pd.actionTitle}>Download data</b><small style={pd.actionSub}>Export account progress and settings as JSON.</small></span><span style={pd.arrow} aria-hidden="true">→</span></button>
+            {contactHref?<a style={{...pd.action,textDecoration:"none"}} href={contactHref}><span style={pd.actionCopy}><b style={pd.actionTitle}>Submit a privacy request</b><small style={pd.actionSub}>Request access, correction or deletion.</small></span><span style={pd.arrow} aria-hidden="true">→</span></a>:
+              <div style={{...pd.action,cursor:"default",opacity:.65}}><span style={pd.actionCopy}><b style={pd.actionTitle}>Submit a privacy request</b><small style={pd.actionSub}>The privacy contact is being configured.</small></span></div>}
+          </div>
+        </section>
+        <section style={pd.section}>
+          <div style={pd.sectionHeading}><b style={pd.sectionTitle}>Policies and transparency</b><small style={pd.sectionSub}>Direct, plain-language documents.</small></div>
+          <div style={pd.documentList}>
+            {Object.entries(LEGAL_SECTIONS).map(([id,item])=><button key={id} style={pd.documentRow} onClick={()=>setView(id)}><span style={pd.documentCopy}><b style={pd.documentTitle}>{item.label}</b><small style={pd.documentSub}>{id==="accessibility"?"AI disclosure and accessibility testing":`Effective ${LEGAL_EFFECTIVE_DATE}`}</small></span><span style={pd.arrow} aria-hidden="true">→</span></button>)}
+          </div>
+          <div style={pd.paymentNote}><b style={pd.paymentTitle}>Purchases and subscriptions</b><span style={pd.paymentCopy}>Paid features are not active. Lumora must display price, renewal, cancellation and refund terms before checkout.</span></div>
+        </section>
+      </>:<>
+        <div style={pd.documentHero}><p style={pd.legalIntro}>{document.intro}</p><span style={pd.effective}>{view==="accessibility"?"Current statement":`Effective ${LEGAL_EFFECTIVE_DATE}`}</span></div>
+        <div style={pd.legalList}>{document.sections.map(([heading,body],index)=><section key={heading} style={pd.legalSection}><span style={pd.sectionNumber}>{String(index+1).padStart(2,"0")}</span><div style={pd.legalCopy}><h4 style={pd.legalHeading}>{heading}</h4><p style={pd.legalBody}>{body}</p></div></section>)}</div>
+        {LEGAL_CONTACT_EMAIL&&<a href={contactHref} style={pd.contact}>Contact: {LEGAL_CONTACT_EMAIL}</a>}
+      </>}
+    </div>
+  </div>;
+}
+const pd={
+  overlay:{...ap.overlay,zIndex:355},sheet:{...ap.modal,maxWidth:620,maxHeight:"94vh",padding:"22px clamp(18px,5vw,34px) 30px",background:"#FCFDFB"},header:{...ap.header,position:"sticky",top:-22,zIndex:2,background:"rgba(252,253,251,.97)",backdropFilter:"blur(14px)",paddingTop:22,paddingBottom:16,marginBottom:10,borderBottom:"1px solid #E9EDE8"},
+  hero:{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:7,padding:"12px 0 8px",margin:"0 0 4px"},heroTitle:{display:"block",fontSize:18,color:"#203027",letterSpacing:"-.25px",lineHeight:1.25},summary:{display:"block",fontSize:12.5,color:"#68736C",lineHeight:1.55,maxWidth:470},trustRow:{display:"flex",flexWrap:"wrap",gap:7,margin:"6px 0 28px"},trustPill:{fontSize:9.5,fontWeight:750,letterSpacing:.2,color:"#59675E",background:"#F3F6F2",borderRadius:999,padding:"6px 9px"},notice:{background:"#EDF5EE",color:"#2D6A4F",borderRadius:9,padding:"9px 11px",fontSize:12,fontWeight:700,marginBottom:18},
+  section:{padding:"0 0 25px",marginBottom:25,borderBottom:"1px solid #E7ECE7"},sectionHeading:{display:"block",marginBottom:16},sectionTitle:{display:"block",fontSize:14.5,color:"#25342B",lineHeight:1.3},sectionSub:{display:"block",fontSize:10.8,color:"#87918A",lineHeight:1.45,marginTop:4},
+  toggleRow:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:22,cursor:"pointer",padding:"1px 0"},toggleTitle:{display:"block",fontSize:13,color:"#2A3930",lineHeight:1.35},toggleSub:{display:"block",fontSize:11.3,color:"#758078",lineHeight:1.55,marginTop:5,maxWidth:430},checkbox:{width:21,height:21,accentColor:"#2D6A4F",flexShrink:0},helper:{fontSize:10.5,color:"#8B958E",lineHeight:1.55,margin:"13px 0 0"},
+  actionGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:0,borderTop:"1px solid #E7ECE7"},action:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,width:"100%",boxSizing:"border-box",border:0,borderBottom:"1px solid #E7ECE7",background:"transparent",padding:"15px 1px",cursor:"pointer",color:"#27332B",fontFamily:"inherit",textAlign:"left"},actionCopy:{display:"block",minWidth:0},actionTitle:{display:"block",fontSize:13.2,color:"#24332A",lineHeight:1.35},actionSub:{display:"block",fontSize:10.8,color:"#7D8780",lineHeight:1.5,marginTop:4},arrow:{fontSize:15,color:"#9AA29C",fontWeight:500,flexShrink:0},
+  documentList:{borderTop:"1px solid #E7ECE7"},documentRow:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,width:"100%",border:0,borderBottom:"1px solid #E7ECE7",background:"transparent",padding:"15px 1px",cursor:"pointer",fontFamily:"inherit",textAlign:"left",color:"#27332B"},documentCopy:{display:"block",minWidth:0},documentTitle:{display:"block",fontSize:13.2,color:"#24332A",lineHeight:1.35},documentSub:{display:"block",fontSize:10.8,color:"#7D8780",lineHeight:1.45,marginTop:4},paymentNote:{marginTop:17,padding:"0 1px"},paymentTitle:{display:"block",fontSize:11.5,color:"#546159",lineHeight:1.4},paymentCopy:{display:"block",fontSize:10.7,color:"#879089",lineHeight:1.55,marginTop:4},
+  documentHero:{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:9,padding:"10px 0 23px",borderBottom:"1px solid #E7ECE7"},legalIntro:{fontSize:13,color:"#4F5D54",lineHeight:1.6,margin:0,maxWidth:500},effective:{fontSize:9.5,color:"#8A948D",fontWeight:700,letterSpacing:.4,textTransform:"uppercase"},legalList:{display:"block"},legalSection:{display:"grid",gridTemplateColumns:"34px minmax(0,1fr)",gap:12,padding:"20px 0",borderBottom:"1px solid #E7ECE7"},sectionNumber:{fontSize:9.5,fontWeight:750,letterSpacing:1,color:"#9AA39D",paddingTop:3},legalCopy:{minWidth:0},legalHeading:{fontSize:13.5,color:"#26352C",margin:"0 0 7px",lineHeight:1.35},legalBody:{fontSize:11.8,color:"#626F67",lineHeight:1.68,margin:0},contact:{display:"inline-flex",color:"#2D6A4F",fontSize:11.5,fontWeight:750,margin:"20px 0 1px",padding:"9px 0",textDecoration:"none"},
+};
+
+function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onToggleTheme, onLogout, onClose }) {
   const items = [
     { icon:"🧑‍🎓", label:"Character Styles", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
@@ -7402,6 +7504,7 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animation
     { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
     { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
+    { icon:"◇", label:"Privacy & Data", sub:"Controls, policy & terms", onClick:onPrivacyData },
     ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
   return (
@@ -7461,7 +7564,7 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animation
 }
 const hm = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:350},
-  sheet:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
+  sheet:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
   grabber:{width:36,height:4,borderRadius:4,background:"#E0E0E0",margin:"0 auto 14px"},
   profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"#F9FBF8",border:"1px solid #EEF2EC",borderRadius:14,cursor:"pointer",marginBottom:10},
   avatar:{width:42,height:42,borderRadius:"50%",background:"#2D6A4F",color:"#fff",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
@@ -10662,26 +10765,6 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
-    <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Group Leaderboards</div>
-      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
-    </div>
-
-    {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
-    {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
-      <div style={gl.sectionLabel}>PENDING INVITATIONS</div>
-      {incomingInvites.map(invite=><div key={invite.id} style={gl.incomingRow}>
-        <div style={gl.incomingIcon}>🏫</div>
-        <div style={gl.incomingText}>
-          <div style={gl.incomingName}>{invite.groupName||"Private group"}</div>
-          <div style={gl.incomingMeta}>Invited by {invite.createdBy}</div>
-        </div>
-        <button style={gl.acceptBtn} onClick={()=>acceptInvite(invite)} disabled={busy}>Accept</button>
-        <button style={gl.declineBtn} onClick={()=>declineInvite(invite)} disabled={busy} aria-label={`Decline invitation to ${invite.groupName||"group"}`}>×</button>
-      </div>)}
-    </div>}
-    {inviteLoadError&&<div style={gl.error} role="alert">{inviteLoadError}</div>}
-
     {groupsError&&<div style={gl.errorState} role="alert"><strong>Couldn't load groups</strong><span>{groupsError}</span><button style={gl.retryBtn} onClick={()=>reload()}>Try again</button></div>}
 
     {!groupsError&&groups.length>1&&<div style={gl.groupTabs}>
@@ -10689,9 +10772,37 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     </div>}
 
     {active&&<>
+      <div style={S.toggleRow}>
+        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
+          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
+      </div>
+      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
+      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
+        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
+      }
+      <div style={gl.boardBar}>
+        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
+        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
+      </div>
+      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
+      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
+        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
+        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
+      }
+      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
+        {view!=="allTime"
+          ? displayedEligibility.eligible
+            ? view==="past"
+              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
+            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
+          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      </div>}
+
+      <div style={gl.detailsDivider}/>
       <div style={gl.headCard}>
         <div style={{minWidth:0}}>
-          <div style={gl.kicker}>GROUP LEADERBOARD</div>
+          <div style={gl.kicker}>GROUP DETAILS</div>
           <div style={gl.name}>{active.name}</div>
           <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · {weeklyEligibility.participantCount} participating this week</div>
         </div>
@@ -10733,34 +10844,27 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
             : <button style={gl.dangerBtn} onClick={leave} disabled={busy}>Leave group</button>}
         </div>
       </div>}
-
-      <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
-          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
-      </div>
-      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
-      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
-        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
-      }
-      <div style={gl.boardBar}>
-        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
-        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
-      </div>
-      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
-      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
-        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
-        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
-      }
-      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view!=="allTime"
-          ? displayedEligibility.eligible
-            ? view==="past"
-              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
-              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
-          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
-      </div>}
     </>}
+
+    <div style={gl.intro}>
+      <div style={gl.introTitle}>Private Group Leaderboards</div>
+      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
+    </div>
+
+    {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
+    {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
+      <div style={gl.sectionLabel}>PENDING INVITATIONS</div>
+      {incomingInvites.map(invite=><div key={invite.id} style={gl.incomingRow}>
+        <div style={gl.incomingIcon}>🏫</div>
+        <div style={gl.incomingText}>
+          <div style={gl.incomingName}>{invite.groupName||"Private group"}</div>
+          <div style={gl.incomingMeta}>Invited by {invite.createdBy}</div>
+        </div>
+        <button style={gl.acceptBtn} onClick={()=>acceptInvite(invite)} disabled={busy}>Accept</button>
+        <button style={gl.declineBtn} onClick={()=>declineInvite(invite)} disabled={busy} aria-label={`Decline invitation to ${invite.groupName||"group"}`}>×</button>
+      </div>)}
+    </div>}
+    {inviteLoadError&&<div style={gl.error} role="alert">{inviteLoadError}</div>}
 
     {!groupsError&&!active&&<div style={gl.emptyCard}><div style={{fontSize:30}}>🌱</div><div style={gl.emptyTitle}>Start a private group</div><div style={gl.emptyBody}>Create one for classmates or enter an invite from someone you know.</div></div>}
 
@@ -10800,6 +10904,7 @@ function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKe
 const MemoLeaderboardHub=memo(LeaderboardHub);
 
 const gl={
+  detailsDivider:{height:1,background:"#E3EAE2",margin:"18px 2px 12px"},
   intro:{background:"linear-gradient(135deg,#EDF7F0,#F8FBF6)",border:"1px solid #DCEBDD",borderRadius:14,padding:"11px 13px",marginBottom:10},
   introTitle:{fontSize:13.5,fontWeight:800,color:"#2D6A4F"},introBody:{fontSize:10.75,color:"#718076",lineHeight:1.45,marginTop:2},
   sectionLabel:{fontSize:9,fontWeight:800,letterSpacing:1,color:"#849188",marginBottom:6},
@@ -11088,6 +11193,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showSessions,setShowSessions]=useState(false); // my-sessions self-edit panel
   const [showRecap,setShowRecap]=useState(false);     // weekly recap card
   const [showAccount,setShowAccount]=useState(false); // account panel
+  const [showPrivacyData,setShowPrivacyData]=useState(false);
+  const [privacyFromMenu,setPrivacyFromMenu]=useState(false);
+  const [privacyPrefs,setPrivacyPrefs]=useState({sharePresence:true});
   const [visiting,setVisiting]=useState(null);        // username whose garden we're viewing
   const [accountFromMenu,setAccountFromMenu]=useState(false);
   const [sessionsFromMenu,setSessionsFromMenu]=useState(false);
@@ -11272,6 +11380,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     // Otherwise a fast login switch can briefly advertise the previous
     // account's cached subject under the newly logged-in username.
     if(!user || !prefsReady) return;
+    if(privacyPrefs.sharePresence===false){fbClearPresence(user);return;}
     const earningFocus=timerStyle!=="pomodoro"||pomodoroRef.current.phase==="focus";
     const publish=()=>{
       const studying=running&&!paused&&earningFocus;
@@ -11282,7 +11391,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const hb=setInterval(publish,45*1000);
     return()=>clearInterval(hb);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[running, paused, subject, user, prefsReady, timerStyle, pomodoro.phase]);
+  },[running, paused, subject, user, prefsReady, timerStyle, pomodoro.phase, privacyPrefs.sharePresence]);
 
   // Clear presence if the tab/window closes mid-session
   useEffect(()=>{
@@ -11970,12 +12079,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setSubjects(DEFAULT_SUBJECTS);setSubject("math");setCoins(0);setClaimedMilestoneRewards([]);setExams([]);setTargets({});
     setOwnedSkins(["default"]);setActiveSkin("default");setEnhancements({});
     setAnimationMode("device");setAdminRoleVerified(false);
+    setPrivacyPrefs({sharePresence:true});
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
     setDecorations([]);setGardenLayout({});setTasks([]);setTasksError("");setTasksLoading(false);setSelectedTaskId("");
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
-    setShowSessions(false);setShowAccount(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
+    setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
@@ -12112,6 +12222,26 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return true;
   };
   const handleSaveTargets=obj=>{ setTargets(obj); lsSet(LS_TARGETS,obj); fbSavePrefs(user,{targets:obj}); };
+  const handlePrivacyChange=async patch=>{
+    const next={...privacyPrefs,...patch};
+    setPrivacyPrefs(next);
+    if(next.sharePresence===false)await fbClearPresence(user);
+    return fbSavePrefs(user,{privacy:next});
+  };
+  const exportMyData=()=>{
+    const payload={
+      exportedAt:new Date().toISOString(),account:{username:user},privacy:privacyPrefs,
+      study:{sessions:history||[],subjects,assessments:exams,weeklyTargets:targets,tasks},
+      progress:{coins,ownedSkins,activeSkin,enhancements,badges,decorations,gardenLayout,ownedBackgrounds,activeBackground},
+      social:{friends:friendNetwork.friends.map(friend=>friend.username)},
+      preferences:{theme,animationMode,timerStyle,pomodoro:sanitizePomodoroConfig(pomodoroRef.current)},
+      note:"Authentication secrets, internal security records and other users' information are excluded.",
+    };
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download=`lumora-${canonUsername(user)}-data-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+  };
   const handleClaimMilestoneReward=async stageIndex=>{
     const result=await fbClaimMilestoneReward(user,stageIndex);
     if(!result.ok){showToast(result.reason==="locked"?"Reach this stage to unlock its reward":"Couldn’t claim that reward yet");return false;}
@@ -12189,12 +12319,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           const nextMode=normalizeAnimationMode(prefs.animationMode);
           setAnimationMode(nextMode);lsSetR(LS_ANIMATION_MODE,nextMode);
         }
+        if(prefs.privacy&&typeof prefs.privacy==="object"){
+          setPrivacyPrefs({sharePresence:prefs.privacy.sharePresence!==false});
+        }
       } else {
         // No cloud prefs yet — seed from whatever this device has
         await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
-          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode });
+          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,
+          privacy:{sharePresence:true} });
       }
       setPrefsReady(true);
     })();
@@ -12411,6 +12545,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
         onBack={accountFromMenu?()=>{setShowAccount(false);setAccountFromMenu(false);setShowMenu(true);}:null}/>}
+      {showPrivacyData&&<PrivacyDataPanel user={user} privacyPrefs={privacyPrefs}
+        onPrivacyChange={handlePrivacyChange} exportData={exportMyData}
+        onClose={()=>{setShowPrivacyData(false);setPrivacyFromMenu(false);}}
+        onBack={privacyFromMenu?()=>{setShowPrivacyData(false);setPrivacyFromMenu(false);setShowMenu(true);}:null}/>}
       {showAdmin&&isAdmin&&<AdminPanel admin={{ user }}
         selfTools={{coins,setCoins:adminSetCoins,unlockAll:adminUnlockAll}}
         animationMode={animationMode} onAnimationModeChange={changeAnimationMode}
@@ -12465,6 +12603,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onRecap={()=>{setShowMenu(false);setRecapFromMenu(true);setShowRecap(true);}}
               onSessions={()=>{setShowMenu(false);setSessionsFromMenu(true);setShowSessions(true);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
+              onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
               isAdmin={isAdmin}
               onAdmin={()=>{setShowMenu(false);setAdminFromMenu(true);setShowAdmin(true);}}
               onToggleTheme={toggleTheme}
