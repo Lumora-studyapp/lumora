@@ -10766,26 +10766,6 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
-    <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Group Leaderboards</div>
-      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
-    </div>
-
-    {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
-    {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
-      <div style={gl.sectionLabel}>PENDING INVITATIONS</div>
-      {incomingInvites.map(invite=><div key={invite.id} style={gl.incomingRow}>
-        <div style={gl.incomingIcon}>🏫</div>
-        <div style={gl.incomingText}>
-          <div style={gl.incomingName}>{invite.groupName||"Private group"}</div>
-          <div style={gl.incomingMeta}>Invited by {invite.createdBy}</div>
-        </div>
-        <button style={gl.acceptBtn} onClick={()=>acceptInvite(invite)} disabled={busy}>Accept</button>
-        <button style={gl.declineBtn} onClick={()=>declineInvite(invite)} disabled={busy} aria-label={`Decline invitation to ${invite.groupName||"group"}`}>×</button>
-      </div>)}
-    </div>}
-    {inviteLoadError&&<div style={gl.error} role="alert">{inviteLoadError}</div>}
-
     {groupsError&&<div style={gl.errorState} role="alert"><strong>Couldn't load groups</strong><span>{groupsError}</span><button style={gl.retryBtn} onClick={()=>reload()}>Try again</button></div>}
 
     {!groupsError&&groups.length>1&&<div style={gl.groupTabs}>
@@ -10793,9 +10773,37 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     </div>}
 
     {active&&<>
+      <div style={S.toggleRow}>
+        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
+          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
+      </div>
+      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
+      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
+        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
+      }
+      <div style={gl.boardBar}>
+        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
+        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
+      </div>
+      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
+      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
+        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
+        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
+      }
+      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
+        {view!=="allTime"
+          ? displayedEligibility.eligible
+            ? view==="past"
+              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
+            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
+          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      </div>}
+
+      <div style={gl.detailsDivider}/>
       <div style={gl.headCard}>
         <div style={{minWidth:0}}>
-          <div style={gl.kicker}>GROUP LEADERBOARD</div>
+          <div style={gl.kicker}>GROUP DETAILS</div>
           <div style={gl.name}>{active.name}</div>
           <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · {weeklyEligibility.participantCount} participating this week</div>
         </div>
@@ -10837,34 +10845,27 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
             : <button style={gl.dangerBtn} onClick={leave} disabled={busy}>Leave group</button>}
         </div>
       </div>}
-
-      <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
-          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
-      </div>
-      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
-      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
-        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
-      }
-      <div style={gl.boardBar}>
-        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
-        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
-      </div>
-      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
-      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
-        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
-        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
-      }
-      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view!=="allTime"
-          ? displayedEligibility.eligible
-            ? view==="past"
-              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
-              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
-          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
-      </div>}
     </>}
+
+    <div style={gl.intro}>
+      <div style={gl.introTitle}>Private Group Leaderboards</div>
+      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
+    </div>
+
+    {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
+    {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
+      <div style={gl.sectionLabel}>PENDING INVITATIONS</div>
+      {incomingInvites.map(invite=><div key={invite.id} style={gl.incomingRow}>
+        <div style={gl.incomingIcon}>🏫</div>
+        <div style={gl.incomingText}>
+          <div style={gl.incomingName}>{invite.groupName||"Private group"}</div>
+          <div style={gl.incomingMeta}>Invited by {invite.createdBy}</div>
+        </div>
+        <button style={gl.acceptBtn} onClick={()=>acceptInvite(invite)} disabled={busy}>Accept</button>
+        <button style={gl.declineBtn} onClick={()=>declineInvite(invite)} disabled={busy} aria-label={`Decline invitation to ${invite.groupName||"group"}`}>×</button>
+      </div>)}
+    </div>}
+    {inviteLoadError&&<div style={gl.error} role="alert">{inviteLoadError}</div>}
 
     {!groupsError&&!active&&<div style={gl.emptyCard}><div style={{fontSize:30}}>🌱</div><div style={gl.emptyTitle}>Start a private group</div><div style={gl.emptyBody}>Create one for classmates or enter an invite from someone you know.</div></div>}
 
@@ -10904,6 +10905,7 @@ function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKe
 const MemoLeaderboardHub=memo(LeaderboardHub);
 
 const gl={
+  detailsDivider:{height:1,background:"#E3EAE2",margin:"18px 2px 12px"},
   intro:{background:"linear-gradient(135deg,#EDF7F0,#F8FBF6)",border:"1px solid #DCEBDD",borderRadius:14,padding:"11px 13px",marginBottom:10},
   introTitle:{fontSize:13.5,fontWeight:800,color:"#2D6A4F"},introBody:{fontSize:10.75,color:"#718076",lineHeight:1.45,marginTop:2},
   sectionLabel:{fontSize:9,fontWeight:800,letterSpacing:1,color:"#849188",marginBottom:6},
