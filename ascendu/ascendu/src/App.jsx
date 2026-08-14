@@ -7454,7 +7454,6 @@ function PrivacyDataPanel({user,privacyPrefs,onPrivacyChange,exportData,onClose,
           <b style={pd.heroTitle}>Privacy without the fine-print feel.</b>
           <span style={pd.summary}>Control visibility, manage your information and read every policy in one place.</span>
         </div>
-        <div style={pd.trustRow}>{["Private by design","No targeted ads","Export available"].map(item=><span key={item} style={pd.trustPill}>{item}</span>)}</div>
         {saved&&<div style={pd.notice} role="status">{saved}</div>}
         <section style={pd.section}>
           <div style={pd.sectionHeading}><b style={pd.sectionTitle}>Friend visibility</b><small style={pd.sectionSub}>Control live activity sharing.</small></div>
