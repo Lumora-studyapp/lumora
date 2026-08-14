@@ -21,6 +21,10 @@ import {
   normalizeFriendUsername, normalizePresenceRecord,
 } from "./friendships.js";
 import {
+  GROUP_REWARD_MIN_PARTICIPANTS, groupRewardEligibility, groupRows,
+  selectLargestEligibleRewardGroup,
+} from "./groupRewards.js";
+import {
   BACKGROUND_CATALOGUE, BACKGROUND_CSS, BackgroundLayer, BackgroundShop,
   DEFAULT_BACKGROUND_ID, ShopCategoryTabs, backgroundCacheKey,
   canEquipBackground, evaluateBackgroundPurchase, getBackgroundAppearance, normalizeBackgroundId,
@@ -1859,8 +1863,8 @@ async function fbLoadWeekBoard(wk) {
 }
 
 // ── Invite-only group leaderboards ──────────────────────────────────────────
-// Groups are deliberately separate from the rewarded global board. They reuse
-// the same verified weekly session totals but never mint coins or skins.
+// Groups reuse the verified aggregate session totals. A group becomes reward
+// eligible only after five distinct members participate during the week.
 const GROUP_MAX_MEMBERS=20;
 const GROUP_MAX_PER_USER=3;
 const cleanGroupName=raw=>(raw||"").trim().replace(/\s+/g," ").slice(0,24);
@@ -1888,14 +1892,14 @@ async function fbLoadGroups(usernameRaw){
   }catch(e){console.error("Group load error:",e);return {ok:false,groups:[],error:"Your groups couldn't be loaded. Try again."};}
 }
 
-async function fbLoadGroupBoard(group){
+async function fbLoadGroupBoard(group,view="weekly"){
   try{
-    const snap=await getDoc(doc(db,"leaderboard_weekly",getWeekKey()));
+    const ref=view==="allTime"
+      ? doc(db,"leaderboard_alltime","data")
+      : doc(db,"leaderboard_weekly",getWeekKey());
+    const snap=await getDoc(ref);
     const ranked=snap.exists()?normalizeBoardEntries(snap.data()):[];
-    const byUser=new Map(ranked.map(row=>[row.username,row]));
-    const rows=(Array.isArray(group?.members)?group.members:[])
-      .map(username=>byUser.get(canonUsername(username))||{username:canonUsername(username),totalSecs:0,sessions:0,subjects:{}})
-      .sort((a,b)=>b.totalSecs-a.totalSecs||a.username.localeCompare(b.username));
+    const rows=groupRows(group,ranked);
     return {ok:true,rows};
   }catch(e){console.error("Group board error:",e);return {ok:false,rows:[],error:"The group standings couldn't be loaded. Try again."};}
 }
@@ -2227,14 +2231,25 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
   const boardRef = doc(db, "leaderboard_weekly", weekKey);
   const claimRef = doc(db, "leaderboard_reward_claims", weekKey);
   const prefsRef = doc(db, "prefs", username);
+  const membershipRef = doc(db, "leaderboard_group_memberships", username);
   try {
     return await runTransaction(db, async tx => {
+      const membershipSnap=await tx.get(membershipRef);
+      const groupIds=membershipSnap.exists()&&Array.isArray(membershipSnap.data().groupIds)
+        ? membershipSnap.data().groupIds.slice(0,GROUP_MAX_PER_USER):[];
+      const groupSnaps=await Promise.all(groupIds.map(groupId=>tx.get(doc(db,"leaderboard_groups",groupId))));
       const [boardSnap, claimSnap, prefsSnap] = await Promise.all([
         tx.get(boardRef), tx.get(claimRef), tx.get(prefsRef)
       ]);
       if(!boardSnap.exists()) return { ok:true, pending:true, reward:0, weekKey, rewardMode };
       const entries = normalizeBoardEntries(boardSnap.data());
-      const rank = entries.findIndex(e=>e.username===username);
+      const groups=groupSnaps.filter(snap=>snap.exists()).map(snap=>({id:snap.id,...snap.data()}));
+      const rewardGroup=selectLargestEligibleRewardGroup(groups,entries,username);
+      if(!rewardGroup)return {
+        ok:true,reward:0,noPrize:true,weekKey,rewardMode,rank:0,
+        reason:"no-eligible-group",minimumParticipants:GROUP_REWARD_MIN_PARTICIPANTS,
+      };
+      const rank=rewardGroup.rank;
       const claimed = normalizeRewardClaims(claimSnap.exists() ? claimSnap.data().claimed : {});
       const prefs = prefsSnap.exists() ? prefsSnap.data() : {};
       const ownedSkins = Array.isArray(prefs.ownedSkins) && prefs.ownedSkins.length ? prefs.ownedSkins : ["default"];
@@ -2292,6 +2307,8 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
 
       const claimData = {
         ts:Date.now(), rank:rank+1, reward,
+        source:"group",groupId:rewardGroup.group.id,groupName:rewardGroup.group.name||"Group",
+        participantCount:rewardGroup.participantCount,
         rewardType:background?"background":decoration?"decoration":skin?"skin":reward>0?"coins":"none",
         skinId:skin?.id||null, skinName:skin?.name||null,
         backgroundId:background?.id||null,backgroundName:background?.name||null,
@@ -2313,6 +2330,8 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
         tx.set(prefsRef, { coins:current+reward }, { merge:true });
       }
       return { ok:true, reward, weekKey, rank:rank+1, rewardMode,
+        groupId:rewardGroup.group.id,groupName:rewardGroup.group.name||"Group",
+        participantCount:rewardGroup.participantCount,
         skinId:skin?.id||null, skinName:skin?.name||null, skinFallback,
         backgroundId:background?.id||null,backgroundName:background?.name||null,backgroundFallback,
         decorationId:decoration?.id||null,decorationName:decoration?.name||null,decorationFallback,
@@ -10347,13 +10366,57 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
   );
 }
 
+function LeaderboardRows({entries,currentUser,subjects,onVisit,loading=false,emptyTitle="No study time yet",emptyBody="Complete a session to appear here."}){
+  const podiumStyles=[gl.rankGold,gl.rankSilver,gl.rankBronze];
+  if(loading)return <div style={gl.loadingRows}>{[0,1,2,3].map(i=><div key={i} style={gl.loadingRow}>
+    <div className="sg-skeleton" style={{width:30,height:30,borderRadius:10}}/>
+    <div className="sg-skeleton" style={{width:34,height:34,borderRadius:"50%"}}/>
+    <div className="sg-skeleton" style={{height:11,flex:1}}/>
+    <div className="sg-skeleton" style={{width:46,height:12}}/>
+  </div>)}</div>;
+  if(!entries.length)return <div style={gl.boardEmpty}><div style={{fontSize:28}}>📚</div><strong>{emptyTitle}</strong><span>{emptyBody}</span></div>;
+  return entries.map((entry,i)=>{
+    const isMe=canonUsername(entry.username)===canonUsername(currentUser);
+    const topId=Object.entries(entry.subjects||{}).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const topSubj=subjects.find(subject=>subject.id===topId);
+    return <div key={entry.username} style={{...gl.boardRow,...(i<3?podiumStyles[i]:{}),...(isMe?gl.boardRowMe:{}),cursor:"pointer"}}
+      className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s classroom`}>
+      <div style={{...gl.rankBadge,...(i<3?gl.rankBadgePodium:{})}}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
+      <div style={{...gl.avatar,background:isMe?"#4F9D73":"#E6EEE7",color:isMe?"#fff":"#506258"}}>{entry.username.slice(0,1).toUpperCase()}</div>
+      <div style={gl.boardIdentity}>
+        <div style={{...gl.boardUsername,color:isMe?"#2D6A4F":"#1A2E22"}}>{entry.username}{isMe&&<span style={gl.youTag}>you</span>}</div>
+        <div style={gl.boardMeta}>{entry.sessions} session{entry.sessions!==1?"s":""}{topSubj&&<span> · {topSubj.emoji} {topSubj.label}</span>}</div>
+      </div>
+      <div style={gl.focusTime}><strong style={{fontSize:13,color:"#23372A"}}>{fmtMins(entry.totalSecs)}</strong><span style={{fontSize:8.5,color:"#9AA39C"}}>focused</span></div>
+    </div>;
+  });
+}
+
+function WeeklyGroupRewardCard({group,weeklyEntries}){
+  const eligibility=groupRewardEligibility(group,weeklyEntries);
+  const rewardMode=getWeeklyRewardMode(new Date());
+  const rewardPlan=getWeeklyRewardPlan(new Date());
+  const title=rewardMode==="skin"?"Mystery character week":rewardMode==="classroom"?"Classroom collection week":"Coin reward week";
+  return <div style={{...S.rewardCard,marginBottom:10}}>
+    <div style={S.rewardCardTop}><div style={S.rewardCardTitle}>{title}</div><div style={S.rewardCycleBadge}>3-week rotation</div></div>
+    <div style={S.rewardPrizeRow}>{rewardPlan.map(prize=><div key={prize.place} style={{...S.rewardPrize,...(prize.type!=="coins"?S.rewardPrizeSkin:{})}}>
+      <span style={S.rewardMedal}>{prize.medal}</span><span style={S.rewardPlace}>{prize.place}</span>
+      <span style={prize.type!=="coins"?S.rewardSkin:S.rewardCoins}>{prize.type==="skin"?"🎁 Random style":prize.type==="background"?"🌙 Background":prize.type==="decoration"?"🏫 Classroom décor":`+${prize.coins} 🪙`}</span>
+    </div>)}</div>
+    <div style={{...gl.rewardEligibility,...(eligibility.eligible?gl.rewardEligible:{})}}>
+      {eligibility.eligible?"✓ Reward eligible":`${eligibility.participantCount}/${eligibility.minimum} participating members`}
+      <span>{eligibility.eligible?" Prizes settle after the Sunday reset.":" Five members must study this week to unlock prizes."}</span>
+    </div>
+  </div>;
+}
+
 function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network }) {
   const [view,setView]=useState("weekly");
+  const [managing,setManaging]=useState(false);
   const [friendUsername,setFriendUsername]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const entries=useMemo(()=>filterBoardForFriends(data[view]||[],currentUser,network.friends),[data,view,currentUser,network.friends]);
-  const medals=["🥇","🥈","🥉"];
   const run=async action=>{
     if(busy)return false;
     setBusy(true);setError("");
@@ -10373,9 +10436,9 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
     <div>
       <div style={fr.hero}>
         <div><div style={fr.kicker}>YOUR STUDY CIRCLE</div><div style={fr.title}>Friends</div><div style={fr.subtitle}>Only accepted friends can see your status, subject and rankings.</div></div>
-        <div style={fr.count}>{network.friends.length}<span style={{fontSize:7,fontWeight:750,letterSpacing:.4}}>friends</span></div>
+        <button style={gl.manageBtn} onClick={()=>setManaging(value=>!value)}>{managing?"Done":"Friend settings"}</button>
       </div>
-      <div style={fr.addRow}>
+      {managing&&<div style={gl.manageCard}><div style={fr.addRow}>
         <input style={gl.input} value={friendUsername} maxLength={20} onChange={event=>{setFriendUsername(event.target.value);setError("");}}
           onKeyDown={event=>event.key==="Enter"&&friendUsername.trim()&&send()} placeholder="Add by username" aria-label="Friend username"/>
         <button style={fr.addBtn} onClick={send} disabled={busy||!friendUsername.trim()}>{busy?"…":"Add"}</button>
@@ -10401,7 +10464,7 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
           <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><span style={fr.friendDot}/>{friend.username}</button>
           <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
         </div>)}
-      </div>}
+      </div>}</div>}
 
       <div style={S.toggleRow}>
         {[["weekly","This Week"],["allTime","All Time"]].map(([id,lbl])=>(
@@ -10410,41 +10473,9 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
         ))}
       </div>
       <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(0).rangeLabel}</div>
-      {loading&&<div>
-        {[0,1,2,3,4].map(i=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",marginBottom:8}}>
-            <div className="sg-skeleton" style={{width:26,height:26,borderRadius:"50%",flexShrink:0,animationDelay:`${i*0.08}s`}}/>
-            <div style={{flex:1}}>
-              <div className="sg-skeleton" style={{height:12,width:`${52-i*5}%`,marginBottom:7,animationDelay:`${i*0.08}s`}}/>
-              <div className="sg-skeleton" style={{height:8,width:`${34-i*3}%`,animationDelay:`${i*0.08}s`}}/>
-            </div>
-            <div className="sg-skeleton" style={{width:44,height:14,animationDelay:`${i*0.08}s`}}/>
-          </div>
-        ))}
-      </div>}
-      {!loading&&entries.length===0&&<div style={fr.empty}><div>👥</div><strong>{network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}</strong><span>{network.friends.length?"Complete a session to appear in this ranking.":"Send a username request above. They must accept before either account appears."}</span></div>}
-      {!loading&&entries.map((entry,i)=>{
-        const isMe=entry.username===currentUser;
-        const topId=entry.subjects?Object.entries(entry.subjects).sort((a,b)=>b[1]-a[1])[0]?.[0]:null;
-        const topSubj=subjects.find(s=>s.id===topId);
-        return (
-          <div key={entry.username} style={{...S.boardRow,...(isMe?S.boardRowMe:{}),cursor:"pointer"}}
-            className="sg-tap-card" onClick={()=>onVisit&&onVisit(entry.username)} title={`Visit ${entry.username}'s classroom`}>
-            <div style={S.boardRank}>{i<3?medals[i]:<span style={{color:"#aaa",fontWeight:700}}>#{i+1}</span>}</div>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:isMe?700:500,color:isMe?"#56B68B":"#1a1a2e"}}>
-                {entry.username}{isMe&&<span style={{fontSize:11,color:"#56B68B"}}> (you)</span>}
-              </div>
-              <div style={{fontSize:11,color:"#aaa",marginTop:2}}>
-                {entry.sessions} session{entry.sessions!==1?"s":""}
-                {topSubj&&` · mostly ${topSubj.emoji} ${topSubj.label}`}
-              </div>
-            </div>
-            <div style={{fontWeight:700,color:"#1a1a2e",fontSize:15}}>{fmtMins(entry.totalSecs)}</div>
-            <span style={{color:"#C4CDC2",fontSize:15,marginLeft:6}}>›</span>
-          </div>
-        );
-      })}
+      <LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={loading}
+        emptyTitle={network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}
+        emptyBody={network.friends.length?"Complete a session to appear in this ranking.":"Open Friend settings to send a username request."}/>
     </div>
   );
 }
@@ -10461,7 +10492,8 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [groups,setGroups]=useState(null);
   const [groupsError,setGroupsError]=useState("");
   const [activeId,setActiveId]=useState(null);
-  const [board,setBoard]=useState([]);
+  const [view,setView]=useState("weekly");
+  const [boards,setBoards]=useState({weekly:[],allTime:[]});
   const [boardLoading,setBoardLoading]=useState(false);
   const [boardError,setBoardError]=useState("");
   const [incomingInvites,setIncomingInvites]=useState([]);
@@ -10494,10 +10526,14 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const active=groups?.find(g=>g.id===activeId)||null;
   useEffect(()=>{
     let live=true;
-    if(!active){setBoard([]);setBoardError("");setPendingInvites([]);return;}
+    if(!active){setBoards({weekly:[],allTime:[]});setBoardError("");setPendingInvites([]);return;}
     setBoardLoading(true);setBoardError("");
-    Promise.all([fbLoadGroupBoard(active),fbLoadPendingGroupInvites(active)]).then(([result,pending])=>{
-      if(live){setBoard(result.rows||[]);setBoardError(result.ok?"":result.error);setPendingInvites(pending);setBoardLoading(false);}
+    Promise.all([fbLoadGroupBoard(active,"weekly"),fbLoadGroupBoard(active,"allTime"),fbLoadPendingGroupInvites(active)]).then(([weekly,allTime,pending])=>{
+      if(live){
+        setBoards({weekly:weekly.rows||[],allTime:allTime.rows||[]});
+        setBoardError(weekly.ok&&allTime.ok?"":weekly.error||allTime.error);
+        setPendingInvites(pending);setBoardLoading(false);
+      }
     });
     return()=>{live=false;};
   },[active,currentWeekKey]);
@@ -10566,7 +10602,8 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     if(result)await reload();
   };
   const owner=active&&canonUsername(active.owner)===canonUsername(currentUser);
-  const podiumStyles=[gl.rankGold,gl.rankSilver,gl.rankBronze];
+  const board=boards[view]||[];
+  const weeklyEligibility=groupRewardEligibility(active,boards.weekly);
 
   if(groups===null)return <div style={{padding:"24px 0"}}><div className="sg-skeleton" style={{height:120}}/></div>;
   return <div>
@@ -10599,23 +10636,22 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     {active&&<>
       <div style={gl.headCard}>
         <div style={{minWidth:0}}>
-          <div style={gl.kicker}>THIS WEEK</div>
+          <div style={gl.kicker}>GROUP LEADERBOARD</div>
           <div style={gl.name}>{active.name}</div>
-          <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · owner {active.owner}</div>
+          <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · {weeklyEligibility.participantCount} participating this week</div>
         </div>
-        <button style={gl.manageBtn} onClick={()=>setManaging(v=>!v)}>{managing?"Done":"Manage"}</button>
-      </div>
-
-      <div style={gl.inviteCard}>
-        <div>
-          <div style={gl.inviteLabel}>PERMANENT GROUP CODE</div>
-          <div style={gl.inviteCode}>{active.inviteCode||"—"}</div>
-          <div style={gl.inviteHint}>Valid until the owner replaces it or deletes the group</div>
-        </div>
-        <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy code"}</button>
+        <button style={gl.manageBtn} onClick={()=>setManaging(v=>!v)}>{managing?"Done":"Group settings"}</button>
       </div>
 
       {managing&&<div style={gl.manageCard}>
+        <div style={gl.inviteCard}>
+          <div>
+            <div style={gl.inviteLabel}>PERMANENT GROUP CODE</div>
+            <div style={gl.inviteCode}>{active.inviteCode||"—"}</div>
+            <div style={gl.inviteHint}>Share this code with people you want in this leaderboard.</div>
+          </div>
+          <button style={gl.copyBtn} onClick={shareInvite} disabled={!active.inviteCode}>{copied?"Copied ✓":"Copy code"}</button>
+        </div>
         {pendingInvites.length>0&&<div style={gl.pendingList}>
           <div style={gl.sectionLabel}>EARLIER USERNAME INVITES</div>
           {pendingInvites.map(invite=><div key={invite.id} style={gl.pendingRow}>
@@ -10643,33 +10679,27 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
         </div>
       </div>}
 
-      <div style={gl.boardBar}>
-        <span>Weekly standings</span>
-        <span>{weekKeyForOffset(0).rangeLabel}</span>
+      <div style={S.toggleRow}>
+        {[["weekly","This Week"],["allTime","All Time"]].map(([id,label])=><button key={id}
+          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
       </div>
-      {boardLoading?<div style={gl.loadingRows}>{[0,1,2,3].map(i=><div key={i} style={gl.loadingRow}>
-        <div className="sg-skeleton" style={{width:30,height:30,borderRadius:10}}/>
-        <div className="sg-skeleton" style={{width:34,height:34,borderRadius:"50%"}}/>
-        <div className="sg-skeleton" style={{height:11,flex:1}}/>
-        <div className="sg-skeleton" style={{width:46,height:12}}/>
-      </div>)}</div>:board.map((entry,i)=>{
-        const isMe=canonUsername(entry.username)===canonUsername(currentUser);
-        const topId=Object.entries(entry.subjects||{}).sort((a,b)=>b[1]-a[1])[0]?.[0];
-        const topSubj=subjects.find(s=>s.id===topId);
-        const podium=i<3?podiumStyles[i]:{};
-        return <div key={entry.username} style={{...gl.boardRow,...podium,...(isMe?gl.boardRowMe:{}),cursor:"pointer"}} className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s classroom`}>
-          <div style={{...gl.rankBadge,...(i<3?gl.rankBadgePodium:{})}}>{i+1}</div>
-          <div style={{...gl.avatar,background:isMe?"#4F9D73":"#E6EEE7",color:isMe?"#fff":"#506258"}}>{entry.username.slice(0,1).toUpperCase()}</div>
-          <div style={gl.boardIdentity}>
-            <div style={{...gl.boardUsername,color:isMe?"#2D6A4F":"#1A2E22"}}>{entry.username}{isMe&&<span style={gl.youTag}>you</span>}</div>
-            <div style={gl.boardMeta}>{entry.sessions>0&&<span title="Participated this week">🌿 </span>}{entry.sessions} session{entry.sessions!==1?"s":""}{topSubj&&<span> · {topSubj.emoji} {topSubj.label}</span>}</div>
-          </div>
-          <div style={gl.focusTime}><strong style={{fontSize:13,color:"#23372A"}}>{fmtMins(entry.totalSecs)}</strong><span style={{fontSize:8.5,color:"#9AA39C"}}>focused</span></div>
-        </div>;
-      })}
+      {view==="weekly"&&<WeeklyGroupRewardCard group={active} weeklyEntries={boards.weekly}/>}
+      <div style={gl.boardBar}>
+        <span>{view==="weekly"?"Weekly standings":"All-time standings"}</span>
+        <span>{view==="weekly"?weekKeyForOffset(0).rangeLabel:"Since joining Lumora"}</span>
+      </div>
       {!boardLoading&&boardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{boardError}</span><button style={gl.retryBtn} onClick={()=>reload(active.id)}>Try again</button></div>}
-      {!boardLoading&&!boardError&&board.length===0&&<div style={gl.boardEmpty}><div style={{fontSize:28}}>🌱</div><strong>No focus time yet</strong><span>Complete a session this week to appear here.</span></div>}
-      {!boardLoading&&!boardError&&board.length>0&&<div style={gl.badgeNote}>🌱 The leaf marks members who have completed a session this week. Group boards do not award coins or skins.</div>}
+      {!boardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={boardLoading}
+        emptyTitle={view==="weekly"?"No focus time this week":"No all-time focus time yet"}
+        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":"Group members appear here after completing a session."}/>
+      }
+      {!boardLoading&&!boardError&&<div style={{...gl.badgeNote,...(view==="weekly"&&weeklyEligibility.eligible?gl.rewardEligibleNote:{})}}>
+        {view==="weekly"
+          ? weeklyEligibility.eligible
+            ? "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
+            : `🔒 ${weeklyEligibility.participantCount}/${weeklyEligibility.minimum} members have studied. Five participating members unlock this week's rewards.`
+          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      </div>}
     </>}
 
     {!groupsError&&!active&&<div style={gl.emptyCard}><div style={{fontSize:30}}>🌱</div><div style={gl.emptyTitle}>Start a private group</div><div style={gl.emptyBody}>Create one for classmates or enter an invite from someone you know.</div></div>}
@@ -10718,7 +10748,8 @@ const gl={
   groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px",scrollbarWidth:"thin"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"#fff",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"#E8F5EE",borderColor:"#BFE3CE",color:"#2D6A4F"},
   headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#fff",border:"1px solid #E7ECE4",borderRadius:14,padding:"11px 13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{fontSize:17,fontWeight:800,color:"#1A2E22",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"#486351",cursor:"pointer",flexShrink:0},
   inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"#fff",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
-  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},manageCard:{background:"#F9FBF8",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"#fff",fontSize:11},smallBtn:{border:"none",background:"#E8F5EE",color:"#2D6A4F",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
+  rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"#2D6A4F",background:"#EAF6EE",borderColor:"#BFE2CC"},
+  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"#2D6A4F",background:"#EAF6EE",border:"1px solid #CDE7D5"},manageCard:{background:"#F9FBF8",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"#fff",fontSize:11},smallBtn:{border:"none",background:"#E8F5EE",color:"#2D6A4F",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
   boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"#fff",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"#F0F8F3",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"#2D6A4F",background:"#DCEFE3",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
