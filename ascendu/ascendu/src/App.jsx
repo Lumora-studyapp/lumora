@@ -11026,10 +11026,18 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
   const stageCount = MILESTONE_STAGES.length;
   const currentStageIndex = MILESTONE_STAGES.findIndex(stage => totalHours >= stage.min && totalHours < stage.max);
   const userCurrentStage = currentStageIndex === -1 ? stageCount - 1 : currentStageIndex;
+  // Claimable rewards take priority whenever the panel opens. This makes it
+  // impossible to overlook an earlier earned reward while progressing onward.
+  const firstUnclaimedCompletedStage = MILESTONE_STAGES.findIndex((stage,index) =>
+    totalHours >= stage.max && !claimedRewards.includes(index)
+  );
+  const initialStageIndex = firstUnclaimedCompletedStage === -1
+    ? userCurrentStage
+    : firstUnclaimedCompletedStage;
 
   useEffect(() => {
-    setCarouselIndex(userCurrentStage);
-  }, [userCurrentStage]);
+    setCarouselIndex(initialStageIndex);
+  }, [initialStageIndex]);
 
   // Always show three markers: selected in the middle where possible, and the
   // first/last three stages at the ends of the path.
