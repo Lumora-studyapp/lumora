@@ -6120,7 +6120,7 @@ const gs = {
 };
 
 // ── Badges / Achievements Modal ───────────────────────────────────────────────
-function BadgesModal({ unlocked, onClose, onBack }) {
+function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onClose, onBack }) {
   const earned = BADGES.filter(b=>unlocked.includes(b.id)).length;
   return (
     <div style={bg.overlay} className="sg-overlay-anim" onClick={onClose}>
@@ -6133,6 +6133,9 @@ function BadgesModal({ unlocked, onClose, onBack }) {
           <span style={bg.count}>{earned}/{BADGES.length}</span>
         </div>
         <p style={bg.sub}>Earn coins as you build your study habit.</p>
+        <div style={bg.milestonePath}>
+          <MilestonePath history={history} claimedRewards={claimedRewards} onClaimReward={onClaimReward}/>
+        </div>
         <div style={bg.grid}>
           {BADGES.map((b,idx)=>{
             const got = unlocked.includes(b.id);
@@ -6160,6 +6163,7 @@ const bg = {
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
   sub:{fontSize:12,color:"#aaa",margin:"4px 0 0"},
+  milestonePath:{margin:"16px 0 20px"},
   count:{fontSize:14,fontWeight:700,color:"#2D6A4F",background:"#E8F5EE",borderRadius:20,padding:"4px 12px"},
   grid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:14},
   card:{borderRadius:16,padding:"16px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",border:"1.5px solid #E8EDE4"},
@@ -12582,7 +12586,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         onOpenDecorations={()=>{setPreviewBackgroundId(null);setShowBackgroundShop(false);setShowGardenShop(true);}}
         onBack={cameFromMenu?()=>{setPreviewBackgroundId(null);setShowBackgroundShop(false);setShowMenu(true);}:null}
       />}
-      {showBadges&&<BadgesModal unlocked={badges} onClose={()=>setShowBadges(false)}
+      {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onClose={()=>setShowBadges(false)}
         onBack={()=>{setShowBadges(false);setShowMenu(true);}}/>}
       {showRecap&&<SmartDashboard history={history} subjects={subjects} streak={streak} targets={targets} coins={coins}
         onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
@@ -12671,7 +12675,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {tab==="timer"&&(
             <div style={S.timerView} className="sg-view-anim" key="view-timer">
-              <MilestonePath history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward}/>
               <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
                 onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
                 onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
@@ -12910,7 +12913,7 @@ const S = {
   nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},
   navBtnActive:{background:"#fff",color:"#2D6A4F",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"},
-  timerView:{padding:"0 16px 40px"},
+  timerView:{padding:"10px 16px 40px"},
   modeRow:{display:"flex",gap:8,marginBottom:12},
   modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
   modeBtnActive:{fontWeight:700},
