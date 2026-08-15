@@ -1,0 +1,12 @@
+@font-face {
+  font-family: 'Noto Color Emoji';
+  src: url('/fonts/NotoColorEmoji-COLRv1.ttf') format('truetype');
+  font-display: swap;
+  unicode-range: U+00A9, U+00AE, U+203C, U+2049, U+20E3, U+2122, U+2139, U+2194-2199, U+21A9-21AA, U+231A-231B, U+2328, U+23CF, U+23E9-23F3, U+23F8-23FA, U+24C2, U+25AA-25AB, U+25B6, U+25C0, U+25FB-25FE, U+2600-27BF, U+2934-2935, U+2B05-2B07, U+2B1B-2B1C, U+2B50, U+2B55, U+3030, U+303D, U+3297, U+3299, U+FE0F, U+1F000-1FAFF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { width: 100%; max-width: 100%; min-height: 100%; overflow-x: hidden; }
+html { font-family: 'Noto Color Emoji', system-ui, sans-serif; }
+body { font-family: 'Noto Color Emoji', system-ui, sans-serif; }
+html, body { background: var(--sg-boot-bg, #F5F7F2); }

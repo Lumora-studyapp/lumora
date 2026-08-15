@@ -77,17 +77,23 @@ const LS_RECAP    = "studygrove_recap_shown";
 // tree) so they render normally. This is reliable across browsers and doesn't
 // depend on how React serialises inline styles.
 const DARK_CSS = `
+[data-theme] .sg-shell { --sg-counter-filter: ; }
 [data-theme="dark"] .sg-shell {
   filter: invert(0.93) hue-rotate(180deg);
+  --sg-counter-filter: invert(1) hue-rotate(180deg);
   background: #ECF1ED;
   transition: filter 0.25s ease;
 }
-/* Counter-filter media + vivid surfaces so they look normal on dark */
+/* Counter-filter media and marked brand elements so they keep their real colours. */
 [data-theme="dark"] .sg-shell .sg-keepcolor {
   filter: invert(1) hue-rotate(180deg);
 }
 [data-theme="dark"] .sg-shell img,
 [data-theme="dark"] .sg-shell svg {
+  filter: invert(1) hue-rotate(180deg);
+}
+/* Emoji are wrapped at runtime only while dark mode is active. */
+[data-theme="dark"] .sg-shell [data-sg-emoji] {
   filter: invert(1) hue-rotate(180deg);
 }
 `;
@@ -5757,7 +5763,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {onBack && <button style={sh.backBtn} onClick={onBack} title="Back">←</button>}
             <div>
-              <h3 style={sh.title}>🧑‍🎓 Character Styles</h3>
+              <h3 style={sh.title}>🧑‍🎓 Skins</h3>
               <div style={sh.subtitle}>{ownedSkins.length} of {TREE_SKINS.length} unlocked</div>
             </div>
           </div>
@@ -7498,7 +7504,7 @@ const pd={
 
 function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onToggleTheme, onLogout, onClose }) {
   const items = [
-    { icon:"🧑‍🎓", label:"Character Styles", sub:"Growth looks and unlocks", onClick:onTreeShop },
+    { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, onClick:onBadges },
     { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
@@ -10928,16 +10934,16 @@ const gl={
 // are green only when both neighbouring dots are green. Hovering a dot shows a
 // small tab with the stage name and the hour range that unlocks it.
 const MILESTONE_STAGES = [
-  { name:"Infant",              min:0,    max:5, image:"/Images/Infant.png", displayScale:1.62 },
-  { name:"Primary School Student", min:5, max:15, image:"/Images/Primary school student.png", displayScale:1.74 },
-  { name:"High School Student", min:15,   max:40, image:"/Images/High school student.png", displayScale:1.18 },
-  { name:"Uni Student",         min:40,   max:100, image:"/Images/Uni student.png" },
-  { name:"School Teacher",      min:100,  max:200, image:"/Images/School teacher.png" },
-  { name:"Researcher",          min:200,  max:500, image:"/Images/Researcher.png" },
-  { name:"Professor",           min:500,  max:1000, image:"/Images/Professor.png" },
-  { name:"Scholar",             min:1000, max:2500, image:"/Images/Scholar.png" },
-  { name:"Philosopher",         min:2500, max:5000, image:"/Images/Philosopher.png" },
-  { name:"Sage",                min:5000, max:10000, image:"/Images/Sage.png" },
+  { name:"Infant",              min:0,    max:5, image:"/Images/Infant - No Backgorund.png", displayScale:1.62 },
+  { name:"Primary School Student", min:5, max:15, image:"/Images/Primary school student - No Background.png", displayScale:1.74, displayOffsetX:4 },
+  { name:"High School Student", min:15,   max:40, image:"/Images/High School Student - No Background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"University Student",  min:40,   max:100, image:"/Images/University student - No background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"School Teacher",      min:100,  max:200, image:"/Images/School Teacher - No background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"Researcher",          min:200,  max:500, image:"/Images/Researcher - No Background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"Professor",           min:500,  max:1000, image:"/Images/Professor - No Background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"Scholar",             min:1000, max:2500, image:"/Images/Scholar - No Background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"Philosopher",         min:2500, max:5000, image:"/Images/Philosopher - no background.png", displayScale:2, displayOffsetY:-18 },
+  { name:"Sage",                min:5000, max:10000, image:"/Images/Sage - No Background.png", displayScale:2, displayOffsetY:-18 },
 ];
 const getMilestoneReward = stage => Math.max(5,Math.round(stage.max));
 const MILESTONE_GREEN = "#1FA34D"; // vivid saturated green
@@ -11098,7 +11104,7 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
         <div key={`art-${carouselIndex}`} className={transitionDirection==="next"?"sg-milestone-art-next":"sg-milestone-art-prev"} style={mp.artColumn}>
           <div style={mp.artPanel}>
             <img className="sg-keepcolor" src={selectedStage.image} alt={selectedStage.name}
-              style={{...mp.stageImage, transform:`scale(${selectedStage.displayScale||1})`, filter:stageColourFilter, ...(!selectedCompleted ? mp.stageImageLocked : {})}} />
+              style={{...mp.stageImage, transform:`translate(${selectedStage.displayOffsetX||0}px, ${selectedStage.displayOffsetY||0}px) scale(${selectedStage.displayScale||1})`, filter:`var(--sg-counter-filter) ${stageColourFilter}`, ...(!selectedCompleted ? mp.stageImageLocked : {})}} />
           </div>
           <div style={{...mp.rewardPanel, filter:stageColourFilter}}>
             <span style={mp.rewardCopy}>Stage reward <b style={mp.rewardAmount}>🪙 {rewardAmount.toLocaleString()}</b></span>
@@ -11283,6 +11289,50 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const themeMeta=document.querySelector('meta[name="theme-color"]');
     if(themeMeta)themeMeta.setAttribute("content",renderedBackgroundAppearance.baseColor);
   },[theme,renderedBackgroundAppearance]);
+
+  // Dark mode uses a shell-level colour inversion. Preserve emoji artwork by
+  // wrapping only emoji glyphs in a counter-inverted span, including content
+  // added later by toasts, menus, or async data.
+  useEffect(()=>{
+    if(theme!=="dark")return;
+    const root=document.querySelector(".sg-shell");
+    if(!root)return;
+    const emojiPattern=/(?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)/gu;
+    const containsEmoji=/\p{Extended_Pictographic}/u;
+    const wrapText=node=>{
+      if(!node.parentElement||node.parentElement.closest("[data-sg-emoji], .sg-keepcolor")||!containsEmoji.test(node.nodeValue||""))return;
+      const text=node.nodeValue||"";
+      const fragment=document.createDocumentFragment();
+      let cursor=0;
+      for(const match of text.matchAll(emojiPattern)){
+        if(match.index>cursor)fragment.append(text.slice(cursor,match.index));
+        const emoji=document.createElement("span");
+        emoji.dataset.sgEmoji="true";
+        emoji.textContent=match[0];
+        fragment.append(emoji);
+        cursor=match.index+match[0].length;
+      }
+      if(cursor===0)return;
+      if(cursor<text.length)fragment.append(text.slice(cursor));
+      node.replaceWith(fragment);
+    };
+    const scan=node=>{
+      if(node.nodeType===Node.ELEMENT_NODE&&node.matches("[data-sg-emoji]"))return;
+      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
+      const nodes=[];
+      while(walker.nextNode())nodes.push(walker.currentNode);
+      nodes.forEach(wrapText);
+    };
+    scan(root);
+    const observer=new MutationObserver(records=>{
+      records.forEach(record=>record.addedNodes.forEach(node=>{
+        if(node.nodeType===Node.TEXT_NODE)wrapText(node);
+        else if(node.nodeType===Node.ELEMENT_NODE)scan(node);
+      }));
+    });
+    observer.observe(root,{childList:true,subtree:true});
+    return()=>observer.disconnect();
+  },[theme]);
   const toggleTheme=()=>{ const t=theme==="dark"?"light":"dark"; setTheme(t); lsSetR(LS_THEME,t); };
 
   useEffect(()=>{
@@ -12581,7 +12631,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           )}
 
           <header style={S.header}>
-            <span style={S.logo}>🧑‍🎓 Lumora</span>
+            <span className="sg-keepcolor" style={S.logo}>🧑‍🎓 Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={coins} prefix="🪙 "/></button>
               <button onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
@@ -12806,7 +12856,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 )}
                 <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":subjectObj.color,...(otherTabActive?{cursor:"not-allowed"}:{})}}
                   onClick={startSession} disabled={otherTabActive}>
-                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"✨ Start Growing"}
+                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"Start Learning ✨"}
                 </button>
 
                 {/* Weekly target progress (only if set) */}

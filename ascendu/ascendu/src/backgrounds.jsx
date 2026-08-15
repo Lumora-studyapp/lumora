@@ -759,7 +759,7 @@ export function BackgroundLayer({ backgroundId, theme = "light", focusMode = fal
 
 export function ShopCategoryTabs({ active, onTrees, onDecorations, onBackgrounds }) {
   const items = [
-    ["trees", "🧑‍🎓", "Character Styles", onTrees],
+    ["trees", "🧑‍🎓", "Skins", onTrees],
     ["decorations", "🏫", "Classroom Decor", onDecorations],
     ["backgrounds", "◫", "Backgrounds", onBackgrounds],
   ];
