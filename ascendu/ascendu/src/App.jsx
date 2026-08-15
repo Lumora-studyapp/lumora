@@ -103,6 +103,12 @@ const APP_CSS = `
   70%  { box-shadow: 0 0 0 7px rgba(52,199,89,0); }
   100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); }
 }
+@keyframes sgFocusStageGlow {
+  0% { filter:brightness(1); box-shadow:0 0 0 0 color-mix(in srgb,var(--sg-stage-glow) 0%,transparent); }
+  25% { filter:brightness(1.3); box-shadow:0 0 11px 3px color-mix(in srgb,var(--sg-stage-glow) 58%,transparent); }
+  62% { filter:brightness(1.1); box-shadow:0 0 7px 1px color-mix(in srgb,var(--sg-stage-glow) 30%,transparent); }
+  100% { filter:brightness(1); box-shadow:0 0 0 0 color-mix(in srgb,var(--sg-stage-glow) 0%,transparent); }
+}
 .sg-shell ::-webkit-scrollbar { height:5px; width:5px; }
 .sg-shell ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:8px; }
 .sg-shell {
@@ -5309,6 +5315,28 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
   // What the big clock shows: countdown until 0, then counts UP as overtime
   const bigTime = isTimer ? (overtime ? `+${fmt(overSecs)}` : fmt(remaining)) : fmt(elapsed);
   const bigColor = paused ? "#8D9990" : isBreak ? "#4F7D68" : (overtime ? "#E08A2B" : subject.color);
+  const focusSeconds=isPomodoro
+    ? (pomodoro.completedFocusSeconds+(isBreak?0:elapsed))
+    : elapsed;
+  // Pomodoro starts with its familiar 25-minute focus interval; standard focus
+  // uses the full progression milestones.
+  const focusStages=[
+    {label:isPomodoro?"0–25 min":"0–30 min",end:isPomodoro?25*60:30*60},
+    {label:isPomodoro?"25–60 min":"30–60 min",end:60*60},
+    {label:"1–2 hr",end:2*60*60},{label:"2–3 hr",end:3*60*60},{label:"3–6 hr",end:6*60*60},
+  ];
+  const foundStageIndex=focusStages.findIndex(stage=>focusSeconds<stage.end);
+  const stageIndex=foundStageIndex===-1?focusStages.length-1:foundStageIndex;
+  const activeFocusStage=focusStages[stageIndex];
+  const stagePercent=Math.min(100,Math.floor((focusSeconds/activeFocusStage.end)*100));
+  const previousStageRef=useRef(stageIndex);
+  const [stageGlowToken,setStageGlowToken]=useState(0);
+  useEffect(()=>{
+    if(previousStageRef.current!==stageIndex){
+      previousStageRef.current=stageIndex;
+      setStageGlowToken(token=>token+1);
+    }
+  },[stageIndex]);
   return (
     <div className={`sg-session-screen sg-focus-anim${isBreak?" sg-break-screen":""}`} style={{...fs.wrap,"--sg-focus-accent":`${subject.color}18`}}>
       {!isBreak&&<SubjectSessionAmbience subject={subject} paused={paused}/>}
@@ -5320,6 +5348,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
       {isPomodoro&&<div style={fs.roundLabel} aria-live="polite">Round {pomodoro.round} of {pomodoro.plannedRounds} · {isBreak?"Rest":"Focus"}</div>}
       <div className="sg-session-tree" style={fs.treeArea}><TreeSVG progress={isBreak?1:progress} color={subject.color} paused={paused||isBreak} large skin={skin} enhance={enhance}/></div>
       {task&&<div className="sg-focus-task" title={task.title}>Task · {task.title}</div>}
+      <div style={fs.focusProgressGroup}>
       <div className="sg-session-time" style={{...fs.time,color:bigColor}} aria-live="off">{bigTime}</div>
       <div className="sg-session-mode" style={fs.modeLabel}>
         {isBreak&&pomodoro.awaitingNext ? "Break complete — begin when you’re ready"
@@ -5330,10 +5359,21 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
           : isPomodoro ? `Focus interval · round ${pomodoro.round}`
           : isTimer ? msgs[msgIdx] : "⏱ Stopwatch running"}
       </div>
-      <div style={fs.progressTrack}><div style={{...fs.progressFill,width:`${Math.min(progress,1)*100}%`,background:overtime?"#E0A04B":subject.color}}/></div>
-      <div className="sg-session-progress-label" style={fs.progressLabel}>{isBreak
+      <div key={`timeline-${stageGlowToken}`} style={{...fs.timelineWrap,"--sg-stage-glow":subject.color}}>
+        <div style={{...fs.progressTrack,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}><div style={{...fs.progressFill,width:`${(isBreak?Math.min(progress,1)*100:stagePercent)}%`,background:overtime?"#E0A04B":subject.color,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}/></div>
+        {!isBreak&&focusStages.slice(0,stageIndex+1).map((stage,index)=>{
+          const atEnd=index===stageIndex;
+          const position=`${(stage.end/activeFocusStage.end)*100}%`;
+          return <span key={stage.label} style={{...fs.timelinePoint,left:position,transform:"translateX(-50%)"}}>
+            <i style={{...fs.timelineTick,background:subject.color,opacity:atEnd?1:.58,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}/>
+            <small style={{...fs.timelineLabel,color:subject.color,opacity:atEnd?1:.72,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}>Stage {index+1} · {stage.end/60}m</small>
+          </span>;
+        })}
+      </div>
+      <div className="sg-session-progress-label" style={{...fs.progressLabel,marginBottom:isBreak?28:6}}>{isBreak
         ? `${Math.max(0,Math.ceil(remaining/60))} min break remaining · no rewards`
-        : isTimer ? (overtime ? `${fmtMins(elapsed)} total` : `${Math.round(progress*100)}% complete`) : `${fmtMins(elapsed)} elapsed`}</div>
+        : <><b style={{color:subject.color}}>Stage {stageIndex+1}</b> · {activeFocusStage.label} · {stagePercent}% complete</>}</div>
+      </div>
       {isBreak?<div className="sg-break-actions" style={fs.breakActions}>
         {!pomodoro.awaitingNext&&<button style={{...fs.pauseBtn,background:paused?subject.color:"#fff",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
           {paused?"▶ Resume break":"⏸ Pause break"}
@@ -5359,11 +5399,16 @@ const fs = {
   subjectChip:{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500},
   coinBadge:{background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700},
   treeArea:{position:"relative",zIndex:2,flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%"},
+  focusProgressGroup:{position:"relative",zIndex:3,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",transform:"translateY(-12px)"},
   time:{position:"relative",zIndex:3,fontSize:72,fontWeight:900,letterSpacing:"-3px",lineHeight:1,marginBottom:6,transition:"color 0.3s"},
   modeLabel:{position:"relative",zIndex:3,fontSize:15,color:"#666",marginBottom:20,fontWeight:500,textAlign:"center"},
-  progressTrack:{position:"relative",zIndex:3,width:"100%",maxWidth:300,height:6,background:"rgba(0,0,0,0.08)",borderRadius:10,overflow:"hidden",marginBottom:6},
-  progressFill:{height:"100%",borderRadius:10,transition:"width 1s linear"},
+  timelineWrap:{position:"relative",zIndex:3,width:"100%",maxWidth:300,marginBottom:25,borderRadius:10,transformOrigin:"center"},
+  progressTrack:{position:"relative",zIndex:1,width:"100%",height:7,background:"rgba(31,93,47,.12)",borderRadius:10,overflow:"hidden"},
+  progressFill:{height:"100%",borderRadius:10,transition:"width .65s ease, background .35s ease"},
   progressLabel:{position:"relative",zIndex:3,fontSize:12,color:"#999",marginBottom:28},
+  timelinePoint:{position:"absolute",zIndex:2,top:-4,display:"flex",flexDirection:"column",alignItems:"center",gap:4,whiteSpace:"nowrap"},
+  timelineTick:{width:4,height:15,borderRadius:2,boxShadow:"0 1px 3px rgba(27,74,39,.15)"},
+  timelineLabel:{fontSize:8,fontWeight:800,lineHeight:1},
   btnRow:{position:"relative",zIndex:3,display:"flex",gap:12,width:"100%",maxWidth:320},
   breakActions:{position:"relative",zIndex:3,display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9,width:"100%",maxWidth:360},
   roundLabel:{position:"relative",zIndex:3,fontSize:11,fontWeight:750,color:"#627168",background:"rgba(255,255,255,.7)",border:"1px solid rgba(255,255,255,.9)",borderRadius:16,padding:"5px 10px",marginTop:10},
