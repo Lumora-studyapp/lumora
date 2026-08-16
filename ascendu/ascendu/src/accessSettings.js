@@ -1,4 +1,7 @@
-export const ADMIN_CONSOLE_USERNAMES = Object.freeze(["phamalam", "v2trappy"]);
+// Keep the original V2Trappy spelling for backwards compatibility and accept
+// the V2Trapps preview account requested by the Lumora team. A verified
+// roles/{uid}.admin document is still required for cross-user controls.
+export const ADMIN_CONSOLE_USERNAMES = Object.freeze(["phamalam", "v2trappy", "v2trapps"]);
 
 export const ANIMATION_MODES = Object.freeze(["device", "full", "off"]);
 

@@ -6,9 +6,10 @@ import {
   shouldDisableAnimations,
 } from "./accessSettings.js";
 
-test("admin console allowlist canonicalizes the two named admins", () => {
+test("preview console allowlist canonicalizes the named test accounts", () => {
   assert.equal(isAdminConsoleUsername(" Phamalam "), true);
   assert.equal(isAdminConsoleUsername("V2TRAPPY"), true);
+  assert.equal(isAdminConsoleUsername("V2TRAPPS"), true);
   assert.equal(isAdminConsoleUsername("learner"), false);
 });
 

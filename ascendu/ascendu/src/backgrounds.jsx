@@ -6,15 +6,15 @@ export const DEFAULT_BACKGROUND_ID = "classic-grove";
 export const BACKGROUND_CATALOGUE = Object.freeze([
   {
     id: DEFAULT_BACKGROUND_ID,
-    name: "Classic Classroom",
+    name: "Lumora Classroom",
     cost: 0,
     rarity: "Default",
     art: "classic",
     tone: "light",
-    motion: "none",
-    description: "Lumora’s calm original cream canvas.",
-    baseColor: "#F5F7F2",
-    gradient: "linear-gradient(155deg,#FBFCF7 0%,#F2F6EE 55%,#E8F1E6 100%)",
+    motion: "low",
+    description: "A bright, leafy classroom with wide windows and calm study desks.",
+    baseColor: "#E8F0E5",
+    gradient: "linear-gradient(155deg,#F9F4E7 0%,#E8F0E5 52%,#CADCCB 100%)",
     shellSurface: "linear-gradient(180deg,#F9FBF7,#F3F8F1)",
     focusSurface: "#F4F8F3",
     uiAccent: "#6E9B72",
@@ -27,6 +27,83 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
       focusSurface: "#EEF5F0",
       uiAccent: "#77A887",
       uiAccentSoft: "rgba(119,168,135,.19)",
+    },
+  },
+  {
+    id: "creative-studio",
+    name: "Creative Studio",
+    cost: 420,
+    rarity: "Rare",
+    art: "studio",
+    tone: "warm",
+    motion: "medium",
+    description: "A timber design studio with art walls, plants and sunlit collaborative desks.",
+    baseColor: "#D9B98F",
+    gradient: "linear-gradient(155deg,#F8EAD1 0%,#DDBD94 52%,#A97E61 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(252,248,239,.67),rgba(244,233,217,.57))",
+    focusSurface: "rgba(248,242,233,.89)",
+    uiAccent: "#A16F4F",
+    uiAccentSoft: "rgba(161,111,79,.2)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#211610",
+      gradient: "linear-gradient(155deg,#493326 0%,#251912 54%,#100B08 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(250,245,237,.73),rgba(239,229,216,.64))",
+      focusSurface: "rgba(246,239,230,.92)",
+      uiAccent: "#B27E5B",
+      uiAccentSoft: "rgba(178,126,91,.21)",
+    },
+  },
+  {
+    id: "future-lab",
+    name: "Future Lab",
+    cost: 0,
+    unlockHours: 10,
+    rarity: "Epic",
+    art: "lab",
+    tone: "cool",
+    motion: "medium",
+    description: "Unlocked after 10 focused hours: a clean research lab with responsive displays.",
+    baseColor: "#B9D7DB",
+    gradient: "linear-gradient(155deg,#E9F7F5 0%,#B9D7DB 51%,#749BA8 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(244,251,250,.68),rgba(224,240,241,.59))",
+    focusSurface: "rgba(237,247,247,.9)",
+    uiAccent: "#43899A",
+    uiAccentSoft: "rgba(67,137,154,.2)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#071A21",
+      gradient: "linear-gradient(155deg,#173943 0%,#0A2029 55%,#031015 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(239,248,248,.74),rgba(220,235,238,.65))",
+      focusSurface: "rgba(232,243,245,.92)",
+      uiAccent: "#57A2B2",
+      uiAccentSoft: "rgba(87,162,178,.22)",
+    },
+  },
+  {
+    id: "skyline-study-loft",
+    name: "Skyline Study Loft",
+    cost: 0,
+    unlockHours: 35,
+    rarity: "Mythical",
+    art: "loft",
+    tone: "warm",
+    motion: "medium",
+    description: "Unlocked after 35 focused hours: a high-rise study loft above the city lights.",
+    baseColor: "#A7AABF",
+    gradient: "linear-gradient(155deg,#EED9C8 0%,#A8A9BD 48%,#4E5873 100%)",
+    shellSurface: "linear-gradient(180deg,rgba(250,246,243,.7),rgba(235,232,237,.62))",
+    focusSurface: "rgba(244,241,242,.91)",
+    uiAccent: "#6C718E",
+    uiAccentSoft: "rgba(108,113,142,.21)",
+    darkPalette: {
+      tone: "dark",
+      baseColor: "#0B1020",
+      gradient: "linear-gradient(155deg,#303750 0%,#12182A 52%,#050812 100%)",
+      shellSurface: "linear-gradient(180deg,rgba(245,244,247,.74),rgba(229,229,237,.65))",
+      focusSurface: "rgba(239,239,244,.93)",
+      uiAccent: "#858CAB",
+      uiAccentSoft: "rgba(133,140,171,.22)",
     },
   },
   {
@@ -181,13 +258,13 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "library-study",
-    name: "Library Study",
-    cost: 650,
+    name: "Cosy Library",
+    cost: 680,
     rarity: "Rare",
     art: "library",
     tone: "warm",
-    motion: "none",
-    description: "A refined reading room with warm shelves and lamplight.",
+    motion: "low",
+    description: "A book-lined reading room with plants, rain-glass windows and warm lamplight.",
     baseColor: "#B99D78",
     gradient: "linear-gradient(155deg,#F3E8D2 0%,#CCB38E 50%,#8A684B 100%)",
     shellSurface: "linear-gradient(180deg,rgba(252,248,239,.68),rgba(244,234,218,.58))",
@@ -405,18 +482,28 @@ export function normalizeOwnedBackgrounds(value) {
   return [...new Set([DEFAULT_BACKGROUND_ID, ...ids])];
 }
 
+export function milestoneBackgroundIds(totalHours = 0) {
+  const hours = Math.max(0, Number(totalHours) || 0);
+  return BACKGROUND_CATALOGUE
+    .filter(item => Number(item.unlockHours) > 0 && hours >= item.unlockHours)
+    .map(item => item.id);
+}
+
 export function canEquipBackground(backgroundId, ownedBackgrounds) {
   const id = normalizeBackgroundId(backgroundId);
   return id === DEFAULT_BACKGROUND_ID || normalizeOwnedBackgrounds(ownedBackgrounds).includes(id);
 }
 
-export function evaluateBackgroundPurchase(backgroundId, ownedBackgrounds, coinBalance) {
+export function evaluateBackgroundPurchase(backgroundId, ownedBackgrounds, coinBalance, lifetimeHours = 0) {
   const background = CATALOGUE_BY_ID.get(backgroundId);
   const owned = normalizeOwnedBackgrounds(ownedBackgrounds);
   const coins = Number.isFinite(Number(coinBalance)) ? Math.max(0, Number(coinBalance)) : 0;
   if (!background) return { ok:false, reason:"missing", coinBalance:coins, ownedBackgrounds:owned };
   if (owned.includes(backgroundId)) {
     return { ok:false, reason:"owned", coinBalance:coins, ownedBackgrounds:owned, background };
+  }
+  if (Number(background.unlockHours) > Math.max(0, Number(lifetimeHours) || 0)) {
+    return { ok:false, reason:"milestone", coinBalance:coins, ownedBackgrounds:owned, background };
   }
   if (coins < background.cost) {
     return { ok:false, reason:"coins", coinBalance:coins, ownedBackgrounds:owned, background };
@@ -510,6 +597,25 @@ function RainField() {
 }
 
 function ClassroomEnvironment({ art }) {
+  if (["classic","studio","lab","loft"].includes(art)) return <div className={`sg-learning-room sg-learning-room--${art}`} aria-hidden="true">
+    <span className="sg-learning-ceiling"><i/><i/><i/></span>
+    <span className="sg-learning-window"><i/><i/><i/><i/></span>
+    <span className="sg-learning-skyline"><i/><i/><i/><i/><i/></span>
+    <span className="sg-learning-board"><i/><i/><i/></span>
+    <span className="sg-learning-shelf"><i/><i/><i/><i/><i/></span>
+    <span className="sg-learning-pinboard"><i/><i/><i/></span>
+    <span className="sg-learning-floor"/>
+    <span className="sg-learning-rug"/>
+    <span className="sg-learning-desk sg-learning-desk--left"><i/><i/></span>
+    <span className="sg-learning-desk sg-learning-desk--right"><i/><i/></span>
+    <span className="sg-learning-plant sg-learning-plant--left"><i/><i/><i/><i/></span>
+    <span className="sg-learning-plant sg-learning-plant--right"><i/><i/><i/></span>
+    <span className="sg-learning-student sg-learning-student--one"><i/></span>
+    <span className="sg-learning-student sg-learning-student--two"><i/></span>
+    <span className="sg-learning-lamp sg-learning-lamp--one"/>
+    <span className="sg-learning-lamp sg-learning-lamp--two"/>
+  </div>;
+
   if (art === "ocean") return <div className="sg-theme-room sg-theme-room--ocean" aria-hidden="true">
     <span className="sg-ocean-room-canopy"/>
     <span className="sg-ocean-room-arch sg-ocean-room-arch--left"/>
@@ -587,9 +693,13 @@ function ClassroomEnvironment({ art }) {
     <span className="sg-everyday-room-window"><i/><i/><i/></span>
     <span className="sg-everyday-room-board"/>
     <span className="sg-everyday-room-feature"/>
+    <span className="sg-everyday-room-plant"><i/><i/><i/></span>
+    <span className="sg-everyday-room-pendant sg-everyday-room-pendant--one"/>
+    <span className="sg-everyday-room-pendant sg-everyday-room-pendant--two"/>
     <span className="sg-everyday-room-floor"/>
     <span className="sg-everyday-room-table sg-everyday-room-table--one"/>
     <span className="sg-everyday-room-table sg-everyday-room-table--two"/>
+    <span className="sg-everyday-room-student"><i/></span>
   </div>;
 }
 
@@ -609,6 +719,11 @@ function OceanField() {
 
 function BackgroundDecor({ art }) {
   switch (art) {
+    case "classic":
+    case "studio":
+    case "lab":
+    case "loft":
+      return <><div className="sg-learning-daylight"/><AmbientDots className="sg-learning-motes" count={6}/></>;
     case "midnight":
       return <>
         <div className="sg-bg-midnight-glow"/>
@@ -647,6 +762,8 @@ function BackgroundDecor({ art }) {
         <div className="sg-bg-library-window"/>
         <div className="sg-bg-library-desk"/>
         <div className="sg-bg-library-lamp"/>
+        <div className="sg-bg-library-plant"><i/><i/><i/></div>
+        <div className="sg-bg-library-reader"><i/></div>
         <div className="sg-bg-library-light"/>
       </>;
     case "lanterns":
@@ -761,7 +878,7 @@ export function ShopCategoryTabs({ active, onTrees, onDecorations, onBackgrounds
   const items = [
     ["trees", "🧑‍🎓", "Skins", onTrees],
     ["decorations", "🏫", "Classroom Decor", onDecorations],
-    ["backgrounds", "◫", "Backgrounds", onBackgrounds],
+    ["backgrounds", "◫", "Learning Spaces", onBackgrounds],
   ];
   return <div className="sg-shop-category-tabs" role="tablist" aria-label="Shop categories">
     {items.map(([id, icon, label, onClick]) => (
@@ -789,10 +906,12 @@ function BackgroundPreview({
   owned,
   active,
   buying,
+  lifetimeHours,
   onBuy,
   onEquip,
   onCancel,
 }) {
+  const milestoneLocked = Number(background.unlockHours) > Number(lifetimeHours || 0);
   return <div className="sg-background-preview" role="dialog" aria-modal="true" aria-labelledby="sg-background-preview-title" onClick={event=>event.stopPropagation()}>
     <BackgroundArtwork backgroundId={background.id} theme={theme} paused/>
     <div className="sg-background-preview-shade"/>
@@ -809,9 +928,13 @@ function BackgroundPreview({
           ? <span className="sg-background-equipped">✓ Equipped</span>
           : owned
             ? <button type="button" className="sg-background-primary-btn" onClick={onEquip}>Equip</button>
-            : <button type="button" className="sg-background-primary-btn" disabled={buying} onClick={onBuy}>
-                {buying ? "Buying…" : `Buy · 🪙 ${background.cost}`}
-              </button>}
+            : milestoneLocked
+              ? <button type="button" className="sg-background-primary-btn" disabled>
+                  {`${Math.max(0,background.unlockHours-Number(lifetimeHours||0)).toFixed(1)}h to unlock`}
+                </button>
+              : <button type="button" className="sg-background-primary-btn" disabled={buying} onClick={onBuy}>
+                  {buying ? "Unlocking…" : background.unlockHours ? "Claim space" : `Buy · 🪙 ${background.cost}`}
+                </button>}
       </div>
     </div>
   </div>;
@@ -822,6 +945,7 @@ export function BackgroundShop({
   theme = "light",
   ownedBackgrounds,
   activeBackground,
+  lifetimeHours = 0,
   onBuy,
   onEquip,
   onPreview,
@@ -863,6 +987,7 @@ export function BackgroundShop({
     setBusyId("");
     if (result?.ok) showToast(`${result.background?.name || "Background"} added to your collection`);
     else if (result?.reason === "coins") showToast("Not enough coins");
+    else if (result?.reason === "milestone") showToast(`Keep focusing to unlock this space`);
     else if (result?.reason === "owned") showToast("You already own this background");
     else showToast("Purchase couldn’t be completed");
     return result;
@@ -891,7 +1016,7 @@ export function BackgroundShop({
         <div className="sg-background-shop-heading">
           {onBack && <button type="button" className="sg-background-round-btn" onClick={onBack} aria-label="Back">←</button>}
           <div>
-            <h3>◫ Backgrounds</h3>
+            <h3>◫ Learning Spaces</h3>
             <p>{ownedIds.length} of {BACKGROUND_CATALOGUE.length} owned</p>
           </div>
         </div>
@@ -918,7 +1043,8 @@ export function BackgroundShop({
         {items.map((background, index) => {
           const owned = ownedIds.includes(background.id);
           const active = activeBackground === background.id;
-          const canAfford = coins >= background.cost;
+          const milestoneLocked = Number(background.unlockHours) > Number(lifetimeHours || 0);
+          const canAfford = !milestoneLocked && coins >= background.cost;
           return <article
             key={background.id}
             className={`sg-background-card sg-card-anim${active ? " sg-background-card--active" : ""}`}
@@ -934,7 +1060,8 @@ export function BackgroundShop({
               <p>{background.description}</p>
             </div>
             <div className="sg-background-card-meta">
-              {background.cost === 0 ? <span className="sg-background-free">Free</span>
+              {background.unlockHours && !owned ? <span className="sg-background-milestone">◷ {Math.min(Number(lifetimeHours||0),background.unlockHours).toFixed(1)} / {background.unlockHours}h</span>
+                : background.cost === 0 ? <span className="sg-background-free">Free</span>
                 : !owned ? <span className="sg-background-cost">🪙 {background.cost}</span> : <span/>}
               {active ? <span className="sg-background-equipped">✓ Equipped</span>
                 : owned
@@ -944,7 +1071,7 @@ export function BackgroundShop({
                       className="sg-background-card-action"
                       disabled={!canAfford || !!busyId}
                       onClick={() => buy(background.id)}
-                    >{canAfford ? (busyId === background.id ? "Buying…" : "Buy") : "Need more 🪙"}</button>}
+                    >{milestoneLocked ? `Unlock at ${background.unlockHours}h` : canAfford ? (busyId === background.id ? "Unlocking…" : background.unlockHours ? "Claim" : "Buy") : "Need more 🪙"}</button>}
             </div>
           </article>;
         })}
@@ -958,6 +1085,7 @@ export function BackgroundShop({
       owned={previewOwned}
       active={previewActive}
       buying={busyId === preview.id}
+      lifetimeHours={lifetimeHours}
       onCancel={closePreview}
       onBuy={() => buy(preview.id)}
       onEquip={() => equip(preview.id)}
@@ -1013,6 +1141,37 @@ export const BACKGROUND_CSS = `
    in front of their own sky/weather artwork, so rain, water and space remain
    outside the architecture instead of tinting one reusable classroom. */
 .sg-theme-room{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+
+/* Lumora Learning Spaces share a disciplined perspective grid so content stays
+   clear in the middle, while each room gets its own architecture and story. */
+.sg-learning-room{position:absolute;inset:0;overflow:hidden;--lr-wall:#E7E7D8;--lr-trim:#B9A98B;--lr-floor-a:#C9B08D;--lr-floor-b:#927A60;--lr-desk:#9C7654;--lr-accent:#6B9479;--lr-glass:rgba(191,225,225,.68)}
+.sg-learning-ceiling{position:absolute;left:-3%;right:-3%;top:-2%;height:11%;background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(232,228,211,.72));border-bottom:clamp(3px,.45vw,7px) solid color-mix(in srgb,var(--lr-trim),transparent 42%);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
+.sg-learning-ceiling i{position:absolute;top:42%;width:clamp(40px,8vw,118px);height:clamp(3px,.5vw,7px);border-radius:99px;background:rgba(255,247,209,.88);box-shadow:0 0 20px rgba(255,235,174,.38)}.sg-learning-ceiling i:nth-child(1){left:15%}.sg-learning-ceiling i:nth-child(2){left:46%}.sg-learning-ceiling i:nth-child(3){right:13%}
+.sg-learning-window{position:absolute;left:7%;top:12%;width:48%;height:43%;border:clamp(6px,.8vw,12px) solid var(--lr-trim);border-radius:12px 12px 5px 5px;background:linear-gradient(180deg,rgba(194,225,229,.78),rgba(236,225,192,.5));box-shadow:inset 0 0 38px rgba(255,255,255,.24),0 14px 32px rgba(42,55,48,.1)}
+.sg-learning-window>i{position:absolute;background:color-mix(in srgb,var(--lr-trim),transparent 20%)}.sg-learning-window>i:nth-child(1){left:32%;top:0;bottom:0;width:3px}.sg-learning-window>i:nth-child(2){left:65%;top:0;bottom:0;width:3px}.sg-learning-window>i:nth-child(3){left:0;right:0;top:58%;height:3px}.sg-learning-window>i:nth-child(4){left:-4%;right:-4%;bottom:-10px;height:clamp(7px,.8vw,12px);border-radius:3px}
+.sg-learning-skyline{position:absolute;left:8%;top:31%;width:46%;height:23%;opacity:.42}.sg-learning-skyline i{position:absolute;bottom:0;width:15%;background:#70858A;border-radius:3px 3px 0 0;box-shadow:inset 0 5px rgba(255,255,255,.12)}.sg-learning-skyline i:nth-child(1){left:2%;height:31%}.sg-learning-skyline i:nth-child(2){left:19%;height:55%}.sg-learning-skyline i:nth-child(3){left:40%;height:39%}.sg-learning-skyline i:nth-child(4){left:60%;height:72%}.sg-learning-skyline i:nth-child(5){right:2%;height:48%}
+.sg-learning-board{position:absolute;right:6%;top:14%;width:31%;height:24%;border:clamp(5px,.65vw,9px) solid var(--lr-trim);border-radius:8px;background:linear-gradient(145deg,rgba(45,78,69,.83),rgba(21,52,47,.88));box-shadow:0 10px 24px rgba(29,44,36,.12),inset 0 0 18px rgba(255,255,255,.04)}
+.sg-learning-board>i{position:absolute;height:2px;border-radius:9px;background:rgba(244,239,202,.48)}.sg-learning-board>i:nth-child(1){left:10%;right:42%;top:28%}.sg-learning-board>i:nth-child(2){left:10%;right:18%;top:48%}.sg-learning-board>i:nth-child(3){left:10%;right:31%;top:68%}
+.sg-learning-shelf{position:absolute;right:7%;top:43%;width:19%;height:20%;border:clamp(4px,.5vw,7px) solid var(--lr-trim);border-radius:6px;background:repeating-linear-gradient(0deg,transparent 0 42%,color-mix(in srgb,var(--lr-trim),transparent 18%) 43% 48%,transparent 49%);opacity:.88}.sg-learning-shelf i{position:absolute;bottom:49%;width:8%;height:37%;border-radius:2px 2px 0 0;background:#C87D65}.sg-learning-shelf i:nth-child(1){left:9%}.sg-learning-shelf i:nth-child(2){left:20%;height:49%;background:#6E9184}.sg-learning-shelf i:nth-child(3){left:34%;background:#D1A85E}.sg-learning-shelf i:nth-child(4){right:31%;height:45%;background:#7B7797}.sg-learning-shelf i:nth-child(5){right:12%;height:31%;background:#9C6C5B}
+.sg-learning-pinboard{display:none;position:absolute;right:5%;top:14%;width:34%;height:27%;border:clamp(5px,.6vw,9px) solid #9A704C;border-radius:7px;background:#C79869;box-shadow:0 10px 25px rgba(69,43,25,.16)}.sg-learning-pinboard i{position:absolute;width:25%;height:33%;background:#F6E3B2;box-shadow:0 3px 5px rgba(73,48,29,.13);transform:rotate(-3deg)}.sg-learning-pinboard i:nth-child(1){left:8%;top:11%}.sg-learning-pinboard i:nth-child(2){left:39%;top:29%;background:#DCE8D3;transform:rotate(2deg)}.sg-learning-pinboard i:nth-child(3){right:7%;top:10%;height:51%;background:#E6D4DD;transform:rotate(4deg)}
+.sg-learning-floor{position:absolute;left:-5%;right:-5%;bottom:-4%;height:39%;border-top:2px solid rgba(255,255,255,.2);background:repeating-linear-gradient(104deg,transparent 0 11%,rgba(70,51,37,.09) 11% 11.4%),linear-gradient(180deg,var(--lr-floor-a),var(--lr-floor-b));clip-path:polygon(5% 0,95% 0,100% 100%,0 100%)}
+.sg-learning-rug{position:absolute;left:28%;right:27%;bottom:0;height:19%;border-radius:50% 50% 8% 8%;background:linear-gradient(90deg,color-mix(in srgb,var(--lr-accent),transparent 28%),color-mix(in srgb,var(--lr-accent),white 18%));opacity:.3;transform:perspective(180px) rotateX(55deg)}
+.sg-learning-desk{position:absolute;bottom:5%;width:30%;height:14%;border-top:clamp(8px,.95vw,14px) solid var(--lr-desk);border-radius:45% 45% 4px 4px/16% 16% 4px 4px;background:color-mix(in srgb,var(--lr-desk),transparent 32%);clip-path:polygon(3% 0,97% 0,100% 73%,85% 73%,82% 100%,75% 100%,73% 73%,27% 73%,25% 100%,18% 100%,16% 73%,0 73%);filter:drop-shadow(0 9px 8px rgba(41,35,28,.13))}.sg-learning-desk--left{left:4%;transform:scale(.86);transform-origin:bottom left}.sg-learning-desk--right{right:4%;bottom:1%}.sg-learning-desk>i{position:absolute;top:-34%;width:19%;height:26%;border-radius:2px;background:#EBD9B4;transform:rotate(-7deg)}.sg-learning-desk>i:first-child{left:24%}.sg-learning-desk>i:last-child{right:23%;background:#667C72;transform:rotate(5deg)}
+.sg-learning-plant{position:absolute;bottom:18%;width:clamp(28px,4.8vw,68px);height:clamp(55px,9vw,126px);border-bottom:clamp(17px,2.5vw,36px) solid #9A684B;filter:drop-shadow(0 7px 7px rgba(36,48,38,.13));transform-origin:50% 100%}.sg-learning-plant--left{left:1.5%;animation:sgLearningPlant 10s ease-in-out infinite}.sg-learning-plant--right{right:1.5%;height:clamp(42px,7vw,96px);animation:sgLearningPlant 12s ease-in-out -5s infinite}.sg-learning-plant i{position:absolute;left:38%;bottom:18%;width:45%;height:41%;border-radius:90% 12% 90% 12%;background:#648D68;transform-origin:0 100%;transform:rotate(-42deg)}.sg-learning-plant i:nth-child(2){left:47%;bottom:34%;transform:rotate(24deg) scale(.9);background:#78A078}.sg-learning-plant i:nth-child(3){left:31%;bottom:50%;transform:rotate(-63deg) scale(.72)}.sg-learning-plant i:nth-child(4){left:48%;bottom:60%;transform:rotate(38deg) scale(.62);background:#86AA7D}
+.sg-learning-student{position:absolute;bottom:15%;width:clamp(12px,1.8vw,26px);height:clamp(22px,3.2vw,46px);border-radius:45% 45% 20% 20%;background:#718B83;opacity:.7;transform-origin:50% 100%;animation:sgLearningStudent 9s ease-in-out infinite}.sg-learning-student::before{content:"";position:absolute;left:18%;top:-42%;width:64%;aspect-ratio:1;border-radius:50%;background:#C98F73}.sg-learning-student i{position:absolute;left:-38%;top:42%;width:65%;height:17%;border-radius:99px;background:inherit;transform:rotate(18deg);transform-origin:right}.sg-learning-student--one{left:21%}.sg-learning-student--two{right:21%;background:#9A7185;animation-delay:-4s;transform:scale(.85)}
+.sg-learning-lamp{display:none;position:absolute;bottom:17%;width:clamp(4px,.45vw,7px);height:clamp(43px,7vw,95px);background:#6D5949}.sg-learning-lamp::before{content:"";position:absolute;left:50%;top:-7%;width:clamp(28px,4vw,56px);height:24%;transform:translateX(-50%);clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);background:#D9A65C;box-shadow:0 8px 24px rgba(255,206,113,.28)}.sg-learning-lamp--one{left:26%}.sg-learning-lamp--two{right:27%}
+.sg-learning-daylight{position:absolute;inset:0;background:linear-gradient(112deg,rgba(255,248,211,.2),transparent 42%),radial-gradient(circle at 24% 17%,rgba(255,249,211,.34),transparent 30%);animation:sgLearningLight 18s ease-in-out infinite}.sg-learning-motes i{background:#FFF0B5;box-shadow:0 0 7px rgba(255,236,164,.55);animation:sgBgFloat 18s ease-in-out var(--sg-bg-dot-delay) infinite}
+
+/* Creative Studio */
+.sg-learning-room--studio{--lr-trim:#9B7656;--lr-floor-a:#D8B98E;--lr-floor-b:#9F7557;--lr-desk:#A66F48;--lr-accent:#C36F54}.sg-learning-room--studio .sg-learning-pinboard{display:block}.sg-learning-room--studio .sg-learning-board{display:none}.sg-learning-room--studio .sg-learning-window{left:6%;width:50%;border-radius:22px 22px 6px 6px}.sg-learning-room--studio .sg-learning-shelf{right:7%;top:47%;width:28%;height:17%}.sg-learning-room--studio .sg-learning-rug{background:repeating-linear-gradient(90deg,#C96E55 0 9%,#E1B366 9% 18%,#6F9B8E 18% 27%);opacity:.3}
+
+/* Future Lab */
+.sg-learning-room--lab{--lr-trim:#5A8791;--lr-floor-a:#AFC8CA;--lr-floor-b:#54747F;--lr-desk:#507A84;--lr-accent:#43B5B2}.sg-learning-room--lab .sg-learning-ceiling{background:linear-gradient(180deg,rgba(223,245,244,.9),rgba(94,133,144,.62))}.sg-learning-room--lab .sg-learning-window{left:5%;width:42%;border-radius:28% 28% 7px 7px/18% 18% 7px 7px;background:linear-gradient(180deg,rgba(171,224,226,.7),rgba(90,152,164,.35));box-shadow:inset 0 0 35px rgba(129,242,235,.12),0 0 28px rgba(64,181,181,.12)}.sg-learning-room--lab .sg-learning-board{right:5%;width:41%;background:linear-gradient(145deg,rgba(7,48,59,.8),rgba(4,27,39,.92));border-color:#6699A4;box-shadow:0 0 28px rgba(65,198,196,.16),inset 0 0 18px rgba(61,205,205,.09)}.sg-learning-room--lab .sg-learning-board::after{content:"";position:absolute;right:8%;top:18%;width:20%;aspect-ratio:1;border:1px solid rgba(104,225,218,.43);border-radius:50%;animation:sgLabScan 12s linear infinite}.sg-learning-room--lab .sg-learning-shelf{right:8%;border-radius:14px;background:linear-gradient(180deg,rgba(114,192,190,.2),rgba(29,86,96,.25))}.sg-learning-room--lab .sg-learning-pinboard,.sg-learning-room--lab .sg-learning-rug{display:none}.sg-learning-room--lab .sg-learning-plant{filter:saturate(.65) hue-rotate(12deg)}
+
+/* Skyline Loft */
+.sg-learning-room--loft{--lr-trim:#4E5264;--lr-floor-a:#8E7D75;--lr-floor-b:#393846;--lr-desk:#685D58;--lr-accent:#C88B66}.sg-learning-room--loft .sg-learning-window{left:3%;right:3%;top:6%;width:auto;height:57%;border-width:clamp(8px,1.1vw,16px);background:linear-gradient(180deg,rgba(114,133,166,.68),rgba(227,158,118,.35));border-radius:4px}.sg-learning-room--loft .sg-learning-board,.sg-learning-room--loft .sg-learning-shelf,.sg-learning-room--loft .sg-learning-pinboard{display:none}.sg-learning-room--loft .sg-learning-skyline{left:4%;top:29%;width:92%;height:34%;opacity:.74}.sg-learning-room--loft .sg-learning-skyline i{background:linear-gradient(180deg,#51566B,#242938);box-shadow:inset 5px 0 rgba(255,197,117,.09)}.sg-learning-room--loft .sg-learning-lamp{display:block}.sg-learning-room--loft .sg-learning-rug{background:linear-gradient(90deg,#A76654,#D0A16D);opacity:.23}
+[data-background-mode="dark"] .sg-learning-room{filter:brightness(.65) saturate(.82)}[data-background-mode="dark"] .sg-learning-ceiling i{background:rgba(255,216,141,.58);box-shadow:0 0 24px rgba(255,196,91,.25)}[data-background-mode="dark"] .sg-learning-window{background:linear-gradient(180deg,rgba(27,47,67,.82),rgba(84,69,72,.48))}[data-background-mode="dark"] .sg-learning-skyline i{background:#151D2B;box-shadow:inset 4px 0 rgba(255,198,105,.13)}[data-background-mode="dark"] .sg-learning-lamp{filter:brightness(1.4)}[data-background-mode="dark"] .sg-learning-daylight{background:radial-gradient(circle at 70% 18%,rgba(255,196,100,.11),transparent 28%)}
+.sg-background-art--compact .sg-learning-student,.sg-background-art--compact .sg-learning-plant--right,.sg-background-art--compact .sg-learning-lamp--two{display:none}.sg-background-art--compact .sg-learning-ceiling i:nth-child(2){display:none}.sg-background-art--compact .sg-learning-window{border-width:4px}.sg-background-art--compact .sg-learning-board,.sg-background-art--compact .sg-learning-pinboard{border-width:3px}.sg-background-art--compact .sg-learning-desk{border-top-width:5px}
 
 /* Underwater classroom — arched observation glass, reef desks and sea-floor
    masonry are deliberately unlike every terrestrial room. */
@@ -1074,14 +1233,30 @@ export const BACKGROUND_CSS = `
 /* Remaining catalogue entries retain their own art direction while receiving
    a light room shell tailored through per-theme colour variables. */
 .sg-theme-room--everyday{--room-wall:rgba(232,239,228,.52);--room-trim:rgba(92,78,61,.32);--room-floor-a:rgba(209,177,132,.34);--room-floor-b:rgba(104,76,55,.38);--room-desk:rgba(124,84,54,.48);opacity:.72}
-.sg-everyday-room-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:9%;background:linear-gradient(180deg,rgba(255,255,247,.56),rgba(255,255,255,.12));border-bottom:3px solid var(--room-trim);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
-.sg-everyday-room-window{position:absolute;left:4%;top:8%;width:46%;height:46%;border:clamp(6px,.7vw,11px) solid var(--room-trim);border-radius:8px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 40px rgba(255,255,255,.08)}.sg-everyday-room-window i{position:absolute;background:var(--room-trim)}.sg-everyday-room-window i:nth-child(1){left:33%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(2){left:66%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(3){left:0;right:0;top:55%;height:4px}
-.sg-everyday-room-board{position:absolute;right:6%;top:15%;width:34%;height:24%;border:clamp(5px,.6vw,9px) solid var(--room-trim);border-radius:5px;background:linear-gradient(150deg,rgba(39,78,65,.5),rgba(18,55,49,.66));box-shadow:0 8px 20px rgba(23,35,29,.1)}.sg-everyday-room-board::before{content:"STUDY  •  GROW  •  SHINE";position:absolute;left:8%;right:8%;top:42%;color:rgba(246,241,211,.44);font:700 clamp(5px,.7vw,11px)/1 system-ui;letter-spacing:.1em;text-align:center}
-.sg-everyday-room-feature{position:absolute;right:7%;top:44%;width:15%;height:18%;border:4px solid var(--room-trim);border-radius:6px;background:repeating-linear-gradient(90deg,#C78667 0 9%,#799685 9% 17%,#D4AE63 17% 25%);opacity:.58}
+.sg-theme-room--everyday{--room-trim:rgba(92,111,96,.4);--room-floor-a:rgba(180,188,166,.36);--room-floor-b:rgba(91,111,91,.48);--room-desk:rgba(88,104,78,.58);--room-leaf:#718F70;--room-light:#E2B866}
+.sg-everyday-room-ceiling{position:absolute;left:-3%;right:-3%;top:0;height:9%;background:linear-gradient(180deg,rgba(255,255,247,.7),rgba(255,255,255,.16));border-bottom:3px solid var(--room-trim);clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
+.sg-everyday-room-window{position:absolute;left:4%;top:8%;width:46%;height:46%;border:clamp(6px,.7vw,11px) solid var(--room-trim);border-radius:10px;background:rgba(255,255,255,.045);box-shadow:inset 0 0 40px rgba(255,255,255,.1),0 12px 26px rgba(31,46,38,.08)}.sg-everyday-room-window i{position:absolute;background:var(--room-trim)}.sg-everyday-room-window i:nth-child(1){left:33%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(2){left:66%;top:0;bottom:0;width:4px}.sg-everyday-room-window i:nth-child(3){left:0;right:0;top:55%;height:4px}
+.sg-everyday-room-board{position:absolute;right:6%;top:15%;width:34%;height:24%;border:clamp(5px,.6vw,9px) solid var(--room-trim);border-radius:7px;background:linear-gradient(150deg,rgba(39,78,65,.58),rgba(18,55,49,.72));box-shadow:0 9px 22px rgba(23,35,29,.12),inset 0 0 18px rgba(255,255,255,.035)}.sg-everyday-room-board::before{content:"STUDY  •  GROW  •  SHINE";position:absolute;left:8%;right:8%;top:42%;color:rgba(246,241,211,.48);font:700 clamp(5px,.7vw,11px)/1 system-ui;letter-spacing:.1em;text-align:center}
+.sg-everyday-room-feature{position:absolute;right:7%;top:44%;width:15%;height:18%;border:4px solid var(--room-trim);border-radius:7px;background:repeating-linear-gradient(90deg,#C78667 0 9%,#799685 9% 17%,#D4AE63 17% 25%);opacity:.66;box-shadow:0 8px 18px rgba(35,43,36,.08)}
+.sg-everyday-room-plant{position:absolute;right:25%;bottom:18%;width:clamp(25px,4vw,58px);height:clamp(45px,7vw,96px);border-bottom:clamp(14px,2vw,27px) solid color-mix(in srgb,var(--room-desk),#7F5539 38%);filter:drop-shadow(0 7px 6px rgba(34,44,35,.12));transform-origin:50% 100%;animation:sgLearningPlant 12s ease-in-out -3s infinite}.sg-everyday-room-plant i{position:absolute;left:37%;bottom:17%;width:48%;height:43%;border-radius:90% 12% 90% 12%;background:var(--room-leaf);transform-origin:0 100%;transform:rotate(-43deg)}.sg-everyday-room-plant i:nth-child(2){left:47%;bottom:37%;transform:rotate(28deg) scale(.84)}.sg-everyday-room-plant i:nth-child(3){left:29%;bottom:53%;transform:rotate(-62deg) scale(.68)}
+.sg-everyday-room-pendant{position:absolute;top:0;width:2px;height:16%;background:color-mix(in srgb,var(--room-trim),transparent 15%);display:none}.sg-everyday-room-pendant::after{content:"";position:absolute;left:50%;bottom:-2px;width:clamp(25px,3.8vw,52px);height:24%;transform:translateX(-50%);clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);background:var(--room-light);box-shadow:0 8px 25px color-mix(in srgb,var(--room-light),transparent 60%)}.sg-everyday-room-pendant--one{left:30%}.sg-everyday-room-pendant--two{right:28%}
 .sg-everyday-room-floor{position:absolute;left:-4%;right:-4%;bottom:-4%;height:39%;background:repeating-linear-gradient(104deg,transparent 0 12%,rgba(86,64,49,.08) 12% 12.4%),linear-gradient(180deg,var(--room-floor-a),var(--room-floor-b));border-top:2px solid rgba(255,255,255,.14);clip-path:polygon(4% 0,96% 0,100% 100%,0 100%)}
-.sg-everyday-room-table{position:absolute;bottom:4%;width:31%;height:14%;border-top:clamp(8px,.9vw,13px) solid var(--room-desk);background:color-mix(in srgb,var(--room-desk),transparent 44%);clip-path:polygon(4% 0,96% 0,100% 72%,84% 72%,82% 100%,75% 100%,73% 72%,27% 72%,25% 100%,18% 100%,16% 72%,0 72%)}.sg-everyday-room-table--one{left:7%;transform:scale(.82);transform-origin:bottom left}.sg-everyday-room-table--two{right:6%}
-.sg-theme-room--forest{--room-trim:rgba(72,105,72,.36);--room-floor-a:rgba(190,197,139,.28);--room-floor-b:rgba(82,116,75,.42);--room-desk:rgba(93,110,68,.5)}.sg-theme-room--forest .sg-everyday-room-window{width:60%;border-radius:42% 42% 8px 8px/20% 20% 8px 8px}.sg-theme-room--clouds{--room-trim:rgba(94,139,157,.3);--room-floor-a:rgba(205,223,225,.3);--room-floor-b:rgba(115,151,161,.38);--room-desk:rgba(97,131,142,.45)}.sg-theme-room--sunset{--room-trim:rgba(136,85,65,.34);--room-floor-a:rgba(232,173,123,.34);--room-floor-b:rgba(139,77,66,.42);--room-desk:rgba(142,80,54,.5)}.sg-theme-room--library{opacity:.44;--room-trim:rgba(101,66,40,.36);--room-floor-a:rgba(174,126,73,.28);--room-floor-b:rgba(74,47,30,.34);--room-desk:rgba(83,50,29,.45)}.sg-theme-room--lanterns{opacity:.5;--room-trim:rgba(114,58,43,.38);--room-floor-a:rgba(179,94,60,.3);--room-floor-b:rgba(72,41,39,.38);--room-desk:rgba(109,54,37,.5)}.sg-theme-room--aurora{--room-trim:rgba(115,149,181,.25);--room-floor-a:rgba(75,105,138,.28);--room-floor-b:rgba(17,32,62,.5);--room-desk:rgba(66,89,122,.5)}.sg-theme-room--midnight{opacity:.45;--room-trim:rgba(104,142,119,.2);--room-floor-a:rgba(39,61,49,.28);--room-floor-b:rgba(9,20,16,.48);--room-desk:rgba(49,75,59,.44)}
-[data-background-mode="dark"] .sg-theme-room--everyday{filter:brightness(.72) saturate(.82);opacity:.62}
+.sg-everyday-room-table{position:absolute;bottom:4%;width:31%;height:14%;border-top:clamp(8px,.9vw,13px) solid var(--room-desk);border-radius:42% 42% 4px 4px/14% 14% 4px 4px;background:color-mix(in srgb,var(--room-desk),transparent 40%);clip-path:polygon(4% 0,96% 0,100% 72%,84% 72%,82% 100%,75% 100%,73% 72%,27% 72%,25% 100%,18% 100%,16% 72%,0 72%);filter:drop-shadow(0 8px 7px rgba(31,38,31,.11))}.sg-everyday-room-table--one{left:7%;transform:scale(.82);transform-origin:bottom left}.sg-everyday-room-table--two{right:6%}
+.sg-everyday-room-student{position:absolute;left:21%;bottom:15%;width:clamp(11px,1.7vw,24px);height:clamp(20px,3vw,42px);border-radius:46% 46% 20% 20%;background:color-mix(in srgb,var(--room-desk),#6A7F8D 45%);opacity:.56;transform-origin:50% 100%;animation:sgLearningStudent 10s ease-in-out infinite}.sg-everyday-room-student::before{content:"";position:absolute;left:18%;top:-40%;width:64%;aspect-ratio:1;border-radius:50%;background:#C99578}.sg-everyday-room-student i{position:absolute;left:-58%;top:43%;width:77%;height:15%;border-radius:99px;background:inherit;transform:rotate(18deg);transform-origin:right}
+
+/* Each legacy background now has a restrained architectural identity. */
+.sg-theme-room--forest{--room-trim:rgba(67,98,68,.48);--room-floor-a:rgba(190,197,139,.34);--room-floor-b:rgba(71,105,68,.5);--room-desk:rgba(87,105,66,.62);--room-leaf:#587C59}.sg-theme-room--forest .sg-everyday-room-window{width:60%;border-radius:45% 45% 9px 9px/22% 22% 9px 9px}.sg-theme-room--forest .sg-everyday-room-board{width:27%}.sg-theme-room--forest .sg-everyday-room-feature{background:repeating-linear-gradient(90deg,#8B6950 0 8%,#65816B 8% 16%,#D4B66E 16% 22%)}
+.sg-theme-room--clouds{--room-trim:rgba(83,130,150,.42);--room-floor-a:rgba(205,223,225,.36);--room-floor-b:rgba(104,145,158,.45);--room-desk:rgba(86,123,137,.56);--room-leaf:#699A8A}.sg-theme-room--clouds .sg-everyday-room-window{left:3%;width:62%;height:50%;border-radius:28px}.sg-theme-room--clouds .sg-everyday-room-board{right:4%;width:27%;background:linear-gradient(145deg,rgba(55,105,124,.52),rgba(23,65,83,.7))}.sg-theme-room--clouds .sg-everyday-room-feature{display:none}
+.sg-theme-room--sunset{--room-trim:rgba(126,78,60,.47);--room-floor-a:rgba(232,173,123,.4);--room-floor-b:rgba(126,70,61,.5);--room-desk:rgba(132,73,50,.62);--room-leaf:#687A60;--room-light:#E8A55D}.sg-theme-room--sunset .sg-everyday-room-pendant{display:block}.sg-theme-room--sunset .sg-everyday-room-board{background:linear-gradient(150deg,rgba(91,55,51,.55),rgba(49,37,44,.72))}.sg-theme-room--sunset .sg-everyday-room-feature{background:linear-gradient(135deg,#D0A05D 0 33%,#A86154 34% 66%,#6E7770 67%)}
+.sg-theme-room--library{opacity:.58;--room-trim:rgba(91,57,34,.45);--room-floor-a:rgba(174,126,73,.34);--room-floor-b:rgba(69,43,27,.44);--room-desk:rgba(76,45,27,.56);--room-leaf:#5D775F;--room-light:#D9A65C}.sg-theme-room--library .sg-everyday-room-window,.sg-theme-room--library .sg-everyday-room-board,.sg-theme-room--library .sg-everyday-room-feature,.sg-theme-room--library .sg-everyday-room-plant,.sg-theme-room--library .sg-everyday-room-student{display:none}.sg-theme-room--library .sg-everyday-room-pendant{display:block}.sg-theme-room--library .sg-everyday-room-floor{height:35%}
+.sg-theme-room--lanterns{opacity:.68;--room-trim:rgba(103,52,39,.5);--room-floor-a:rgba(179,94,60,.36);--room-floor-b:rgba(65,36,36,.48);--room-desk:rgba(99,48,33,.62);--room-leaf:#657C60;--room-light:#D98A50}.sg-theme-room--lanterns .sg-everyday-room-window,.sg-theme-room--lanterns .sg-everyday-room-board,.sg-theme-room--lanterns .sg-everyday-room-feature{opacity:.18}.sg-theme-room--lanterns .sg-everyday-room-pendant{display:block}.sg-theme-room--lanterns .sg-everyday-room-student{background:#8C5D62}
+.sg-theme-room--aurora{--room-trim:rgba(103,139,172,.34);--room-floor-a:rgba(65,96,130,.36);--room-floor-b:rgba(13,27,56,.58);--room-desk:rgba(55,78,111,.65);--room-leaf:#4D776D;--room-light:#9DBCD0}.sg-theme-room--aurora .sg-everyday-room-window{left:3%;width:65%;height:51%;border-radius:34px 34px 7px 7px}.sg-theme-room--aurora .sg-everyday-room-board{right:4%;width:25%;background:linear-gradient(150deg,rgba(38,61,93,.58),rgba(13,27,58,.78))}.sg-theme-room--aurora .sg-everyday-room-feature{display:none}.sg-theme-room--aurora .sg-everyday-room-pendant{display:block}
+.sg-theme-room--midnight{opacity:.64;--room-trim:rgba(91,130,107,.28);--room-floor-a:rgba(32,51,41,.34);--room-floor-b:rgba(6,14,11,.58);--room-desk:rgba(40,64,49,.58);--room-leaf:#416A55;--room-light:#9DB9A4}.sg-theme-room--midnight .sg-everyday-room-window{left:7%;width:54%;border-radius:20px;background:linear-gradient(180deg,rgba(40,60,61,.18),rgba(5,12,13,.2))}.sg-theme-room--midnight .sg-everyday-room-board{right:6%;width:24%;background:linear-gradient(145deg,rgba(24,45,38,.45),rgba(8,20,17,.68))}.sg-theme-room--midnight .sg-everyday-room-feature{display:none}.sg-theme-room--midnight .sg-everyday-room-plant{opacity:.45}.sg-theme-room--midnight .sg-everyday-room-pendant--one{display:block;left:51%}.sg-theme-room--midnight .sg-everyday-room-pendant--two{display:none}
+[data-background-mode="dark"] .sg-theme-room--everyday{filter:brightness(.68) saturate(.8);opacity:.72}[data-background-mode="dark"] .sg-everyday-room-pendant{filter:brightness(1.38)}
+
+/* Small finishing details for the already-specialised rooms. */
+.sg-theme-room--ocean::after,.sg-theme-room--planetarium::after,.sg-theme-room--celestial::after,.sg-theme-room--moonlit::after,.sg-theme-room--blossom::after,.sg-theme-room--rain::after{content:"";position:absolute;left:42%;bottom:3%;width:16%;height:4%;border-radius:50%;background:rgba(255,255,255,.08);filter:blur(3px);box-shadow:0 0 22px rgba(255,255,255,.08)}
+.sg-theme-room--ocean::after{background:rgba(98,221,208,.12);box-shadow:0 0 28px rgba(74,210,202,.13)}.sg-theme-room--planetarium::after,.sg-theme-room--celestial::after{background:rgba(135,151,236,.13);box-shadow:0 0 30px rgba(118,140,235,.14)}.sg-theme-room--blossom::after{background:rgba(246,190,202,.16)}.sg-theme-room--rain::after{background:rgba(234,191,118,.12);box-shadow:0 0 26px rgba(239,183,96,.12)}
 .sg-background-art--compact .sg-theme-room{font-size:6px}.sg-background-art--compact .sg-space-room-planet--three,.sg-background-art--compact .sg-ocean-room-ship,.sg-background-art--compact .sg-everyday-room-feature,.sg-background-art--compact .sg-celestial-room-pod--three{display:none}.sg-background-art--compact .sg-ocean-room-desk,.sg-background-art--compact .sg-space-room-table,.sg-background-art--compact .sg-rain-room-desk,.sg-background-art--compact .sg-everyday-room-table,.sg-background-art--compact .sg-celestial-room-pod,.sg-background-art--compact .sg-moonlit-room-desk{border-top-width:4px}.sg-background-art--compact .sg-blossom-room-window,.sg-background-art--compact .sg-rain-room-window,.sg-background-art--compact .sg-ocean-room-arch,.sg-background-art--compact .sg-celestial-room-observatory{border-width:4px}
 .sg-bg-classic-leaves {
   position:absolute;width:34vw;height:34vw;max-width:420px;max-height:420px;opacity:.22;
@@ -1174,6 +1349,8 @@ export const BACKGROUND_CSS = `
 .sg-bg-library-lamp{position:absolute;left:31%;bottom:21%;width:clamp(32px,5vw,72px);height:clamp(46px,7vw,102px);border-left:clamp(3px,.35vw,5px) solid rgba(77,62,44,.46);transform:skewX(-7deg)}
 .sg-bg-library-lamp::before{content:"";position:absolute;left:-70%;top:-12%;width:145%;height:34%;clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);background:rgba(222,184,112,.66);box-shadow:0 8px 24px rgba(255,221,147,.3)}
 .sg-bg-library-lamp::after{content:"";position:absolute;left:-70%;bottom:-4%;width:140%;height:7%;border-radius:50%;background:rgba(71,51,34,.48)}
+.sg-bg-library-plant{position:absolute;right:23%;bottom:17%;width:clamp(28px,4vw,55px);height:clamp(50px,7vw,92px);border-bottom:clamp(15px,2vw,27px) solid #876146;filter:drop-shadow(0 7px 7px rgba(55,36,22,.16));transform-origin:50% 100%;animation:sgLearningPlant 12s ease-in-out -4s infinite}.sg-bg-library-plant i{position:absolute;left:39%;bottom:16%;width:49%;height:42%;border-radius:90% 12% 90% 12%;background:#63846A;transform-origin:0 100%;transform:rotate(-43deg)}.sg-bg-library-plant i:nth-child(2){left:46%;bottom:36%;transform:rotate(29deg) scale(.85);background:#789576}.sg-bg-library-plant i:nth-child(3){left:29%;bottom:53%;transform:rotate(-62deg) scale(.68)}
+.sg-bg-library-reader{position:absolute;left:36%;bottom:18%;width:clamp(13px,1.8vw,25px);height:clamp(23px,3vw,42px);border-radius:45% 45% 20% 20%;background:#7A6D76;opacity:.6;transform-origin:50% 100%;animation:sgLearningStudent 11s ease-in-out infinite}.sg-bg-library-reader::before{content:"";position:absolute;left:18%;top:-40%;width:64%;aspect-ratio:1;border-radius:50%;background:#C79375}.sg-bg-library-reader i{position:absolute;left:-62%;top:43%;width:80%;height:15%;border-radius:99px;background:inherit;transform:rotate(18deg);transform-origin:right}
 .sg-bg-library-light{background:radial-gradient(ellipse at 50% 18%,rgba(255,247,207,.42),transparent 35%),radial-gradient(circle at 29% 73%,rgba(255,223,153,.22),transparent 18%)}
 [data-background-mode="dark"][data-background-art="library"] .sg-bg-library-room{background:linear-gradient(90deg,rgba(20,12,7,.38),transparent 27% 73%,rgba(20,12,7,.38)),repeating-linear-gradient(0deg,transparent 0 12%,rgba(236,204,155,.025) 12% 12.4%)}
 [data-background-mode="dark"][data-background-art="library"] .sg-bg-shelf{opacity:.54;filter:brightness(.68) saturate(.8);box-shadow:inset 0 0 0 3px rgba(220,179,121,.06),0 18px 34px rgba(0,0,0,.28)}
@@ -1249,6 +1426,10 @@ export const BACKGROUND_CSS = `
 @keyframes sgBgCloud{0%,100%{translate:-8px 0}50%{translate:18px -3px}}
 @keyframes sgBgAurora{0%,100%{transform:skewX(-6deg) scaleY(.9);opacity:.14}50%{transform:skewX(7deg) scaleY(1.12);opacity:.28}}
 @keyframes sgBgOrbit{to{transform:rotate(360deg)}}
+@keyframes sgLearningPlant{0%,100%{rotate:-1.2deg;scale:1 .99}50%{rotate:1.8deg;scale:1 1.02}}
+@keyframes sgLearningStudent{0%,100%{transform:translate3d(0,0,0) rotate(-.7deg)}48%{transform:translate3d(0,1px,0) rotate(.7deg)}54%{transform:translate3d(0,-1px,0) rotate(.3deg)}}
+@keyframes sgLearningLight{0%,100%{opacity:.7;transform:translateX(-1%)}50%{opacity:1;transform:translateX(1.5%)}}
+@keyframes sgLabScan{to{transform:rotate(360deg)}}
 .sg-background-art--focus .sg-bg-petals i,
 .sg-background-art--focus .sg-bg-rain-sheet i,
 .sg-background-art--focus .sg-bg-rain-trails i,
@@ -1264,6 +1445,13 @@ export const BACKGROUND_CSS = `
 .sg-background-art--focus .sg-space-room-planet,
 .sg-background-art--focus .sg-celestial-room-orbit-ring,
 .sg-background-art--focus .sg-blossom-room-light { animation-duration:60s!important;opacity:.18 }
+.sg-background-art--focus .sg-learning-daylight,
+.sg-background-art--focus .sg-learning-plant,
+.sg-background-art--focus .sg-learning-student,
+.sg-background-art--focus .sg-bg-library-reader,
+.sg-background-art--focus .sg-bg-library-plant,
+.sg-background-art--focus .sg-everyday-room-plant,
+.sg-background-art--focus .sg-everyday-room-student {animation-duration:60s!important;opacity:.3}
 .sg-background-art--focus { filter:saturate(.72) contrast(.9); }
 [data-theme="dark"] .sg-shell .sg-background-art--focus.sg-keepcolor {
   filter:invert(1) hue-rotate(180deg) saturate(.72) contrast(.9);
@@ -1283,6 +1471,14 @@ export const BACKGROUND_CSS = `
 .sg-background-art--low-power .sg-space-room-planet,
 .sg-background-art--low-power .sg-celestial-room-orbit-ring,
 .sg-background-art--low-power .sg-blossom-room-light { animation-play-state:paused!important; }
+.sg-background-art--low-power .sg-learning-daylight,
+.sg-background-art--low-power .sg-learning-plant,
+.sg-background-art--low-power .sg-learning-student,
+.sg-background-art--low-power .sg-learning-board::after,
+.sg-background-art--low-power .sg-bg-library-reader,
+.sg-background-art--low-power .sg-bg-library-plant,
+.sg-background-art--low-power .sg-everyday-room-plant,
+.sg-background-art--low-power .sg-everyday-room-student {animation-play-state:paused!important}
 .sg-shop-category-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4;padding:4;margin:0 0 11px;background:#EEF3EB;border-radius:13px}
 .sg-shop-category-tab{min-width:0;min-height:40px;border:0;border-radius:10px;background:transparent;color:#7C887E;padding:8px 5px;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap}
 .sg-shop-category-tab--active{color:#2D6A4F;background:#fff;box-shadow:0 1px 4px rgba(35,58,42,.1)}
@@ -1292,7 +1488,7 @@ export const BACKGROUND_CSS = `
 .sg-background-shop-heading{display:flex;align-items:center;gap:8px;min-width:0}.sg-background-shop-heading h3{font-size:18px;color:#1A1A2E;margin:0}.sg-background-shop-heading p{font-size:11.5px;color:#98A39A;font-weight:600;margin:2px 0 0}
 .sg-background-round-btn{width:32px;height:32px;border:0;border-radius:50%;background:#F0F2EE;color:#666;font-size:17px;cursor:pointer}
 .sg-background-coin-balance{flex-shrink:0;font-size:14px;font-weight:700;color:#B8860B;background:#FFF8E7;border:1px solid #F0D060;border-radius:20px;padding:5px 10px}
-.sg-background-filter-row{display:flex;gap:6;align-items:center;margin-bottom:10px}.sg-background-filter-row button{min-height:34px;border:1px solid #DFE7DC;border-radius:18px;background:#F7F9F5;color:#718075;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer}.sg-background-filter-row button.is-active{color:#2D6A4F;background:#E9F4EA;border-color:#BFD8C2}.sg-background-filter-row .sg-background-use-default{margin-left:auto;color:#53685A;background:#fff}
+.sg-background-filter-row{display:flex;gap:6px;align-items:center;margin-bottom:10px}.sg-background-filter-row button{min-height:34px;border:1px solid #DFE7DC;border-radius:18px;background:#F7F9F5;color:#718075;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer}.sg-background-filter-row button.is-active{color:#2D6A4F;background:#E9F4EA;border-color:#BFD8C2}.sg-background-filter-row .sg-background-use-default{margin-left:auto;color:#53685A;background:#fff}
 .sg-background-toast{position:sticky;top:54px;z-index:10;background:#20352A;color:#fff;border-radius:12px;padding:9px 12px;margin-bottom:10px;text-align:center;font-size:11.5px;font-weight:650;box-shadow:0 5px 18px rgba(20,40,28,.16)}
 .sg-background-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .sg-background-card{min-width:0;overflow:hidden;border:1.5px solid #E4EAE1;border-radius:16px;background:#fff;padding:7px;box-shadow:0 2px 7px rgba(29,49,35,.045)}
@@ -1301,7 +1497,7 @@ export const BACKGROUND_CSS = `
 .sg-background-thumb>span{position:absolute;right:7px;bottom:7px;padding:4px 7px;border-radius:10px;background:rgba(20,32,24,.63);backdrop-filter:blur(5px);color:#fff;font-size:9px;font-weight:750}
 .sg-background-card-copy{padding:8px 3px 4px}.sg-background-card-copy h4{font-size:13px;line-height:1.2;color:#26352B;margin:5px 0 3px}.sg-background-card-copy p{font-size:10px;line-height:1.35;color:#8D978F;margin:0;min-height:27px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .sg-background-rarity{display:inline-flex;border-radius:9px;padding:2px 6px;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.45px;color:#667269;background:#EEF2EC}.sg-background-rarity--common{color:#4F715D;background:#EAF3EC}.sg-background-rarity--rare{color:#3A6F83;background:#E7F4F7}.sg-background-rarity--epic{color:#73549A;background:#F0E9F8}.sg-background-rarity--mythical{color:#9A672B;background:#FFF1D8}.sg-background-rarity--default{color:#55715C;background:#EAF3E9}
-.sg-background-card-meta{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 3px 3px;min-height:34px}.sg-background-cost{font-size:10.5px;font-weight:800;color:#B8860B}.sg-background-free{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border-radius:10px;padding:3px 7px}.sg-background-equipped{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border:1px solid #CBE3D2;border-radius:11px;padding:5px 8px;white-space:nowrap}.sg-background-card-action{min-height:34px;border:0;border-radius:11px;background:#2D6A4F;color:#fff;padding:6px 10px;font-size:10px;font-weight:750;cursor:pointer}.sg-background-card-action:disabled{background:#C8CECA;color:#fff;cursor:not-allowed}
+.sg-background-card-meta{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 3px 3px;min-height:34px}.sg-background-cost{font-size:10.5px;font-weight:800;color:#B8860B}.sg-background-free{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border-radius:10px;padding:3px 7px}.sg-background-milestone{font-size:9px;font-weight:800;color:#5E6683;background:#EEF0F8;border-radius:10px;padding:4px 7px;white-space:nowrap}.sg-background-equipped{font-size:10px;font-weight:800;color:#2D6A4F;background:#E8F5EE;border:1px solid #CBE3D2;border-radius:11px;padding:5px 8px;white-space:nowrap}.sg-background-card-action{min-height:34px;border:0;border-radius:11px;background:#2D6A4F;color:#fff;padding:6px 10px;font-size:10px;font-weight:750;cursor:pointer}.sg-background-card-action:disabled{background:#C8CECA;color:#fff;cursor:not-allowed}
 .sg-background-done{display:block;width:100%;margin-top:14px;border:0;border-radius:14px;background:#F0F2EE;color:#59665C;padding:11px;font-size:13px;font-weight:700;cursor:pointer}
 .sg-background-preview{position:fixed;inset:0;z-index:390;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;padding:max(18px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));isolation:isolate}
 .sg-background-preview>.sg-background-art{z-index:-2}.sg-background-preview-shade{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(7,12,9,.04),rgba(7,12,9,.1) 50%,rgba(7,12,9,.46))}
@@ -1309,7 +1505,7 @@ export const BACKGROUND_CSS = `
 .sg-background-preview-panel{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;width:min(100%,720px);padding:18px;border:1px solid rgba(255,255,255,.58);border-radius:20px;background:rgba(250,252,249,.88);backdrop-filter:blur(14px);box-shadow:0 14px 45px rgba(9,18,12,.25);color:#223128}
 .sg-background-preview-copy h3{font-size:22px;margin:6px 0 4px}.sg-background-preview-copy p{font-size:12.5px;line-height:1.45;color:#627068;margin:0;max-width:420px}.sg-background-preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.sg-background-secondary-btn,.sg-background-primary-btn{min-height:42px;border-radius:13px;padding:9px 15px;font-size:12px;font-weight:750;cursor:pointer}.sg-background-secondary-btn{border:1px solid #D8E1D7;background:#fff;color:#647168}.sg-background-primary-btn{border:0;background:#2D6A4F;color:#fff}.sg-background-primary-btn:disabled{background:#AAB5AE}
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
-@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
+@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-learning-window{left:3%;width:54%}.sg-learning-board{right:3%;width:35%}.sg-learning-shelf{right:3%;width:22%}.sg-learning-plant--right,.sg-learning-student--two,.sg-learning-lamp--two,.sg-everyday-room-plant,.sg-everyday-room-pendant--two{display:none}.sg-learning-desk--left{left:-4%}.sg-learning-desk--right{right:-4%}.sg-learning-room--loft .sg-learning-window{left:1%;right:1%}.sg-everyday-room-window{left:2%;width:52%}.sg-everyday-room-board{right:3%;width:35%}.sg-everyday-room-table--one{left:-3%}.sg-everyday-room-table--two{right:-3%}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
 html[data-animation-disabled="true"] .sg-background-art *{animation:none!important;transition:none!important}
 html[data-animation-disabled="true"] .sg-background-art--focus{filter:saturate(.82) contrast(.94)}
