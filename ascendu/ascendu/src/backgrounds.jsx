@@ -12,11 +12,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "study",
     art: "classic",
     tone: "light",
-    motion: "none",
+    motion: "low",
     description: "A bright, plant-filled corner for calm everyday study.",
     imageSrc: "/backgrounds/study-corner.webp",
     imageSrcMobile: "/backgrounds/study-corner-mobile.webp",
-    imageOpacity: .44,
+    imageOpacity: .52,
+    imageOpacityMobile: .64,
     imagePreviewOpacity: .9,
     imagePosition: "center 48%",
     imagePositionMobile: "center center",
@@ -44,11 +45,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "study",
     art: "midnight",
     tone: "dark",
-    motion: "none",
+    motion: "low",
     description: "A quiet blue study room made for late-night focus.",
     imageSrc: "/backgrounds/midnight-study.webp",
     imageSrcMobile: "/backgrounds/midnight-study-mobile.webp",
-    imageOpacity: .4,
+    imageOpacity: .49,
+    imageOpacityMobile: .6,
     imagePreviewOpacity: .88,
     imagePosition: "center 43%",
     imagePositionMobile: "center center",
@@ -80,7 +82,8 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     description: "A warm timber loft beneath a wide sunset skylight.",
     imageSrc: "/backgrounds/attic-study.webp",
     imageSrcMobile: "/backgrounds/attic-study-mobile.webp",
-    imageOpacity: .42,
+    imageOpacity: .51,
+    imageOpacityMobile: .62,
     imagePreviewOpacity: .9,
     imagePosition: "center 44%",
     imagePositionMobile: "center center",
@@ -108,11 +111,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "nature",
     art: "blossom",
     tone: "light",
-    motion: "none",
+    motion: "medium",
     description: "A quiet blossom-lined lake beneath a rose-coloured sky.",
     imageSrc: "/backgrounds/sakura-lake.webp",
     imageSrcMobile: "/backgrounds/sakura-lake-mobile.webp",
-    imageOpacity: .4,
+    imageOpacity: .49,
+    imageOpacityMobile: .6,
     imagePreviewOpacity: .9,
     imagePosition: "center 50%",
     imagePositionMobile: "center center",
@@ -140,11 +144,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "nature",
     art: "rain",
     tone: "cool",
-    motion: "none",
+    motion: "medium",
     description: "A misty mountain lake under a calm, steady rainfall.",
     imageSrc: "/backgrounds/rainfall-sanctuary.webp",
     imageSrcMobile: "/backgrounds/rainfall-sanctuary-mobile.webp",
-    imageOpacity: .38,
+    imageOpacity: .47,
+    imageOpacityMobile: .58,
     imagePreviewOpacity: .9,
     imagePosition: "center 48%",
     imagePositionMobile: "center center",
@@ -172,11 +177,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "study",
     art: "library",
     tone: "warm",
-    motion: "none",
+    motion: "low",
     description: "A leafy reading room filled with warm shelves and lamplight.",
     imageSrc: "/backgrounds/library-study.webp",
     imageSrcMobile: "/backgrounds/library-study-mobile.webp",
-    imageOpacity: .42,
+    imageOpacity: .51,
+    imageOpacityMobile: .62,
     imagePreviewOpacity: .9,
     imagePosition: "center 48%",
     imagePositionMobile: "center center",
@@ -208,7 +214,8 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     description: "A warm festival room glowing with lanterns and blossom light.",
     imageSrc: "/backgrounds/festival-study.webp",
     imageSrcMobile: "/backgrounds/festival-study-mobile.webp",
-    imageOpacity: .38,
+    imageOpacity: .47,
+    imageOpacityMobile: .58,
     imagePreviewOpacity: .88,
     imagePosition: "center 42%",
     imagePositionMobile: "center center",
@@ -236,11 +243,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "celestial",
     art: "moonlands",
     tone: "dark",
-    motion: "none",
+    motion: "medium",
     description: "A vast violet lunar plain beneath planets and falling stars.",
     imageSrc: "/backgrounds/violet-moonlands.webp",
     imageSrcMobile: "/backgrounds/violet-moonlands-mobile.webp",
-    imageOpacity: .38,
+    imageOpacity: .47,
+    imageOpacityMobile: .58,
     imagePreviewOpacity: .9,
     imagePosition: "center 48%",
     imagePositionMobile: "center center",
@@ -268,11 +276,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     collection: "discovery",
     art: "ocean",
     tone: "cool",
-    motion: "none",
+    motion: "medium",
     description: "A glass-walled learning room beneath blue water, drifting bubbles and quiet sea life.",
     imageSrc: "/backgrounds/ocean-observatory.webp",
     imageSrcMobile: "/backgrounds/ocean-observatory-mobile.webp",
-    imageOpacity: .38,
+    imageOpacity: .47,
+    imageOpacityMobile: .58,
     imagePreviewOpacity: .9,
     imagePosition: "center 46%",
     imagePositionMobile: "center center",
@@ -304,7 +313,8 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     description: "A moonlit observatory room with soft celestial detail.",
     imageSrc: "/backgrounds/celestial-study.webp",
     imageSrcMobile: "/backgrounds/celestial-study-mobile.webp",
-    imageOpacity: .4,
+    imageOpacity: .49,
+    imageOpacityMobile: .6,
     imagePreviewOpacity: .9,
     imagePosition: "center 42%",
     imagePositionMobile: "center center",
@@ -628,6 +638,40 @@ function OceanField() {
   </>;
 }
 
+function PhotoMotionEffects({ art }) {
+  if (art === "rain") return <div className="sg-bg-photo-effects sg-bg-photo-effects--rain">
+    <RainField/>
+  </div>;
+
+  if (art === "ocean") return <div className="sg-bg-photo-effects sg-bg-photo-effects--ocean">
+    <div className="sg-bg-ocean-rays"/>
+    <div className="sg-bg-ocean-fish sg-bg-ocean-fish--one"/>
+    <div className="sg-bg-ocean-fish sg-bg-ocean-fish--two"/>
+    <div className="sg-bg-ocean-bubbles">
+      {OCEAN_BUBBLES.map((bubble,index)=><i key={index} style={{
+        left:`${bubble.left}%`,width:`${bubble.size}px`,height:`${bubble.size}px`,
+        "--sg-bubble-delay":`${bubble.delay}s`,"--sg-bubble-duration":`${bubble.duration}s`,
+      }}/>) }
+    </div>
+  </div>;
+
+  if (art === "blossom" || art === "lanterns") return <div className={`sg-bg-photo-effects sg-bg-photo-effects--${art}`}>
+    <AmbientDots className="sg-bg-petals" count={art === "lanterns" ? 7 : 10}/>
+    <span className="sg-bg-photo-glow"/>
+  </div>;
+
+  if (art === "midnight" || art === "moonlands" || art === "celestial") return <div className={`sg-bg-photo-effects sg-bg-photo-effects--${art}`}>
+    <AmbientDots className="sg-bg-celestial-stars" count={art === "midnight" ? 7 : 12}/>
+    <span className="sg-bg-photo-glow"/>
+    {art === "moonlands" && <><i className="sg-bg-shooting-star sg-bg-shooting-star--one"/><i className="sg-bg-shooting-star sg-bg-shooting-star--two"/></>}
+  </div>;
+
+  return <div className={`sg-bg-photo-effects sg-bg-photo-effects--${art}`}>
+    <AmbientDots className="sg-bg-sunset-motes" count={art === "library" ? 5 : 7}/>
+    <span className="sg-bg-photo-glow"/>
+  </div>;
+}
+
 function BackgroundDecor({ art }) {
   switch (art) {
     case "midnight":
@@ -720,6 +764,7 @@ export function BackgroundArtwork({
   focusMode = false,
   paused = false,
   lowPower = false,
+  animationMode = "device",
   className = "",
 }) {
   const background = useMemo(
@@ -730,9 +775,12 @@ export function BackgroundArtwork({
     "--sg-bg-gradient": background.gradient,
     "--sg-bg-base": background.baseColor,
     "--sg-bg-photo-opacity": background.imageOpacity ?? .44,
+    "--sg-bg-photo-opacity-mobile": background.imageOpacityMobile ?? Math.min(.64,(background.imageOpacity ?? .44)+.1),
     "--sg-bg-photo-preview-opacity": background.imagePreviewOpacity ?? .9,
     "--sg-bg-photo-position": background.imagePosition || "center center",
     "--sg-bg-photo-position-mobile": background.imagePositionMobile || background.imagePosition || "center center",
+    "--sg-bg-camera-duration": background.motion === "medium" ? "25s" : "34s",
+    "--sg-bg-camera-duration-device": background.motion === "medium" ? "34s" : "44s",
   }), [background]);
   return (
     <div
@@ -742,6 +790,7 @@ export function BackgroundArtwork({
         focusMode ? "sg-background-art--focus" : "",
         paused ? "sg-background-art--paused" : "",
         lowPower ? "sg-background-art--low-power" : "",
+        `sg-background-art--motion-${animationMode}`,
         className,
       ].filter(Boolean).join(" ")}
       data-background-art={background.art}
@@ -760,6 +809,7 @@ export function BackgroundArtwork({
         />
       </picture>}
       <div className="sg-bg-wash"/>
+      {background.imageSrc && <PhotoMotionEffects art={background.art}/>}
       {!background.imageSrc && <BackgroundDecor art={background.art}/>}
       {!background.imageSrc && <ClassroomEnvironment art={background.art}/>}
       <div className="sg-bg-vignette"/>
@@ -786,6 +836,7 @@ export function BackgroundLayer({ backgroundId, theme = "light", focusMode = fal
     focusMode={focusMode}
     paused={hidden||animationMode==="off"}
     lowPower={animationMode==="device"&&lowPower}
+    animationMode={animationMode}
     className="sg-keepcolor"
   />;
   return typeof document!=="undefined"?createPortal(artwork,document.body):artwork;
@@ -1061,7 +1112,36 @@ export const BACKGROUND_CSS = `
   object-fit:cover;
   object-position:var(--sg-bg-photo-position,center center);
   filter:saturate(.84) contrast(.92);
-  transform:translateZ(0) scale(1.002);
+  transform:translate3d(0,0,0) scale(1.04);
+  transform-origin:center center;
+  will-change:transform;
+}
+.sg-background-art--full.sg-background-art--motion-full .sg-bg-photo img {
+  --sg-bg-camera-x-start:-1.35%;
+  --sg-bg-camera-x-mid:.6%;
+  --sg-bg-camera-x-end:1.35%;
+  --sg-bg-camera-y-start:-.8%;
+  --sg-bg-camera-y-mid:.55%;
+  --sg-bg-camera-y-end:.8%;
+  --sg-bg-camera-scale:1.075;
+  --sg-bg-camera-scale-mid:1.087;
+  animation:sgBgCameraDrift var(--sg-bg-camera-duration,28s) ease-in-out infinite alternate;
+}
+.sg-background-art--full.sg-background-art--motion-device .sg-bg-photo img {
+  --sg-bg-camera-x-start:-.65%;
+  --sg-bg-camera-x-mid:.3%;
+  --sg-bg-camera-x-end:.65%;
+  --sg-bg-camera-y-start:-.4%;
+  --sg-bg-camera-y-mid:.28%;
+  --sg-bg-camera-y-end:.4%;
+  --sg-bg-camera-scale:1.045;
+  --sg-bg-camera-scale-mid:1.054;
+  animation:sgBgCameraDrift var(--sg-bg-camera-duration-device,40s) ease-in-out infinite alternate;
+}
+.sg-background-art--compact .sg-bg-photo img,
+.sg-background-art--motion-off .sg-bg-photo img {
+  animation:none;
+  transform:translate3d(0,0,0) scale(1.01);
 }
 .sg-background-art--compact .sg-bg-photo {
   opacity:var(--sg-bg-photo-preview-opacity,.9);
@@ -1070,7 +1150,66 @@ export const BACKGROUND_CSS = `
   filter:saturate(.94) contrast(.96);
 }
 .sg-background-art--focus .sg-bg-photo {
-  opacity:calc(var(--sg-bg-photo-opacity,.44) * .76);
+  opacity:calc(var(--sg-bg-photo-opacity,.44) * .88);
+}
+.sg-bg-photo-effects {
+  position:absolute;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  opacity:.72;
+}
+.sg-bg-photo-glow {
+  position:absolute;
+  inset:-10%;
+  background:radial-gradient(circle at 32% 24%,rgba(255,238,190,.22),transparent 34%);
+  animation:sgBgPhotoGlow 11s ease-in-out infinite;
+}
+.sg-bg-photo-effects--classic .sg-bg-photo-glow,
+.sg-bg-photo-effects--forest .sg-bg-photo-glow {
+  background:linear-gradient(112deg,transparent 18%,rgba(255,240,196,.17) 40%,transparent 62%);
+}
+.sg-bg-photo-effects--library .sg-bg-photo-glow {
+  background:radial-gradient(circle at 29% 66%,rgba(255,195,105,.2),transparent 25%);
+}
+.sg-bg-photo-effects--lanterns .sg-bg-photo-glow {
+  background:radial-gradient(circle at 62% 18%,rgba(255,113,55,.21),transparent 25%);
+}
+.sg-bg-photo-effects--midnight .sg-bg-photo-glow,
+.sg-bg-photo-effects--moonlands .sg-bg-photo-glow,
+.sg-bg-photo-effects--celestial .sg-bg-photo-glow {
+  background:radial-gradient(circle at 50% 30%,rgba(173,151,255,.15),transparent 35%);
+}
+.sg-bg-photo-effects--rain .sg-bg-rain-sheet,
+.sg-bg-photo-effects--rain .sg-bg-rain-trails,
+.sg-bg-photo-effects--rain .sg-bg-rain-droplets,
+.sg-bg-photo-effects--rain .sg-bg-rain-bokeh {
+  inset:0;
+  width:auto;
+  height:100%;
+  border-radius:0;
+}
+.sg-bg-photo-effects--rain .sg-bg-rain-bokeh { opacity:.28; }
+.sg-bg-photo-effects--rain .sg-bg-rain-sheet--far { opacity:.25; }
+.sg-bg-photo-effects--rain .sg-bg-rain-sheet--near { opacity:.44; }
+.sg-bg-photo-effects--rain .sg-bg-rain-trails { opacity:.31; }
+.sg-bg-photo-effects--rain .sg-bg-rain-droplets { opacity:.2; }
+.sg-bg-photo-effects--ocean .sg-bg-ocean-rays { opacity:.46; }
+.sg-bg-photo-effects--ocean .sg-bg-ocean-fish { opacity:.22; }
+.sg-bg-photo-effects--ocean .sg-bg-ocean-bubbles { opacity:.58; }
+.sg-bg-shooting-star {
+  position:absolute;
+  top:13%;
+  left:-18%;
+  width:clamp(65px,11vw,145px);
+  height:1px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,rgba(255,245,209,.82));
+  box-shadow:8px 0 10px rgba(255,239,183,.38);
+  transform:rotate(-18deg);
+  animation:sgBgShootingStar 13s linear infinite;
+}
+.sg-bg-shooting-star--two { top:36%;animation-delay:-7s;animation-duration:17s;opacity:.65; }
 }
 .sg-bg-wash,.sg-bg-vignette,.sg-bg-rain-glow,.sg-bg-library-light,.sg-bg-library-room {
   position:absolute;inset:0;pointer-events:none;
@@ -1337,6 +1476,13 @@ export const BACKGROUND_CSS = `
 @keyframes sgBgCloud{0%,100%{translate:-8px 0}50%{translate:18px -3px}}
 @keyframes sgBgAurora{0%,100%{transform:skewX(-6deg) scaleY(.9);opacity:.14}50%{transform:skewX(7deg) scaleY(1.12);opacity:.28}}
 @keyframes sgBgOrbit{to{transform:rotate(360deg)}}
+@keyframes sgBgCameraDrift{
+  0%{transform:translate3d(var(--sg-bg-camera-x-start,-1%),var(--sg-bg-camera-y-start,-.5%),0) scale(var(--sg-bg-camera-scale,1.06))}
+  48%{transform:translate3d(var(--sg-bg-camera-x-mid,.45%),var(--sg-bg-camera-y-mid,.35%),0) scale(var(--sg-bg-camera-scale-mid,1.072))}
+  100%{transform:translate3d(var(--sg-bg-camera-x-end,1%),var(--sg-bg-camera-y-end,.5%),0) scale(var(--sg-bg-camera-scale,1.06))}
+}
+@keyframes sgBgPhotoGlow{0%,100%{transform:translate3d(-1.5%,0,0) scale(.98);opacity:.45}50%{transform:translate3d(1.5%,-.5%,0) scale(1.025);opacity:.78}}
+@keyframes sgBgShootingStar{0%,72%{transform:translate3d(-12vw,0,0) rotate(-18deg);opacity:0}75%{opacity:.75}86%{opacity:.62}90%,100%{transform:translate3d(130vw,28vh,0) rotate(-18deg);opacity:0}}
 .sg-background-art--focus .sg-bg-petals i,
 .sg-background-art--focus .sg-bg-rain-sheet i,
 .sg-background-art--focus .sg-bg-rain-trails i,
@@ -1352,6 +1498,8 @@ export const BACKGROUND_CSS = `
 .sg-background-art--focus .sg-space-room-planet,
 .sg-background-art--focus .sg-celestial-room-orbit-ring,
 .sg-background-art--focus .sg-blossom-room-light { animation-duration:60s!important;opacity:.18 }
+.sg-background-art--focus .sg-bg-photo img { animation-duration:54s!important; }
+.sg-background-art--focus .sg-bg-photo-effects { opacity:.42; }
 .sg-background-art--focus { filter:saturate(.72) contrast(.9); }
 [data-theme="dark"] .sg-shell .sg-background-art--focus.sg-keepcolor {
   filter:invert(1) hue-rotate(180deg) saturate(.72) contrast(.9);
@@ -1370,7 +1518,8 @@ export const BACKGROUND_CSS = `
 .sg-background-art--low-power .sg-ocean-room-kelp,
 .sg-background-art--low-power .sg-space-room-planet,
 .sg-background-art--low-power .sg-celestial-room-orbit-ring,
-.sg-background-art--low-power .sg-blossom-room-light { animation-play-state:paused!important; }
+.sg-background-art--low-power .sg-blossom-room-light,
+.sg-background-art--low-power .sg-bg-shooting-star { animation-play-state:paused!important; }
 .sg-shop-category-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4;padding:4;margin:0 0 11px;background:#EEF3EB;border-radius:13px}
 .sg-shop-category-tab{min-width:0;min-height:40px;border:0;border-radius:10px;background:transparent;color:#7C887E;padding:8px 5px;font-size:10.5px;font-weight:700;cursor:pointer;display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap}
 .sg-shop-category-tab--active{color:#2D6A4F;background:#fff;box-shadow:0 1px 4px rgba(35,58,42,.1)}
@@ -1405,7 +1554,7 @@ export const BACKGROUND_CSS = `
 .sg-background-preview-panel{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;width:min(100%,720px);padding:18px;border:1px solid rgba(255,255,255,.58);border-radius:20px;background:rgba(250,252,249,.88);backdrop-filter:blur(14px);box-shadow:0 14px 45px rgba(9,18,12,.25);color:#223128}
 .sg-background-preview-copy h3{font-size:22px;margin:6px 0 4px}.sg-background-preview-copy p{font-size:12.5px;line-height:1.45;color:#627068;margin:0;max-width:420px}.sg-background-preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.sg-background-secondary-btn,.sg-background-primary-btn{min-height:42px;border-radius:13px;padding:9px 15px;font-size:12px;font-weight:750;cursor:pointer}.sg-background-secondary-btn{border:1px solid #D8E1D7;background:#fff;color:#647168}.sg-background-primary-btn{border:0;background:#2D6A4F;color:#fff}.sg-background-primary-btn:disabled{background:#AAB5AE}
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
-@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-bg-photo img{object-position:var(--sg-bg-photo-position-mobile,center center);filter:saturate(.8) contrast(.9)}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
+@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-photo{opacity:var(--sg-bg-photo-opacity-mobile,.6)}.sg-background-art--full.sg-background-art--focus .sg-bg-photo{opacity:calc(var(--sg-bg-photo-opacity-mobile,.6) * .9)}.sg-bg-photo img{object-position:var(--sg-bg-photo-position-mobile,center center);filter:saturate(.86) contrast(.92)}.sg-background-art--full.sg-background-art--motion-full .sg-bg-photo img{--sg-bg-camera-x-start:-.9%;--sg-bg-camera-x-mid:.4%;--sg-bg-camera-x-end:.9%;--sg-bg-camera-y-start:-.55%;--sg-bg-camera-y-mid:.35%;--sg-bg-camera-y-end:.55%;--sg-bg-camera-scale:1.055;--sg-bg-camera-scale-mid:1.066}.sg-background-art--full.sg-background-art--motion-device .sg-bg-photo img{--sg-bg-camera-x-start:-.4%;--sg-bg-camera-x-mid:.18%;--sg-bg-camera-x-end:.4%;--sg-bg-camera-y-start:-.25%;--sg-bg-camera-y-mid:.18%;--sg-bg-camera-y-end:.25%;--sg-bg-camera-scale:1.035;--sg-bg-camera-scale-mid:1.042}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.08)}.sg-bg-photo-effects{opacity:.62}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
 html[data-animation-disabled="true"] .sg-background-art *{animation:none!important;transition:none!important}
 html[data-animation-disabled="true"] .sg-background-art--focus{filter:saturate(.82) contrast(.94)}
