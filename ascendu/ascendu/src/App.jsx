@@ -150,8 +150,134 @@ const APP_CSS = `
 .sg-session-screen {
   background:
     linear-gradient(160deg, var(--sg-focus-accent, rgba(86,182,139,.11)) 0%,
-    var(--sg-focus-surface, rgba(242,247,241,.91)) 100%) !important;
+    color-mix(in srgb,var(--sg-focus-surface,rgba(242,247,241,.91)) 78%,transparent) 100%) !important;
   backdrop-filter: blur(3px);
+}
+
+/* The selected learning-space background also drives the interface palette.
+   The translucent surfaces leave the artwork readable while these semantic
+   tokens keep controls accessible across warm, cool and night scenes. */
+.sg-shell[data-background] {
+  --sg-theme-accent-strong:color-mix(in srgb,var(--sg-theme-accent) 76%,#17291f);
+  --sg-theme-accent-bright:color-mix(in srgb,var(--sg-theme-accent) 84%,white);
+  --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.9) 86%,var(--sg-theme-accent) 14%);
+  --sg-theme-panel-solid:color-mix(in srgb,#fff 89%,var(--sg-theme-accent) 11%);
+  --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.72) 80%,var(--sg-theme-accent) 20%);
+  --sg-theme-border:color-mix(in srgb,var(--sg-theme-accent) 34%,rgba(255,255,255,.72));
+  --sg-theme-text:color-mix(in srgb,var(--sg-theme-accent) 24%,#17241c);
+  --sg-theme-muted:color-mix(in srgb,var(--sg-theme-accent) 22%,#68736b);
+  --sg-theme-shadow:color-mix(in srgb,var(--sg-theme-accent) 22%,transparent);
+  color:var(--sg-theme-text);
+}
+.sg-shell[data-background],
+.sg-shell[data-background] button,
+.sg-shell[data-background] input,
+.sg-shell[data-background] select,
+.sg-shell[data-background] textarea,
+.sg-shell[data-background] .sg-card-anim,
+.sg-shell[data-background] .sg-tap-card {
+  transition:background-color .28s ease,border-color .28s ease,color .28s ease,box-shadow .28s ease,transform .18s cubic-bezier(.34,1.56,.64,1),filter .18s ease;
+}
+.sg-main-header .sg-main-menu-button,
+.sg-main-nav .sg-main-nav-button.is-active,
+.sg-timer-style,
+.sg-shell[data-background] .sg-pomodoro-presets button,
+.sg-shell[data-background] .sg-pomo-field input,
+.sg-shell[data-background] .sg-pomo-field select,
+.sg-shell[data-background] .sg-task-check,
+.sg-shell[data-background] .sg-task-edit input,
+.sg-shell[data-background] .sg-task-edit select,
+.sg-shell[data-background] .sg-subj-scroll-arrow,
+.sg-shell[data-background] .sg-shop-sheet,
+.sg-shell[data-background] .sg-pop-anim,
+.sg-shell[data-background] .sg-assessment-editor,
+.sg-shell[data-background] .sg-background-shop {
+  background:var(--sg-theme-panel-solid)!important;
+  border-color:var(--sg-theme-border)!important;
+  box-shadow:0 8px 26px var(--sg-theme-shadow)!important;
+}
+.sg-main-nav {
+  border-color:var(--sg-theme-border)!important;
+  background:linear-gradient(180deg,transparent,var(--sg-theme-accent-soft));
+}
+.sg-main-nav .sg-main-nav-button {
+  color:var(--sg-theme-muted)!important;
+}
+.sg-main-nav .sg-main-nav-button.is-active {
+  color:var(--sg-theme-accent-strong)!important;
+  box-shadow:inset 0 0 0 1px var(--sg-theme-border),0 5px 15px var(--sg-theme-shadow)!important;
+}
+.sg-main-header .sg-main-menu-avatar,
+.sg-shell[data-background] .sg-background-primary-btn,
+.sg-shell[data-background] .sg-background-card-action,
+.sg-shell[data-background] .sg-background-done,
+.sg-shell[data-background] .sg-task-check[data-checked="true"] {
+  background:linear-gradient(145deg,var(--sg-theme-accent),var(--sg-theme-accent-strong))!important;
+  border-color:color-mix(in srgb,var(--sg-theme-accent) 65%,white)!important;
+  color:#fff!important;
+  box-shadow:0 5px 16px var(--sg-theme-shadow)!important;
+}
+.sg-timer-style button[aria-pressed="true"],
+.sg-shell[data-background] .sg-pomodoro-presets button[aria-pressed="true"],
+.sg-shell[data-background] .sg-task-icon[aria-pressed="true"],
+.sg-shell[data-background] .sg-background-collection-row>button.is-active,
+.sg-shell[data-background] .sg-background-filter-row button.is-active {
+  background:var(--sg-theme-accent-soft)!important;
+  border-color:var(--sg-theme-border)!important;
+  color:var(--sg-theme-accent-strong)!important;
+}
+.sg-shell[data-background] .sg-card-anim,
+.sg-shell[data-background] .sg-tap-card,
+.sg-shell[data-background] .sg-task-card,
+.sg-shell[data-background] .sg-assessment-card,
+.sg-shell[data-background] .sg-announcement-panel,
+.sg-shell[data-background] .sg-background-card,
+.sg-shell[data-background] .sg-background-preview-panel {
+  background-image:linear-gradient(145deg,var(--sg-theme-panel),var(--sg-theme-panel-soft))!important;
+  border-color:var(--sg-theme-border)!important;
+  box-shadow:0 7px 22px var(--sg-theme-shadow)!important;
+}
+.sg-shell[data-background] input:not([type="range"]),
+.sg-shell[data-background] select,
+.sg-shell[data-background] textarea {
+  background-color:var(--sg-theme-panel-solid)!important;
+  border-color:var(--sg-theme-border)!important;
+  color:var(--sg-theme-text)!important;
+}
+.sg-shell[data-background] input:focus,
+.sg-shell[data-background] select:focus,
+.sg-shell[data-background] textarea:focus,
+.sg-shell[data-background] button:focus-visible {
+  outline-color:color-mix(in srgb,var(--sg-theme-accent) 60%,transparent)!important;
+  border-color:var(--sg-theme-accent)!important;
+}
+.sg-shell[data-background] .sg-duration-slider::-webkit-slider-thumb {
+  background:var(--sg-theme-panel-solid);
+  box-shadow:0 2px 10px var(--sg-theme-shadow);
+}
+.sg-shell[data-background] .sg-background-shop-header {
+  background:linear-gradient(180deg,var(--sg-theme-panel-solid) 82%,color-mix(in srgb,var(--sg-theme-panel-solid) 94%,transparent))!important;
+}
+.sg-shell[data-background] .sg-background-collection-row>button,
+.sg-shell[data-background] .sg-background-filter-row button,
+.sg-shell[data-background] .sg-background-round-btn,
+.sg-shell[data-background] .sg-background-secondary-btn {
+  background:var(--sg-theme-panel-soft)!important;
+  border-color:var(--sg-theme-border)!important;
+  color:var(--sg-theme-muted)!important;
+}
+@media(max-width:600px){
+  .sg-shell[data-background]{
+    --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.84) 82%,var(--sg-theme-accent) 18%);
+    --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.64) 76%,var(--sg-theme-accent) 24%);
+  }
+  .sg-main-header{padding-top:max(12px,env(safe-area-inset-top))!important}
+  .sg-main-nav{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+  .sg-session-screen{
+    background:linear-gradient(160deg,var(--sg-focus-accent,rgba(86,182,139,.1)),color-mix(in srgb,var(--sg-focus-surface,rgba(242,247,241,.91)) 70%,transparent))!important;
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+  }
 }
 
 /* ── Motion system ──────────────────────────────────────────────────────────
@@ -12732,12 +12858,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onDismiss={()=>{setShowComplete(null);setElapsed(0);}}/>
           )}
 
-          <header style={S.header}>
+          <header className="sg-main-header" style={S.header}>
             <span className="sg-keepcolor" style={S.logo}>🧑‍🎓 Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={coins} prefix="🪙 "/></button>
-              <button onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
-                <span style={S.menuAvatar}>{user.slice(0,1).toUpperCase()}</span>
+              <button className="sg-main-menu-button" onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
+                <span className="sg-main-menu-avatar" style={S.menuAvatar}>{user.slice(0,1).toUpperCase()}</span>
                 <span style={S.menuBars}>☰</span>
               </button>
             </div>
@@ -12766,9 +12892,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             />
           )}
 
-          <nav style={S.nav}>
+          <nav className="sg-main-nav" style={S.nav}>
             {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["stats","📊 Stats"]].map(([id,lbl])=>(
-              <button key={id} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}}
+              <button key={id} className={`sg-main-nav-button${tab===id?" is-active":""}`} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}}
                 onClick={()=>{setTab(id);if(id==="leaderboard")loadLB();}}>{lbl}</button>
             ))}
           </nav>
@@ -12957,7 +13083,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 {otherTabActive && (
                   <div style={S.otherTabBanner}>⏳ A session is already running in another tab</div>
                 )}
-                <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":subjectObj.color,...(otherTabActive?{cursor:"not-allowed"}:{})}}
+                <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":`linear-gradient(135deg,${subjectObj.color},var(--sg-theme-accent-strong,#2D6A4F))`,...(otherTabActive?{cursor:"not-allowed"}:{})}}
                   onClick={startSession} disabled={otherTabActive}>
                   {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"Start Learning ✨"}
                 </button>
@@ -13003,16 +13129,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 const S = {
   app:{minHeight:"100vh",background:"var(--sg-shell-surface,#F5F7F2)",fontFamily:"'Noto Color Emoji','Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderLeft:"1px solid rgba(255,255,255,.32)",borderRight:"1px solid rgba(255,255,255,.32)",boxShadow:"0 0 34px rgba(24,45,31,.08)"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 16px 0"},
-  logo:{fontSize:17,fontWeight:700,color:"#2D6A4F",letterSpacing:"-0.3px"},
+  logo:{fontSize:17,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.3px"},
   userChip:{fontSize:11,color:"#555",background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
   coinChip:{fontSize:11.5,color:"#B8860B",background:"linear-gradient(180deg,#FFFBEF,#FFF4D6)",border:"1px solid #F0D875",borderRadius:20,padding:"5px 11px",fontWeight:700,boxShadow:"0 1px 2px rgba(184,134,11,0.12)"},
-  menuBtn:{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #E6EAE4",borderRadius:20,padding:"3px 9px 3px 3px",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"},
-  menuAvatar:{width:22,height:22,borderRadius:"50%",background:"#2D6A4F",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  menuBars:{fontSize:13,color:"#888",lineHeight:1},
+  menuBtn:{display:"flex",alignItems:"center",gap:6,background:"var(--sg-theme-panel-solid,#fff)",border:"1px solid var(--sg-theme-border,#E6EAE4)",borderRadius:20,padding:"3px 9px 3px 3px",cursor:"pointer",boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.06))"},
+  menuAvatar:{width:22,height:22,borderRadius:"50%",background:"var(--sg-theme-accent-strong,#2D6A4F)",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
+  menuBars:{fontSize:13,color:"var(--sg-theme-muted,#888)",lineHeight:1},
   logoutBtn:{background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
   nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},
-  navBtnActive:{background:"#fff",color:"#2D6A4F",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"},
+  navBtnActive:{background:"var(--sg-theme-panel-solid,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.08))"},
   timerView:{padding:"10px 16px 40px"},
   modeRow:{display:"flex",gap:8,marginBottom:12},
   modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
@@ -13057,7 +13183,7 @@ const S = {
   // ── Calm Focus layout ──
   segWrap:{display:"flex",gap:3,background:"#EAF0E8",borderRadius:22,padding:3,marginBottom:12},
   segBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:20,fontSize:13,fontWeight:700,color:"#8A968A",cursor:"pointer",transition:"all 0.2s"},
-  modePickBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"11px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:22,fontSize:14,fontWeight:700,color:"#444",cursor:"pointer"},
+  modePickBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"11px 0",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",background:"var(--sg-theme-panel-solid,#fff)",borderRadius:22,fontSize:14,fontWeight:700,color:"var(--sg-theme-text,#444)",cursor:"pointer"},
   modeChev:{fontSize:14,color:"#aaa",transition:"transform 0.2s",lineHeight:1,marginTop:-3},
   modeBackdrop:{position:"fixed",inset:0,zIndex:40},
   modePop:{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:"#fff",borderRadius:16,padding:6,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",border:"1px solid #EEF2EC",zIndex:50},
