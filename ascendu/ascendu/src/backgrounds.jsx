@@ -6,13 +6,19 @@ export const DEFAULT_BACKGROUND_ID = "classic-grove";
 export const BACKGROUND_CATALOGUE = Object.freeze([
   {
     id: DEFAULT_BACKGROUND_ID,
-    name: "Classic Classroom",
+    name: "Study Corner",
     cost: 0,
     rarity: "Default",
     art: "classic",
     tone: "light",
     motion: "none",
-    description: "Lumora’s calm original cream canvas.",
+    description: "A bright, plant-filled corner for calm everyday study.",
+    imageSrc: "/backgrounds/study-corner.webp",
+    imageSrcMobile: "/backgrounds/study-corner-mobile.webp",
+    imageOpacity: .44,
+    imagePreviewOpacity: .9,
+    imagePosition: "center 48%",
+    imagePositionMobile: "center center",
     baseColor: "#F5F7F2",
     gradient: "linear-gradient(155deg,#FBFCF7 0%,#F2F6EE 55%,#E8F1E6 100%)",
     shellSurface: "linear-gradient(180deg,#F9FBF7,#F3F8F1)",
@@ -31,13 +37,19 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "midnight-minimal",
-    name: "Midnight Minimal",
+    name: "Midnight Study",
     cost: 220,
     rarity: "Common",
     art: "midnight",
     tone: "dark",
     motion: "none",
-    description: "A near-black, distraction-free canvas with a quiet classroom tint.",
+    description: "A quiet blue study room made for late-night focus.",
+    imageSrc: "/backgrounds/midnight-study.webp",
+    imageSrcMobile: "/backgrounds/midnight-study-mobile.webp",
+    imageOpacity: .4,
+    imagePreviewOpacity: .88,
+    imagePosition: "center 43%",
+    imagePositionMobile: "center center",
     baseColor: "#0B1112",
     gradient: "linear-gradient(155deg,#111918 0%,#0B1112 52%,#080D0F 100%)",
     shellSurface: "linear-gradient(180deg,rgba(244,248,245,.72),rgba(230,237,232,.63))",
@@ -56,13 +68,19 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "forest-dawn",
-    name: "Classroom Dawn",
+    name: "Attic Study",
     cost: 260,
     rarity: "Common",
     art: "forest",
     tone: "light",
     motion: "low",
-    description: "A calm classroom warmed by first light.",
+    description: "A warm timber loft beneath an open skylight.",
+    imageSrc: "/backgrounds/attic-study.webp",
+    imageSrcMobile: "/backgrounds/attic-study-mobile.webp",
+    imageOpacity: .42,
+    imagePreviewOpacity: .9,
+    imagePosition: "center 44%",
+    imagePositionMobile: "center center",
     baseColor: "#DDEDD7",
     gradient: "linear-gradient(160deg,#FFF3D1 0%,#DDEFD8 48%,#A9CDA9 100%)",
     shellSurface: "linear-gradient(180deg,rgba(248,251,243,.62),rgba(235,245,233,.52))",
@@ -188,6 +206,12 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     tone: "warm",
     motion: "none",
     description: "A refined reading room with warm shelves and lamplight.",
+    imageSrc: "/backgrounds/library-study.webp",
+    imageSrcMobile: "/backgrounds/library-study-mobile.webp",
+    imageOpacity: .42,
+    imagePreviewOpacity: .9,
+    imagePosition: "center 48%",
+    imagePositionMobile: "center center",
     baseColor: "#B99D78",
     gradient: "linear-gradient(155deg,#F3E8D2 0%,#CCB38E 50%,#8A684B 100%)",
     shellSurface: "linear-gradient(180deg,rgba(252,248,239,.68),rgba(244,234,218,.58))",
@@ -206,13 +230,19 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "lantern-study-hall",
-    name: "Lantern Study Hall",
+    name: "Festival Study",
     cost: 720,
     rarity: "Rare",
     art: "lanterns",
     tone: "warm",
     motion: "low",
-    description: "A cosy evening classroom with paper lanterns, books and a warm window glow.",
+    description: "A warm festival room with lanterns and blossom light.",
+    imageSrc: "/backgrounds/festival-study.webp",
+    imageSrcMobile: "/backgrounds/festival-study-mobile.webp",
+    imageOpacity: .38,
+    imagePreviewOpacity: .88,
+    imagePosition: "center 42%",
+    imagePositionMobile: "center center",
     baseColor: "#7A493C",
     gradient: "linear-gradient(160deg,#D58A64 0%,#8D5547 48%,#382B35 100%)",
     shellSurface: "linear-gradient(180deg,rgba(252,244,232,.69),rgba(242,226,211,.59))",
@@ -306,13 +336,19 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
   },
   {
     id: "celestial-garden",
-    name: "Celestial Classroom",
+    name: "Celestial Study",
     cost: 1400,
     rarity: "Mythical",
     art: "celestial",
     tone: "dark",
     motion: "medium",
-    description: "An indigo classroom with orbiting motifs and quiet starlight.",
+    description: "A moonlit observatory room with soft celestial detail.",
+    imageSrc: "/backgrounds/celestial-study.webp",
+    imageSrcMobile: "/backgrounds/celestial-study-mobile.webp",
+    imageOpacity: .4,
+    imagePreviewOpacity: .9,
+    imagePosition: "center 42%",
+    imagePositionMobile: "center center",
     baseColor: "#181934",
     gradient: "linear-gradient(155deg,#34345F 0%,#181934 58%,#0E1027 100%)",
     shellSurface: "linear-gradient(180deg,rgba(246,247,251,.72),rgba(230,231,242,.63))",
@@ -708,6 +744,10 @@ export function BackgroundArtwork({
   const style = useMemo(() => ({
     "--sg-bg-gradient": background.gradient,
     "--sg-bg-base": background.baseColor,
+    "--sg-bg-photo-opacity": background.imageOpacity ?? .44,
+    "--sg-bg-photo-preview-opacity": background.imagePreviewOpacity ?? .9,
+    "--sg-bg-photo-position": background.imagePosition || "center center",
+    "--sg-bg-photo-position-mobile": background.imagePositionMobile || background.imagePosition || "center center",
   }), [background]);
   return (
     <div
@@ -725,9 +765,18 @@ export function BackgroundArtwork({
       style={style}
       aria-hidden="true"
     >
+      {background.imageSrc && <picture className="sg-bg-photo">
+        {background.imageSrcMobile && <source media="(max-width: 600px)" srcSet={background.imageSrcMobile}/>}
+        <img
+          src={background.imageSrc}
+          alt=""
+          decoding="async"
+          draggable="false"
+        />
+      </picture>}
       <div className="sg-bg-wash"/>
-      <BackgroundDecor art={background.art}/>
-      <ClassroomEnvironment art={background.art}/>
+      {!background.imageSrc && <BackgroundDecor art={background.art}/>}
+      {!background.imageSrc && <ClassroomEnvironment art={background.art}/>}
       <div className="sg-bg-vignette"/>
     </div>
   );
@@ -984,6 +1033,32 @@ export const BACKGROUND_CSS = `
   min-height: 100dvh;
 }
 .sg-background-art--compact { border-radius: inherit; }
+.sg-bg-photo {
+  position:absolute;
+  inset:0;
+  display:block;
+  opacity:var(--sg-bg-photo-opacity,.44);
+  overflow:hidden;
+  transform:translateZ(0);
+}
+.sg-bg-photo img {
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+  object-position:var(--sg-bg-photo-position,center center);
+  filter:saturate(.84) contrast(.92);
+  transform:translateZ(0) scale(1.002);
+}
+.sg-background-art--compact .sg-bg-photo {
+  opacity:var(--sg-bg-photo-preview-opacity,.9);
+}
+.sg-background-art--compact .sg-bg-photo img {
+  filter:saturate(.94) contrast(.96);
+}
+.sg-background-art--focus .sg-bg-photo {
+  opacity:calc(var(--sg-bg-photo-opacity,.44) * .76);
+}
 .sg-bg-wash,.sg-bg-vignette,.sg-bg-rain-glow,.sg-bg-library-light,.sg-bg-library-room {
   position:absolute;inset:0;pointer-events:none;
 }
@@ -1309,7 +1384,7 @@ export const BACKGROUND_CSS = `
 .sg-background-preview-panel{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;width:min(100%,720px);padding:18px;border:1px solid rgba(255,255,255,.58);border-radius:20px;background:rgba(250,252,249,.88);backdrop-filter:blur(14px);box-shadow:0 14px 45px rgba(9,18,12,.25);color:#223128}
 .sg-background-preview-copy h3{font-size:22px;margin:6px 0 4px}.sg-background-preview-copy p{font-size:12.5px;line-height:1.45;color:#627068;margin:0;max-width:420px}.sg-background-preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.sg-background-secondary-btn,.sg-background-primary-btn{min-height:42px;border-radius:13px;padding:9px 15px;font-size:12px;font-weight:750;cursor:pointer}.sg-background-secondary-btn{border:1px solid #D8E1D7;background:#fff;color:#647168}.sg-background-primary-btn{border:0;background:#2D6A4F;color:#fff}.sg-background-primary-btn:disabled{background:#AAB5AE}
 .sg-background-shop button:focus-visible,.sg-background-preview button:focus-visible{outline:3px solid rgba(86,182,139,.34);outline-offset:2px}
-@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
+@media(max-width:600px){.sg-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.sg-bg-photo img{object-position:var(--sg-bg-photo-position-mobile,center center);filter:saturate(.8) contrast(.9)}.sg-background-art--full .sg-bg-dots i:nth-child(n+7),.sg-background-art--full .sg-bg-cloud--three,.sg-background-art--full .sg-bg-aurora--three,.sg-background-art--full .sg-bg-shelf--right,.sg-background-art--full .sg-bg-rain-sheet--far i:nth-child(n+13),.sg-background-art--full .sg-bg-rain-sheet--near i:nth-child(n+19),.sg-background-art--full .sg-bg-rain-trails i:nth-child(n+6),.sg-background-art--full .sg-bg-ocean-bubbles i:nth-child(n+8){display:none}.sg-background-art--full .sg-bg-vignette{box-shadow:inset 0 0 65px rgba(30,45,35,.1)}.sg-bg-classroom-shelf{opacity:.42}.sg-bg-classroom-desk--one{left:-2%}.sg-bg-classroom-desk--three{right:-2%}.sg-background-preview-panel{align-items:stretch;flex-direction:column;gap:13px;padding:15px}.sg-background-preview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sg-background-preview-actions>.sg-background-equipped{display:grid;place-items:center;min-height:42px}.sg-background-preview-copy h3{font-size:19px}}
 @media(max-width:370px){.sg-background-grid{grid-template-columns:minmax(0,1fr)}.sg-shop-category-tab{font-size:9.5px}.sg-background-thumb{height:110px}}
 html[data-animation-disabled="true"] .sg-background-art *{animation:none!important;transition:none!important}
 html[data-animation-disabled="true"] .sg-background-art--focus{filter:saturate(.82) contrast(.94)}
