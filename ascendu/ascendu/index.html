@@ -10,11 +10,9 @@
     <meta name="apple-mobile-web-app-title" content="Lumora" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/lumora-learning-spaces.css" />
     <title>Lumora</title>
     <script>
-      // Paint the cached account background colour before React starts so
-      // returning users do not see a white flash. Firestore still replaces
-      // this cache with the account preference during app hydration.
       try {
         const owner = (localStorage.getItem("studygrove_username") || "").trim().normalize("NFC").toLowerCase();
         const id = localStorage.getItem(owner ? `studygrove_background:${owner}` : "studygrove_background:guest") || "classic-grove";
