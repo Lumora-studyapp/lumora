@@ -154,20 +154,46 @@ const APP_CSS = `
   backdrop-filter: blur(3px);
 }
 
-/* The selected learning-space background also drives the interface palette.
-   The translucent surfaces leave the artwork readable while these semantic
-   tokens keep controls accessible across warm, cool and night scenes. */
+/* The selected learning-space background drives a complete, colourful interface.
+   Each scene supplies a distinct two-colour palette while semantic tokens keep
+   text, controls and focus states readable in light and dark appearance modes. */
 .sg-shell[data-background] {
-  --sg-theme-accent-strong:color-mix(in srgb,var(--sg-theme-accent) 76%,#17291f);
-  --sg-theme-accent-bright:color-mix(in srgb,var(--sg-theme-accent) 84%,white);
-  --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.9) 86%,var(--sg-theme-accent) 14%);
-  --sg-theme-panel-solid:color-mix(in srgb,#fff 89%,var(--sg-theme-accent) 11%);
-  --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.72) 80%,var(--sg-theme-accent) 20%);
-  --sg-theme-border:color-mix(in srgb,var(--sg-theme-accent) 34%,rgba(255,255,255,.72));
-  --sg-theme-text:color-mix(in srgb,var(--sg-theme-accent) 24%,#17241c);
-  --sg-theme-muted:color-mix(in srgb,var(--sg-theme-accent) 22%,#68736b);
-  --sg-theme-shadow:color-mix(in srgb,var(--sg-theme-accent) 22%,transparent);
+  --sg-theme-accent-2:color-mix(in srgb,var(--sg-theme-accent) 68%,#f4b96a);
+  --sg-theme-highlight:color-mix(in srgb,var(--sg-theme-accent) 56%,#fff1b8);
+  --sg-theme-accent-strong:color-mix(in srgb,var(--sg-theme-accent) 78%,#14251c);
+  --sg-theme-accent-bright:color-mix(in srgb,var(--sg-theme-accent) 78%,white);
+  --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.82) 72%,var(--sg-theme-accent) 28%);
+  --sg-theme-panel-solid:color-mix(in srgb,#fff 80%,var(--sg-theme-accent) 20%);
+  --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.68) 67%,var(--sg-theme-accent-2) 33%);
+  --sg-theme-border:color-mix(in srgb,var(--sg-theme-accent) 46%,rgba(255,255,255,.66));
+  --sg-theme-text:color-mix(in srgb,var(--sg-theme-accent) 26%,#132219);
+  --sg-theme-muted:color-mix(in srgb,var(--sg-theme-accent) 34%,#59675e);
+  --sg-theme-shadow:color-mix(in srgb,var(--sg-theme-accent) 31%,transparent);
+  --sg-theme-primary-gradient:linear-gradient(135deg,var(--sg-theme-accent),var(--sg-theme-accent-2));
+  --sg-theme-soft-gradient:linear-gradient(145deg,var(--sg-theme-panel),var(--sg-theme-panel-soft));
+  --sg-theme-nav-gradient:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-highlight) 20%,transparent),color-mix(in srgb,var(--sg-theme-accent-2) 28%,transparent));
   color:var(--sg-theme-text);
+}
+/* Scene-specific complementary colours make themes feel intentional rather
+   than like one green tint was placed over every background. */
+.sg-shell[data-background="classic-grove"]{--sg-theme-accent-2:#e5a84e;--sg-theme-highlight:#dff29b}
+.sg-shell[data-background="midnight-minimal"]{--sg-theme-accent-2:#5f78c9;--sg-theme-highlight:#9bd8d0}
+.sg-shell[data-background="sunset-loft"]{--sg-theme-accent:#d78045;--sg-theme-accent-2:#8b72c7;--sg-theme-highlight:#ffd28a}
+.sg-shell[data-background="sakura-lake"]{--sg-theme-accent:#d978a0;--sg-theme-accent-2:#8b78ce;--sg-theme-highlight:#ffd0df}
+.sg-shell[data-background="rainfall-sanctuary"]{--sg-theme-accent:#4f8ba7;--sg-theme-accent-2:#65a88e;--sg-theme-highlight:#b9e2ee}
+.sg-shell[data-background="ivybound-library"]{--sg-theme-accent:#8a6847;--sg-theme-accent-2:#719451;--sg-theme-highlight:#efc678}
+.sg-shell[data-background="lantern-study-hall"]{--sg-theme-accent:#c54f3c;--sg-theme-accent-2:#e79736;--sg-theme-highlight:#ffd16d}
+.sg-shell[data-background="violet-moonlands"]{--sg-theme-accent:#8064cf;--sg-theme-accent-2:#d173b6;--sg-theme-highlight:#c7b7ff}
+.sg-shell[data-background="celestial-garden"]{--sg-theme-accent:#596dc4;--sg-theme-accent-2:#a363ca;--sg-theme-highlight:#f4c969}
+.sg-shell[data-background="underwater-classroom"]{--sg-theme-accent:#288ea6;--sg-theme-accent-2:#45ad83;--sg-theme-highlight:#87e0df}
+.sg-shell[data-background="planetarium-classroom"]{--sg-theme-accent:#5e69b8;--sg-theme-accent-2:#9a66c5;--sg-theme-highlight:#f1c768}
+[data-theme="dark"] .sg-shell[data-background]{
+  --sg-theme-panel:color-mix(in srgb,rgba(20,25,35,.8) 68%,var(--sg-theme-accent) 32%);
+  --sg-theme-panel-solid:color-mix(in srgb,#171b22 73%,var(--sg-theme-accent) 27%);
+  --sg-theme-panel-soft:color-mix(in srgb,rgba(17,21,29,.72) 68%,var(--sg-theme-accent-2) 32%);
+  --sg-theme-border:color-mix(in srgb,var(--sg-theme-accent-bright) 50%,rgba(255,255,255,.2));
+  --sg-theme-text:color-mix(in srgb,var(--sg-theme-highlight) 18%,#f7f5ef);
+  --sg-theme-muted:color-mix(in srgb,var(--sg-theme-accent-bright) 35%,#c8cec9);
 }
 .sg-shell[data-background],
 .sg-shell[data-background] button,
@@ -179,7 +205,6 @@ const APP_CSS = `
   transition:background-color .28s ease,border-color .28s ease,color .28s ease,box-shadow .28s ease,transform .18s cubic-bezier(.34,1.56,.64,1),filter .18s ease;
 }
 .sg-main-header .sg-main-menu-button,
-.sg-main-nav .sg-main-nav-button.is-active,
 .sg-timer-style,
 .sg-shell[data-background] .sg-pomodoro-presets button,
 .sg-shell[data-background] .sg-pomo-field input,
@@ -194,37 +219,61 @@ const APP_CSS = `
 .sg-shell[data-background] .sg-background-shop {
   background:var(--sg-theme-panel-solid)!important;
   border-color:var(--sg-theme-border)!important;
-  box-shadow:0 8px 26px var(--sg-theme-shadow)!important;
+  box-shadow:0 9px 28px var(--sg-theme-shadow)!important;
+  color:var(--sg-theme-text)!important;
+}
+.sg-main-header{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-panel-solid) 82%,transparent),color-mix(in srgb,var(--sg-theme-panel-soft) 68%,transparent))!important;
+  border-bottom-color:var(--sg-theme-border)!important;
 }
 .sg-main-nav {
   border-color:var(--sg-theme-border)!important;
-  background:linear-gradient(180deg,transparent,var(--sg-theme-accent-soft));
+  background:var(--sg-theme-nav-gradient)!important;
 }
 .sg-main-nav .sg-main-nav-button {
   color:var(--sg-theme-muted)!important;
 }
+.sg-main-nav .sg-main-nav-button:hover {
+  color:var(--sg-theme-accent-strong)!important;
+  background:color-mix(in srgb,var(--sg-theme-highlight) 34%,transparent)!important;
+}
 .sg-main-nav .sg-main-nav-button.is-active {
   color:var(--sg-theme-accent-strong)!important;
-  box-shadow:inset 0 0 0 1px var(--sg-theme-border),0 5px 15px var(--sg-theme-shadow)!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--sg-theme-highlight) 58%,white),color-mix(in srgb,var(--sg-theme-accent-2) 30%,white))!important;
+  box-shadow:inset 0 0 0 1px var(--sg-theme-border),0 6px 17px var(--sg-theme-shadow)!important;
+}
+[data-theme="dark"] .sg-main-nav .sg-main-nav-button.is-active{
+  color:#fff!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--sg-theme-accent) 72%,#191d27),color-mix(in srgb,var(--sg-theme-accent-2) 72%,#191d27))!important;
 }
 .sg-main-header .sg-main-menu-avatar,
 .sg-shell[data-background] .sg-background-primary-btn,
 .sg-shell[data-background] .sg-background-card-action,
 .sg-shell[data-background] .sg-background-done,
-.sg-shell[data-background] .sg-task-check[data-checked="true"] {
-  background:linear-gradient(145deg,var(--sg-theme-accent),var(--sg-theme-accent-strong))!important;
-  border-color:color-mix(in srgb,var(--sg-theme-accent) 65%,white)!important;
+.sg-shell[data-background] .sg-task-check[data-checked="true"],
+.sg-shell[data-background] .sg-plant-btn {
+  background:var(--sg-theme-primary-gradient)!important;
+  border-color:color-mix(in srgb,var(--sg-theme-highlight) 62%,white)!important;
   color:#fff!important;
-  box-shadow:0 5px 16px var(--sg-theme-shadow)!important;
+  box-shadow:0 6px 18px var(--sg-theme-shadow),inset 0 1px 0 rgba(255,255,255,.32)!important;
+}
+.sg-shell[data-background] button:not(:disabled):hover{
+  filter:saturate(1.12) brightness(1.035);
 }
 .sg-timer-style button[aria-pressed="true"],
 .sg-shell[data-background] .sg-pomodoro-presets button[aria-pressed="true"],
 .sg-shell[data-background] .sg-task-icon[aria-pressed="true"],
 .sg-shell[data-background] .sg-background-collection-row>button.is-active,
 .sg-shell[data-background] .sg-background-filter-row button.is-active {
-  background:var(--sg-theme-accent-soft)!important;
-  border-color:var(--sg-theme-border)!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--sg-theme-highlight) 72%,white),color-mix(in srgb,var(--sg-theme-accent-2) 36%,white))!important;
+  border-color:var(--sg-theme-accent)!important;
   color:var(--sg-theme-accent-strong)!important;
+  box-shadow:0 5px 14px var(--sg-theme-shadow)!important;
+}
+[data-theme="dark"] .sg-timer-style button[aria-pressed="true"],
+[data-theme="dark"] .sg-shell[data-background] .sg-pomodoro-presets button[aria-pressed="true"],
+[data-theme="dark"] .sg-shell[data-background] .sg-task-icon[aria-pressed="true"]{
+  background:var(--sg-theme-primary-gradient)!important;color:#fff!important;
 }
 .sg-shell[data-background] .sg-card-anim,
 .sg-shell[data-background] .sg-tap-card,
@@ -233,9 +282,21 @@ const APP_CSS = `
 .sg-shell[data-background] .sg-announcement-panel,
 .sg-shell[data-background] .sg-background-card,
 .sg-shell[data-background] .sg-background-preview-panel {
-  background-image:linear-gradient(145deg,var(--sg-theme-panel),var(--sg-theme-panel-soft))!important;
+  background-image:var(--sg-theme-soft-gradient)!important;
   border-color:var(--sg-theme-border)!important;
-  box-shadow:0 7px 22px var(--sg-theme-shadow)!important;
+  box-shadow:0 8px 24px var(--sg-theme-shadow),inset 0 1px 0 rgba(255,255,255,.38)!important;
+}
+.sg-shell[data-background] .sg-card-anim:nth-child(3n+1),
+.sg-shell[data-background] .sg-tap-card:nth-child(3n+1){
+  border-top-color:var(--sg-theme-accent)!important;
+}
+.sg-shell[data-background] .sg-card-anim:nth-child(3n+2),
+.sg-shell[data-background] .sg-tap-card:nth-child(3n+2){
+  border-top-color:var(--sg-theme-accent-2)!important;
+}
+.sg-shell[data-background] .sg-card-anim:nth-child(3n),
+.sg-shell[data-background] .sg-tap-card:nth-child(3n){
+  border-top-color:var(--sg-theme-highlight)!important;
 }
 .sg-shell[data-background] input:not([type="range"]),
 .sg-shell[data-background] select,
@@ -248,33 +309,52 @@ const APP_CSS = `
 .sg-shell[data-background] select:focus,
 .sg-shell[data-background] textarea:focus,
 .sg-shell[data-background] button:focus-visible {
-  outline-color:color-mix(in srgb,var(--sg-theme-accent) 60%,transparent)!important;
+  outline:3px solid color-mix(in srgb,var(--sg-theme-accent-2) 34%,transparent)!important;
+  outline-offset:2px;
   border-color:var(--sg-theme-accent)!important;
 }
+.sg-shell[data-background] .sg-duration-slider{
+  accent-color:var(--sg-theme-accent)!important;
+}
 .sg-shell[data-background] .sg-duration-slider::-webkit-slider-thumb {
-  background:var(--sg-theme-panel-solid);
+  background:var(--sg-theme-highlight);
+  border:2px solid var(--sg-theme-accent);
   box-shadow:0 2px 10px var(--sg-theme-shadow);
 }
 .sg-shell[data-background] .sg-background-shop-header {
-  background:linear-gradient(180deg,var(--sg-theme-panel-solid) 82%,color-mix(in srgb,var(--sg-theme-panel-solid) 94%,transparent))!important;
+  background:linear-gradient(180deg,var(--sg-theme-panel-solid) 78%,color-mix(in srgb,var(--sg-theme-panel-soft) 86%,transparent))!important;
 }
 .sg-shell[data-background] .sg-background-collection-row>button,
 .sg-shell[data-background] .sg-background-filter-row button,
 .sg-shell[data-background] .sg-background-round-btn,
 .sg-shell[data-background] .sg-background-secondary-btn {
-  background:var(--sg-theme-panel-soft)!important;
+  background:linear-gradient(145deg,var(--sg-theme-panel-soft),color-mix(in srgb,var(--sg-theme-highlight) 28%,var(--sg-theme-panel-solid)))!important;
   border-color:var(--sg-theme-border)!important;
   color:var(--sg-theme-muted)!important;
 }
+.sg-shell[data-background] progress,
+.sg-shell[data-background] [role="progressbar"]{
+  accent-color:var(--sg-theme-accent)!important;
+}
+.sg-shell[data-background] ::selection{
+  background:color-mix(in srgb,var(--sg-theme-accent-2) 46%,transparent);
+  color:var(--sg-theme-text);
+}
 @media(max-width:600px){
   .sg-shell[data-background]{
-    --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.84) 82%,var(--sg-theme-accent) 18%);
-    --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.64) 76%,var(--sg-theme-accent) 24%);
+    --sg-theme-panel:color-mix(in srgb,rgba(255,255,255,.79) 68%,var(--sg-theme-accent) 32%);
+    --sg-theme-panel-soft:color-mix(in srgb,rgba(255,255,255,.58) 62%,var(--sg-theme-accent-2) 38%);
+    --sg-theme-panel-solid:color-mix(in srgb,rgba(255,255,255,.9) 76%,var(--sg-theme-accent) 24%);
+  }
+  [data-theme="dark"] .sg-shell[data-background]{
+    --sg-theme-panel:color-mix(in srgb,rgba(18,22,30,.76) 62%,var(--sg-theme-accent) 38%);
+    --sg-theme-panel-soft:color-mix(in srgb,rgba(16,20,28,.68) 60%,var(--sg-theme-accent-2) 40%);
+    --sg-theme-panel-solid:color-mix(in srgb,#171b22 68%,var(--sg-theme-accent) 32%);
   }
   .sg-main-header{padding-top:max(12px,env(safe-area-inset-top))!important}
   .sg-main-nav{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
   .sg-session-screen{
-    background:linear-gradient(160deg,var(--sg-focus-accent,rgba(86,182,139,.1)),color-mix(in srgb,var(--sg-focus-surface,rgba(242,247,241,.91)) 70%,transparent))!important;
+    background:linear-gradient(160deg,color-mix(in srgb,var(--sg-theme-accent) 20%,transparent),color-mix(in srgb,var(--sg-focus-surface,rgba(242,247,241,.91)) 66%,transparent))!important;
     backdrop-filter:blur(2px);
     -webkit-backdrop-filter:blur(2px);
   }
