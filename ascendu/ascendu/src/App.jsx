@@ -37,8 +37,9 @@ import {
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
+  GoogleAuthProvider, OAuthProvider,
   onAuthStateChanged, reauthenticateWithCredential,
-  signInWithEmailAndPassword, signInWithCustomToken,
+  signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup,
   signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -1021,96 +1022,78 @@ const WEEKLY_PODIUM_REWARDS = [300, 150, 100];
 // Collections power the shop's filter chips. Order here = chip order.
 const SKIN_COLLECTIONS = [
   { id:"all",      label:"All",      icon:"🌱" },
-  { id:"starter",  label:"Starter",  icon:"🌰" },
-  { id:"classic",  label:"Classic",  icon:"🍂" },
-  { id:"shapes",   label:"Shapes",   icon:"🌳" },
-  { id:"tropical", label:"Tropical", icon:"🌴" },
-  { id:"treats",   label:"Treats",   icon:"🍰" },
-  { id:"mystical", label:"Mystical", icon:"✨" },
-  { id:"premium",  label:"Premium",  icon:"💠" },
+  { id:"characters",label:"Characters",icon:"🧑‍🎓" },
 ];
 
+// Every character skin supplies five source stages for its preview and for
+// minute-by-minute progression on the Focus screen.
+const CHARACTER_PROGRESSION_STAGES = {
+  "cristiano-ronaldo":["Madeira Football Child","Madeira Broom Teen","Real Madrid Champion","Ballon d'Or Winner","Portugal Euros Champion"],
+  "einstein":["Compass-Curious Child","Aarau Light-Beam Student","Bern Patent Clerk","Relativity Physicist","Scientific Genius"],
+  "davinci":["Vinci Nature Sketcher","Florentine Workshop Apprentice","Anatomy Notebook Scholar","Flying Machine Visionary","Renaissance Master"],
+  "edison":["Basement Laboratory Boy","Railway Newsboy Inventor","Telegraph Operator","Menlo Park Inventor","Electric Light Pioneer"],
+  "gallileo":["Pisa Sky-Watcher","Mathematics Student","Motion Experimenter","Starry Messenger Astronomer","Heliocentric Visionary"],
+  "lebron-james":["Akron Kid","High School Player","Cleveland Champion","Scoring King","Legacy"],
+  "lionel-messi":["Grandoli Child","Academy Teen","Barcelona Peak","Club Champion","World Cup Champion"],
+  "michael-jackson":["Child Singer","Disco Performer","Red Jacket Era","Moonwalk Peak","King of Pop Legacy"],
+  "tiger-woods":["Child Golfer","Junior Champion","Red Shirt Breakthrough","Masters Champion","Comeback Legend"],
+  "william-shakespeare":["Stratford Child","Quill Poet","Globe Playwright","The Bard","First Folio Legacy"],
+  "marie-curie":["Polish Schoolgirl","Paris Science Student","Laboratory Researcher","Radium Pioneer","Two Nobel Icon"],
+  "pythagoras":["Counting Stones","Number Patterns","Triangle Solver","Theorem Demonstration","Greek Sage Legacy"],
+  "jk-rowling":["Young Story Creator","Student Writer","Cafe Manuscript Writer","Published Fantasy Author","Seven Book Legacy"],
+  "ludwig-van-beethoven":["Child Pianist","Vienna Student","Concert Pianist","Symphony Composer","Deaf Maestro Legacy"],
+  "neil-armstrong":["Model Plane Dreamer","X-15 Test Pilot","Gemini Astronaut","Apollo 11 Commander","Moonwalk Legacy"],
+  "henry-ford":["Watch Tinkerer","Engine Builder","Quadricycle Engineer","Model T Innovator","Automobile Mastermind"],
+  "michelangelo":["Marble Apprentice","Medici Sculptor","Sculpture Master","Sistine Visionary","Dome Architect Legacy"],
+  "christopher-columbus":["Mediterranean Sailor","Chart Navigator","Captain with Instruments","1492 Expedition","Four Voyage Navigator"],
+  "elon-musk":["Computer Dreamer","Zip2 Startup Worker","Online Payments Founder","Electric Car and Rocket CEO","Mars Technology Figure"],
+  "bill-gates":["Lakeside Computer Student","Programming Hustler","PC Software Cofounder","Graphical Computing CEO","Computing and Philanthropy Legacy"],
+};
+const FOCUS_STAGE_RANGES = ["0–1 min","1–2 min","2–3 min","3–4 min","4–5 min"];
+
 const TREE_SKINS = [
-  // ── Starter ──
-  { id:"default",  name:"Oak",           cost:0,    shape:"round",   trunk:"#8B6340", canopy:null,      desc:"Your starter tree", collection:"starter" },
-  // ── Colour variants (round shape, recoloured) ──
-  { id:"cherry",   name:"Cherry (colour)",cost:120, shape:"round",   trunk:"#A0624A", canopy:"#F4A7B9", desc:"Soft pink leaves", collection:"classic" },
-  { id:"pine",     name:"Evergreen",      cost:120, shape:"round",   trunk:"#6B4F2A", canopy:"#2D6A4F", desc:"Deep forest green", collection:"classic" },
-  { id:"autumn",   name:"Autumn",         cost:150, shape:"round",   trunk:"#7A4F2A", canopy:"#D4722A", desc:"Warm golden leaves", collection:"classic" },
-  { id:"copperbeech",name:"Copper Beech", cost:180, shape:"round",   trunk:"#6B4A36", canopy:"#B5651D", desc:"Warm copper leaves, year-round", collection:"classic", isNew:true },
-  // ── Magical premium skins (glowing canopies with moons, stars & sparkles) ──
-  { id:"neon",     name:"Bioluminescent", cost:200,  shape:"round",   trunk:"#3A3352", canopy:"#22E39A", desc:"Glows softly in the dark", magic:{ glow:"#22E39A", sparkle:true }, collection:"mystical" },
-  { id:"galaxy",   name:"Galaxy",         cost:400,  shape:"round",   trunk:"#2A1A4A", canopy:"#5B3A8E", desc:"A canopy full of stars", magic:{ glow:"#7A4FB0", stars:true, sparkle:true }, collection:"mystical" },
-  { id:"enchanted",name:"Enchanted Tree", cost:1300, shape:"round",   trunk:"#4A3B2A", canopy:"#5FAE6E", desc:"Ivy, fireflies & a ring of toadstools 🍄", magic:{ glow:"#8FE0A0", enchanted:true }, collection:"mystical", isNew:true },
-  { id:"moonlit",  name:"Moonlit Oak",    cost:900,  shape:"round",   trunk:"#3A2E4E", canopy:"#2E4A7A", desc:"A glowing crescent moon 🌙", magic:{ glow:"#7FA8E8", moon:true, stars:true }, collection:"mystical" },
-  { id:"starlight",name:"Starlight Willow",cost:1100,shape:"willow",  trunk:"#3A3352", canopy:"#3E5C88", desc:"Draped in golden stars ✨", magic:{ glow:"#8FB0E8", stars:true, sparkle:true }, collection:"mystical" },
-  { id:"celestial",name:"Celestial Bloom",cost:1400, shape:"blossom", trunk:"#4A3A5E", canopy:"#6E7BC8", desc:"Moon, stars & falling petals", magic:{ glow:"#9BA8E8", moon:true, stars:true, sparkle:true }, collection:"mystical" },
-  { id:"rainbow",  name:"Rainbow Tree",   cost:1350, shape:"round",   trunk:"#6B4A3A", canopy:"#FF9C4A", desc:"A canopy that catches every colour ☀️", magic:{ glow:"#FFFFFF", rainbow:true, sparkle:true }, collection:"mystical", isNew:true },
-  { id:"lightning",name:"Lightning Tree", cost:1450, shape:"round",   trunk:"#2E2A38", canopy:"#4A5FBF", desc:"Crackles with static after a storm ⚡", magic:{ glow:"#7FA8FF", storm:true }, collection:"mystical", isNew:true },
-  // ── Flagship Premium Collection ──
-  { id:"moontree", name:"Moon Tree", cost:1600, shape:"round", trunk:"#AEBECD", canopy:"#EAF5FF", desc:"A peaceful celestial sanctuary 🌙", collection:"premium", flagship:true, premiumTheme:"moon", isNew:true,
-    enhanceTiers:[
-      { tier:1, name:"Flourish", icon:"🌙", blurb:"Moon flowers bloom through glowing root grass while silver leaves shimmer with a soft blue aura." },
-      { tier:2, name:"Living", icon:"💠", blurb:"Crystal moon charms, crescent ornaments, glowing mushrooms, blue flowers and drifting lunar motes appear." },
-      { tier:3, name:"Radiant", icon:"✨", blurb:"A great crescent rises behind the canopy as stars orbit, crystal stones float, fireflies drift and moonbeams pulse." },
-    ] },
-  { id:"dragontree", name:"Dragon Tree", cost:1900, shape:"round", trunk:"#5A3A24", canopy:"#2F8A58", desc:"An ancient dragon sanctuary 🐉", collection:"premium", flagship:true, premiumTheme:"dragon", isNew:true,
-    enhanceTiers:[
-      { tier:1, name:"Flourish", icon:"🐲", blurb:"Golden vines wrap an ancient claw-marked trunk while enchanted gemstones brighten the roots." },
-      { tier:2, name:"Living", icon:"🥚", blurb:"Dragon eggs, amber lanterns, banners, coins, root horns and rising embers turn the tree into a guarded nest." },
-      { tier:3, name:"Radiant", icon:"🐉", blurb:"A crowned hatchling spreads its wings from the canopy while another sleeps beside treasure, glowing runes and giant gems." },
-    ] },
-  { id:"kingsoak", name:"King's Oak", cost:1750, shape:"round", trunk:"#765332", canopy:"#356F45", desc:"The royal oak of an ancient kingdom 👑", collection:"premium", flagship:true, premiumTheme:"king", isNew:true,
-    enhanceTiers:[
-      { tier:1, name:"Flourish", icon:"👑", blurb:"Gold detailing, a royal banner and a polished stone root platform establish the oak's noble identity." },
-      { tier:2, name:"Living", icon:"🏰", blurb:"Lanterns, marble statues, a stone path, golden acorns, climbing ivy and royal flags complete the palace classroom." },
-      { tier:3, name:"Radiant", icon:"✨", blurb:"The jeweled crown rests above the canopy while a marble fountain, royal benches, doves, fencing and golden sparkles complete the royal centrepiece." },
-    ] },
-  { id:"diamondtree", name:"Diamond Tree", cost:2200, shape:"round", trunk:"#BFE7F2", canopy:"#DDF7FF", desc:"The rarest crystal collectible 💎", collection:"premium", flagship:true, premiumTheme:"diamond", isNew:true,
-    enhanceTiers:[
-      { tier:1, name:"Flourish", icon:"💎", blurb:"Faceted diamond leaves, crystal roots and icy grass intensify the tree's clean radiant glow." },
-      { tier:2, name:"Living", icon:"❄️", blurb:"Hanging shards, root diamonds, crystal flowers, floating gems, crystal bushes and frost sparkles emerge." },
-      { tier:3, name:"Radiant", icon:"🌈", blurb:"A giant diamond finial locks into the canopy above crystal arches and an elevated platform while fragments orbit through rainbow refractions." },
-    ] },
-  { id:"liontree", name:"Lion Tree", cost:2800, shape:"round", trunk:"#623726", canopy:"#B62F3A", desc:"An awakened lion guarding a festival classroom 🦁", collection:"premium", flagship:true, premiumTheme:"lion", isNew:true,
-    enhanceTiers:[
-      { tier:1, name:"Flourish", icon:"🧧", blurb:"Gold brocade curls, knotted tassels and jade accents dress the awakened lion in an auspicious festival mantle." },
-      { tier:2, name:"Living", icon:"🥁", blurb:"Lanterns glow beside an ornamental firecracker garland, ceremonial drum, oranges, prosperity greens and a cluster of red packets." },
-      { tier:3, name:"Radiant", icon:"🦁", blurb:"The lion blinks and drums beneath a radiant festival halo, fortune seal, dancing ribbons and gold festival sparkles." },
-    ] },
-  // ── New distinct SHAPES (premium) ──
-  { id:"blossom",  name:"Cherry Blossom", cost:600,  shape:"blossom", trunk:"#7C4A36", canopy:"#F7B7CE", desc:"Blooming pink sakura 🌸", collection:"shapes" },
-  { id:"pinetree", name:"Pine Tree",      cost:650,  shape:"pine",    trunk:"#5E4327", canopy:"#2F7D4F", desc:"Tall layered conifer 🌲", collection:"shapes" },
-  { id:"frostedpine",name:"Frosted Pine", cost:520,  shape:"pine",    trunk:"#5A4530", canopy:"#3A7D63", desc:"Dusted with a permanent frost ❄️", frosted:true, collection:"shapes", isNew:true },
-  { id:"willow",   name:"Willow",         cost:750,  shape:"willow",  trunk:"#6E5331", canopy:"#8FB95A", desc:"Graceful drooping branches", collection:"shapes" },
-  { id:"wisteria", name:"Wisteria",       cost:830,  shape:"willow",  trunk:"#5E4A3A", canopy:"#9B7EDE", desc:"Drooping clusters of lilac blossom", collection:"shapes", isNew:true },
-  { id:"maple",    name:"Red Maple",      cost:800,  shape:"maple",   trunk:"#6B4226", canopy:"#E0533A", desc:"Fiery autumn crown 🍁", collection:"shapes" },
-  { id:"ginkgo",   name:"Golden Ginkgo",  cost:840,  shape:"maple",   trunk:"#6E5433", canopy:"#E8B84B", desc:"Fan-shaped leaves that turn pure gold", leafEmoji:"🍂", collection:"shapes", isNew:true },
-  // ── Tropical Collection (new silhouettes) ──
-  { id:"goldenbamboo",name:"Golden Bamboo",cost:650, shape:"bamboo",  trunk:"#C9A227", canopy:"#7FAE52", desc:"Slender gold stalks, always swaying 🎋", collection:"tropical", isNew:true },
-  { id:"bananatree",name:"Banana Tree",   cost:780,  shape:"banana",  trunk:"#9BB06E", canopy:"#3E8F4F", desc:"Broad leaves over a ripening bunch 🍌", collection:"tropical", isNew:true },
-  { id:"coconutpalm",name:"Coconut Palm", cost:900,  shape:"palm",    trunk:"#B08A5A", canopy:"#4CAE72", desc:"Leans into the breeze, coconuts and all 🥥", collection:"tropical", isNew:true },
-  // ── Food items (premium, playful) ──
-  { id:"muffin",   name:"Blueberry Muffin",cost:1000, shape:"muffin",  trunk:"#B6885B", canopy:"#6B4E9E", desc:"A treat in your classroom 🧁", collection:"treats" },
-  { id:"cupcake",  name:"Strawberry Cupcake",cost:1200,shape:"cupcake",trunk:"#E8B4C8", canopy:"#F25C8A", desc:"Sweet & frosted 🍓", collection:"treats" },
-  { id:"cake",     name:"Layer Cake",     cost:1800, shape:"cake",    trunk:"#D9B38C", canopy:"#7EC9E0", desc:"The ultimate flex 🎂", collection:"treats" },
+  // Internal fallback for legacy sessions. It is intentionally not displayed
+  // or purchasable in the Skins page.
+  { id:"default", name:"Oak", cost:0, shape:"round", trunk:"#8B6340", canopy:null, desc:"", collection:"legacy", hidden:true },
+  { id:"einstein", name:"Albert Einstein", cost:1600, shape:"round", trunk:"#6B4A36", canopy:"#B98253", desc:"The Genius · relativity icon", collection:"characters", characterImage:"/Images/Albert Einstein (5) - Scientific Genius.png", progressionStages:CHARACTER_PROGRESSION_STAGES.einstein, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"gallileo", name:"Galileo Galilei", cost:1700, shape:"round", trunk:"#5F402A", canopy:"#A97A40", desc:"The Visionary · observational astronomy", collection:"characters", characterImage:"/Images/Galileo Galilei (5) - Heliocentric Visionary.png", characterImageScale:1.1, progressionStages:CHARACTER_PROGRESSION_STAGES.gallileo, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"davinci", name:"Leonardo da Vinci", cost:1800, shape:"round", trunk:"#6C5137", canopy:"#9A6A32", desc:"The Renaissance Master · art and invention", collection:"characters", characterImage:"/Images/Leonardo da Vinci (5) - Renaissance Master.png", progressionStages:CHARACTER_PROGRESSION_STAGES.davinci, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"edison", name:"Thomas Alva Edison", cost:1900, shape:"round", trunk:"#454545", canopy:"#D6A83C", desc:"The Bright Spark · electric light pioneer", collection:"characters", characterImage:"/Images/Thomas Alva Edison (5) - Electric Light Pioneer.png", progressionStages:CHARACTER_PROGRESSION_STAGES.edison, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  // Life-stage character collection. Cards showcase the fifth-stage artwork;
+  // Focus sessions move through stages one to five minute by minute.
+  { id:"lebron-james", name:"LeBron James", cost:2500, shape:"round", trunk:"#5A3624", canopy:"#7E2D2D", desc:"Final evolution · basketball legacy", collection:"characters", characterImage:"/Images/LeBron James (5) - Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lebron-james"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"lionel-messi", name:"Lionel Messi", cost:2500, shape:"round", trunk:"#35567F", canopy:"#71BCEB", desc:"Final evolution · World Cup champion", collection:"characters", characterImage:"/Images/Lionel Messi (5) - World Cup Champion.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lionel-messi"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"michael-jackson", name:"Michael Jackson", cost:2500, shape:"round", trunk:"#36263C", canopy:"#D74A50", desc:"Final evolution · King of Pop legacy", collection:"characters", characterImage:"/Images/Michael Jackson (5) - King of Pop Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["michael-jackson"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"tiger-woods", name:"Tiger Woods", cost:2400, shape:"round", trunk:"#315235", canopy:"#84B45E", desc:"Final evolution · comeback legend", collection:"characters", characterImage:"/Images/Tiger Woods (5) - Comeback Legend.png", progressionStages:CHARACTER_PROGRESSION_STAGES["tiger-woods"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"william-shakespeare", name:"William Shakespeare", cost:2200, shape:"round", trunk:"#523C2C", canopy:"#A07B54", desc:"Final evolution · First Folio legacy", collection:"characters", characterImage:"/Images/William Shakespeare (5) - First Folio Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["william-shakespeare"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"marie-curie", name:"Marie Curie", cost:2300, shape:"round", trunk:"#3D5360", canopy:"#85B9A8", desc:"Final evolution · two Nobel icon", collection:"characters", characterImage:"/Images/Marie Curie (5) - Two Nobel Icon.png", progressionStages:CHARACTER_PROGRESSION_STAGES["marie-curie"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"pythagoras", name:"Pythagoras", cost:2100, shape:"round", trunk:"#6A4C32", canopy:"#C7A15C", desc:"Final evolution · Greek sage", collection:"characters", characterImage:"/Images/Pythagoras (5) - Greek Sage Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["pythagoras"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"jk-rowling", name:"J. K. Rowling", cost:2200, shape:"round", trunk:"#4A355F", canopy:"#9F83C7", desc:"Final evolution · seven-book legacy", collection:"characters", characterImage:"/Images/J. K. Rowling (5) - Seven Book Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["jk-rowling"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"ludwig-van-beethoven", name:"Ludwig van Beethoven", cost:2300, shape:"round", trunk:"#473C34", canopy:"#A8927C", desc:"Final evolution · deaf maestro legacy", collection:"characters", characterImage:"/Images/Ludwig van Beethoven (5) - Deaf Maestro Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["ludwig-van-beethoven"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"neil-armstrong", name:"Neil Armstrong", cost:2400, shape:"round", trunk:"#31445D", canopy:"#91B7D9", desc:"Final evolution · moonwalk legacy", collection:"characters", characterImage:"/Images/Neil Armstrong (5) - Moonwalk Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["neil-armstrong"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"henry-ford", name:"Henry Ford", cost:2200, shape:"round", trunk:"#4D4239", canopy:"#8F8A76", desc:"Final evolution · automobile mastermind", collection:"characters", characterImage:"/Images/Henry Ford (5) - Automobile Mastermind.png", progressionStages:CHARACTER_PROGRESSION_STAGES["henry-ford"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"michelangelo", name:"Michelangelo", cost:2300, shape:"round", trunk:"#6D5642", canopy:"#B99B7B", desc:"Final evolution · dome architect legacy", collection:"characters", characterImage:"/Images/Michelangelo (5) - Dome Architect Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["michelangelo"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"christopher-columbus", name:"Christopher Columbus", cost:2200, shape:"round", trunk:"#3D5263", canopy:"#7FA9B7", desc:"Final evolution · four-voyage navigator", collection:"characters", characterImage:"/Images/Christopher Columbus (5) - Four Voyage Navigator.png", progressionStages:CHARACTER_PROGRESSION_STAGES["christopher-columbus"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"elon-musk", name:"Elon Musk", cost:2600, shape:"round", trunk:"#343B4A", canopy:"#8F9FB7", desc:"Final evolution · Mars technology figure", collection:"characters", characterImage:"/Images/Elon Musk (5) - Mars Technology Figure.png", progressionStages:CHARACTER_PROGRESSION_STAGES["elon-musk"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"bill-gates", name:"Bill Gates", cost:2500, shape:"round", trunk:"#3F5A45", canopy:"#87AF7A", desc:"Final evolution · computing and philanthropy", collection:"characters", characterImage:"/Images/Bill Gates (5) - Computing and Philanthropy Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["bill-gates"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
+  { id:"cristiano-ronaldo", name:"Cristiano Ronaldo", cost:2600, shape:"round", trunk:"#5C292D", canopy:"#B62E36", desc:"The Goalscorer · Portugal football legend", collection:"characters", characterImage:"/Images/Cristiano Ronaldo (5) - Portugal Euros Champion.png", progressionStages:CHARACTER_PROGRESSION_STAGES["cristiano-ronaldo"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
 ];
 
 const TREE_SHOP_RARITY_ORDER = Object.freeze({
-  starter:0,
-  classic:1,
-  shapes:2,
-  tropical:2,
-  treats:3,
-  mystical:4,
-  premium:5,
+  characters:0,
 });
-const TREE_SHOP_CATALOGUE = Object.freeze([...TREE_SKINS].sort((left,right)=>
+const TREE_SHOP_CATALOGUE = Object.freeze(TREE_SKINS.filter(skin=>!skin.hidden).sort((left,right)=>
   (TREE_SHOP_RARITY_ORDER[left.collection] ?? Number.MAX_SAFE_INTEGER)
     - (TREE_SHOP_RARITY_ORDER[right.collection] ?? Number.MAX_SAFE_INTEGER)
   || Number(left.cost||0)-Number(right.cost||0)
   || left.name.localeCompare(right.name)
 ));
+
+const getCharacterProgressionImage = (skin, stageIndex=0) => {
+  const stageName=skin?.progressionStages?.[stageIndex];
+  if(!stageName||skin?.blankProgressions)return null;
+  return `/Images/${skin.name} (${stageIndex+1}) - ${stageName}.png`;
+};
 
 // ── Tree Enhancements ─────────────────────────────────────────────────────────
 // Three permanent tiers per skin, rendered by ONE parameterized layer engine
@@ -1860,7 +1843,7 @@ const getWeeklyRewardPlan = date => {
 };
 const pickWeeklySkin = (weekKey,username,ownedSkins=[]) => {
   return pickDeterministicUnowned({
-    weekKey,username,prizeType:"skin",items:TREE_SKINS,ownedIds:ownedSkins,
+    weekKey,username,prizeType:"skin",items:TREE_SHOP_CATALOGUE,ownedIds:ownedSkins,
     eligible:item=>item.cost>0,
   });
 };
@@ -2623,6 +2606,7 @@ const directAuthError = error => {
   if(code.includes("too-many-requests"))return "Too many attempts. Wait a moment and try again.";
   if(code.includes("weak-password"))return "Password must be at least 6 characters.";
   if(code.includes("operation-not-allowed"))return "Lumora email/password sign-in is not enabled in Firebase.";
+  if(code.includes("unauthorized-domain"))return `This site address (${window.location.hostname}) is not authorised in Firebase yet. Add it under Authentication → Settings → Authorised domains.`;
   if(code.includes("network-request-failed"))return "Couldn't reach Firebase. Check your connection and try again.";
   return `Couldn't sign in: ${code||error?.message||"unknown Firebase error"}`;
 };
@@ -2742,6 +2726,74 @@ async function fbSavePassword(usernameOrEmail, password, recovery) {
     return {ok:true,created:result.created===true};
   }catch(error){
     return {ok:false,error:callableError(error,"Couldn't sign in. Try again.")};
+  }
+}
+
+async function fbCreateEmailAccount(email,password){
+  const normalizedEmail=String(email||"").trim().toLowerCase();
+  if(!normalizedEmail||normalizedEmail.length>254||!/^\S+@\S+\.\S+$/.test(normalizedEmail)){
+    return {ok:false,error:"Enter a valid email address."};
+  }
+  try{
+    const credential=await createUserWithEmailAndPassword(auth,normalizedEmail,password);
+    return {ok:true,needsUsername:true,user:credential.user};
+  }catch(error){
+    if(String(error?.code||"").includes("email-already-in-use")){
+      return {ok:false,error:"An account with this email already exists. Use Continue with email to sign in."};
+    }
+    return {ok:false,error:directAuthError(error)};
+  }
+}
+
+const socialAuthError = error => {
+  const code=String(error?.code||"");
+  if(code.includes("popup-closed-by-user"))return "The sign-in window was closed.";
+  if(code.includes("popup-blocked"))return "Your browser blocked the sign-in window. Allow pop-ups and try again.";
+  if(code.includes("account-exists-with-different-credential"))return "This email is already connected to a different sign-in method.";
+  if(code.includes("operation-not-allowed"))return "This sign-in method has not been enabled in Firebase yet.";
+  return directAuthError(error);
+};
+
+async function fbSignInWithSocialProvider(kind) {
+  const provider = kind==="google" ? new GoogleAuthProvider() : new OAuthProvider("apple.com");
+  if(kind==="apple"){
+    provider.addScope("email");
+    provider.addScope("name");
+  }
+  try{
+    const credential=await signInWithPopup(auth,provider);
+    const username=await usernameForUid(credential.user.uid);
+    return username
+      ? {ok:true,username}
+      : {ok:true,needsUsername:true,user:credential.user};
+  }catch(error){
+    return {ok:false,error:socialAuthError(error)};
+  }
+}
+
+async function fbClaimSocialUsername(firebaseUser, usernameRaw) {
+  const displayName=String(usernameRaw||"").trim().normalize("NFC");
+  const username=canonUsername(displayName);
+  if(username.length<2)return {ok:false,error:"Username needs at least 2 characters."};
+  if(username.length>20)return {ok:false,error:"Username can be at most 20 characters."};
+  if(!/^[a-z0-9_]+$/.test(username))return {ok:false,error:"Username can use letters, numbers, and underscores only."};
+  try{
+    const usernameRef=doc(db,"usernames",username);
+    await runTransaction(db,async transaction=>{
+      const existing=await transaction.get(usernameRef);
+      if(existing.exists()&&existing.data()?.uid!==firebaseUser.uid)throw new Error("username-taken");
+      transaction.set(usernameRef,{
+        uid:firebaseUser.uid,
+        email:firebaseUser.email||null,
+        displayName,
+        createdAt:Date.now(),
+        authVersion:3,
+      },{merge:true});
+    });
+    return {ok:true,username:displayName};
+  }catch(error){
+    if(error?.message==="username-taken")return {ok:false,error:"That username is already taken."};
+    return {ok:false,error:"Signed in, but Lumora couldn't save your username. Please try again."};
   }
 }
 
@@ -3218,7 +3270,7 @@ async function fbToggleAnnouncementReaction(usernameRaw,password,announcementId,
 
 async function fbPurchaseSkin(usernameRaw,skinId){
   const username=canonUsername(usernameRaw);
-  const skin=TREE_SKINS.find(s=>s.id===skinId);
+  const skin=TREE_SHOP_CATALOGUE.find(s=>s.id===skinId);
   if(!skin)return {ok:false,reason:"missing"};
   const prefsRef=doc(db,"prefs",username);
   try{
@@ -5546,16 +5598,22 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
   const focusSeconds=isPomodoro
     ? (pomodoro.completedFocusSeconds+(isBreak?0:elapsed))
     : elapsed;
-  // Pomodoro starts with its familiar 25-minute focus interval; standard focus
-  // uses the full progression milestones.
+  // Short development milestones make it quick to verify every growth stage.
   const focusStages=[
-    {label:isPomodoro?"0–25 min":"0–30 min",end:isPomodoro?25*60:30*60},
-    {label:isPomodoro?"25–60 min":"30–60 min",end:60*60},
-    {label:"1–2 hr",end:2*60*60},{label:"2–3 hr",end:3*60*60},{label:"3–6 hr",end:6*60*60},
+    {label:"0–1 min",end:1*60},{label:"1–2 min",end:2*60},
+    {label:"2–3 min",end:3*60},{label:"3–4 min",end:4*60},{label:"4–5 min",end:5*60},
   ];
   const foundStageIndex=focusStages.findIndex(stage=>focusSeconds<stage.end);
   const stageIndex=foundStageIndex===-1?focusStages.length-1:foundStageIndex;
   const activeFocusStage=focusStages[stageIndex];
+  const equippedSkin=TREE_SKINS.find(entry=>entry.id===skin)||TREE_SKINS[0];
+  const progressionImage=getCharacterProgressionImage(equippedSkin,stageIndex);
+  const progressionName=equippedSkin.progressionStages?.[stageIndex];
+  // The last development stage stays active once its threshold is reached,
+  // including after the five-minute test milestone.
+  const showProgression=!isBreak&&!!progressionImage;
+  const showFinalEvolution=!showProgression&&!isBreak&&!!equippedSkin.finalEvolution
+    && stageIndex===focusStages.length-1;
   const stagePercent=Math.min(100,Math.floor((focusSeconds/activeFocusStage.end)*100));
   const previousStageRef=useRef(stageIndex);
   const [stageGlowToken,setStageGlowToken]=useState(0);
@@ -5574,7 +5632,19 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
       </div>
       {!isBreak&&presence&&<StudyingNow presence={presence} currentUser={currentUser} compact/>}
       {isPomodoro&&<div style={fs.roundLabel} aria-live="polite">Round {pomodoro.round} of {pomodoro.plannedRounds} · {isBreak?"Rest":"Focus"}</div>}
-      <div className="sg-session-tree" style={fs.treeArea}><TreeSVG progress={isBreak?1:progress} color={subject.color} paused={paused||isBreak} large skin={skin} enhance={enhance}/></div>
+      <div className="sg-session-tree" style={fs.treeArea}>
+        {showProgression
+          ? <div style={fs.finalEvolutionWrap}>
+              <img src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} style={{...fs.progressionImage,opacity:paused ? .5 : 1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+            </div>
+          : showFinalEvolution
+          ? <div style={fs.finalEvolutionWrap}>
+              <img src={equippedSkin.characterImage} alt={`${equippedSkin.name} final evolution`} style={{...fs.finalEvolutionImage,opacity:paused ? .5 : 1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+              <div style={fs.finalEvolutionLabel}>✨ Final evolution · {equippedSkin.name}</div>
+            </div>
+          : <TreeSVG progress={isBreak?1:progress} color={subject.color} paused={paused||isBreak} large skin={skin} enhance={enhance}/>
+        }
+      </div>
       {task&&<div className="sg-focus-task" title={task.title}>Task · {task.title}</div>}
       <div style={fs.focusProgressGroup}>
       <div className="sg-session-time" style={{...fs.time,color:bigColor}} aria-live="off">{bigTime}</div>
@@ -5627,6 +5697,10 @@ const fs = {
   subjectChip:{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500},
   coinBadge:{background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700},
   treeArea:{position:"relative",zIndex:2,flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%"},
+  finalEvolutionWrap:{height:"min(50vh,460px)",width:"min(94vw,410px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end"},
+  finalEvolutionImage:{maxWidth:"100%",maxHeight:"calc(100% - 34px)",objectFit:"contain",filter:"drop-shadow(0 12px 18px rgba(25,43,31,.2))"},
+  progressionImage:{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",filter:"drop-shadow(0 14px 22px rgba(25,43,31,.22))"},
+  finalEvolutionLabel:{flexShrink:0,marginTop:5,whiteSpace:"nowrap",padding:"6px 11px",borderRadius:999,background:"rgba(255,255,255,.88)",boxShadow:"0 3px 12px rgba(28,50,34,.13)",fontSize:11,fontWeight:800,color:"#35664A"},
   focusProgressGroup:{position:"relative",zIndex:3,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",transform:"translateY(-12px)"},
   time:{position:"relative",zIndex:3,fontSize:72,fontWeight:900,letterSpacing:"-3px",lineHeight:1,marginBottom:6,transition:"color 0.3s"},
   modeLabel:{position:"relative",zIndex:3,fontSize:15,color:"#666",marginBottom:20,fontWeight:500,textAlign:"center"},
@@ -5967,6 +6041,9 @@ const am = {
 // and freeze off-screen/scrolling animation timelines. Keeping a stable SVG
 // avoids mobile WebKit dropping a re-created skin while its sheet is scrolling.
 function LazyShopTree({ skin, enhance=0, scrolling=false }) {
+  if(skin.characterImage)return <div style={{height:220,width:"100%",position:"relative",overflow:"hidden",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+    <img src={skin.characterImage} alt="" loading="lazy" style={{maxWidth:"100%",height:"218px",objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 7px 9px rgba(35,43,36,.16))",transform:`scale(${skin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+  </div>;
   const hostRef=useRef(null);
   const [nearViewport,setNearViewport]=useState(false);
   const [mounted,setMounted]=useState(false);
@@ -6004,10 +6081,69 @@ function LazyShopTree({ skin, enhance=0, scrolling=false }) {
   </div>;
 }
 
+function SkinProgressionPreview({ skin, onClose }) {
+  const [stageIndex,setStageIndex]=useState(0);
+  const stages=skin.progressionStages||[];
+  const stageName=stages[stageIndex];
+  const focusRange=FOCUS_STAGE_RANGES[stageIndex];
+  const isBlank=!!skin.blankProgressions;
+  const imageSrc=isBlank?null:`/Images/${skin.name} (${stageIndex+1}) - ${stageName}.png`;
+  const goTo=next=>setStageIndex(Math.max(0,Math.min(stages.length-1,next)));
+  return <div style={sp.overlay} className="sg-overlay-anim" onClick={onClose}>
+    <div style={sp.modal} className="sg-sheet-anim" onClick={event=>event.stopPropagation()}>
+      <div style={sp.header}>
+        <div>
+          <div style={sp.kicker}>SKIN PROGRESSION</div>
+          <h3 style={sp.title}>{skin.name}</h3>
+        </div>
+        <button style={sp.close} onClick={onClose} aria-label="Close progression preview">✕</button>
+      </div>
+      <div style={sp.artWrap}>
+        {isBlank
+          ? <div style={sp.blankArt} aria-label={`${skin.name} progression ${stageIndex+1} is blank`}/>
+          : <img key={imageSrc} src={imageSrc} alt={`${skin.name} progression ${stageIndex+1}: ${stageName}`} style={sp.art}/>
+        }
+      </div>
+      <div style={sp.stageLabel}>
+        <div>Stage {stageIndex+1} of {stages.length}{stageName?` · ${stageName}`:""}</div>
+        <div style={sp.focusRange}>Displayed during: {focusRange}</div>
+      </div>
+      <div style={sp.controls}>
+        <button style={{...sp.arrow,...(stageIndex===0?sp.arrowDisabled:{})}} disabled={stageIndex===0} onClick={()=>goTo(stageIndex-1)} aria-label="Previous progression">‹</button>
+        <div style={sp.pips} aria-label={`Viewing stage ${stageIndex+1} of ${stages.length}`}>
+          {stages.map((stage,index)=><button key={`${skin.id}-${index}`} onClick={()=>goTo(index)} aria-label={`View stage ${index+1}${stage?`: ${stage}`:""}`} style={{...sp.pip,...(index===stageIndex?sp.pipActive:{})}}/>) }
+        </div>
+        <button style={{...sp.arrow,...(stageIndex===stages.length-1?sp.arrowDisabled:{})}} disabled={stageIndex===stages.length-1} onClick={()=>goTo(stageIndex+1)} aria-label="Next progression">›</button>
+      </div>
+    </div>
+  </div>;
+}
+
+const sp = {
+  overlay:{position:"fixed",inset:0,zIndex:340,background:"rgba(16,23,20,.58)",display:"flex",alignItems:"center",justifyContent:"center",padding:18},
+  modal:{width:"min(100%,390px)",maxHeight:"calc(100dvh - 36px)",overflowY:"auto",background:"#fff",borderRadius:24,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(0,0,0,.28)"},
+  header:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12},
+  kicker:{fontSize:9.5,fontWeight:850,letterSpacing:1.15,color:"#3E8E68"},
+  title:{fontSize:19,fontWeight:800,color:"#1A2A20",margin:"3px 0 0",lineHeight:1.16},
+  close:{width:32,height:32,border:0,borderRadius:"50%",background:"#EFF3EE",color:"#5D6A60",fontSize:14,cursor:"pointer",flexShrink:0},
+  artWrap:{height:360,borderRadius:18,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse 74% 60% at center 82%,rgba(63,140,93,.13),transparent 76%),#F7FAF6"},
+  art:{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",filter:"drop-shadow(0 10px 12px rgba(30,49,36,.18))"},
+  blankArt:{width:"100%",height:"100%",background:"#F7FAF6"},
+  stageLabel:{textAlign:"center",fontSize:12.5,fontWeight:750,color:"#41564A",margin:"13px 0 10px",lineHeight:1.35},
+  focusRange:{fontSize:11,fontWeight:700,color:"#3D9467",marginTop:3},
+  controls:{display:"grid",gridTemplateColumns:"38px minmax(0,1fr) 38px",alignItems:"center",gap:8},
+  arrow:{height:38,border:0,borderRadius:12,background:"#E5F3E9",color:"#276443",fontSize:25,lineHeight:1,cursor:"pointer"},
+  arrowDisabled:{background:"#F0F2EF",color:"#B6BDB7",cursor:"not-allowed"},
+  pips:{display:"flex",justifyContent:"center",gap:7},
+  pip:{width:9,height:9,padding:0,border:0,borderRadius:"50%",background:"#D7DED8",cursor:"pointer"},
+  pipActive:{width:25,borderRadius:8,background:"#3D9467"},
+};
+
 function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEquip, onEnhance,
   onOpenDecorations, onOpenBackgrounds, onClose, onBack }) {
   const [toast, setToast] = useState(null);
   const [enhancing, setEnhancing] = useState(null); // skin id being enhanced
+  const [previewing, setPreviewing] = useState(null); // skin id being previewed
   const [query, setQuery] = useState("");
   const [activeCollection, setActiveCollection] = useState("all");
   const [scrolling,setScrolling]=useState(false);
@@ -6015,6 +6151,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   const [chipRowRef, chipEdge] = useHScroll();
   const showT = m => { setToast(m); setTimeout(()=>setToast(null),2000); };
   const enhSkin = enhancing ? TREE_SKINS.find(s=>s.id===enhancing) : null;
+  const previewSkin = previewing ? TREE_SKINS.find(s=>s.id===previewing) : null;
 
   const q = query.trim().toLowerCase();
   const filtered = TREE_SHOP_CATALOGUE.filter(skin => {
@@ -6037,7 +6174,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
             {onBack && <button style={sh.backBtn} onClick={onBack} title="Back">←</button>}
             <div>
               <h3 style={sh.title}>🧑‍🎓 Skins</h3>
-              <div style={sh.subtitle}>{ownedSkins.length} of {TREE_SKINS.length} unlocked</div>
+              <div style={sh.subtitle}>{ownedSkins.filter(id=>TREE_SHOP_CATALOGUE.some(skin=>skin.id===id)).length} of {TREE_SHOP_CATALOGUE.length} unlocked</div>
             </div>
           </div>
           <span style={sh.coinBal}><AnimatedNumber value={coins} prefix="🪙 "/></span>
@@ -6063,7 +6200,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
           <div style={sh.chipRow} ref={chipRowRef}>
             {SKIN_COLLECTIONS.map(col=>{
               const isActive = activeCollection===col.id;
-              const count = col.id==="all" ? TREE_SKINS.length : TREE_SKINS.filter(s=>s.collection===col.id).length;
+              const count = col.id==="all" ? TREE_SHOP_CATALOGUE.length : TREE_SHOP_CATALOGUE.filter(s=>s.collection===col.id).length;
               return (
                 <button key={col.id} onClick={()=>setActiveCollection(col.id)}
                   style={{...sh.chip, ...(isActive?sh.chipActive:{})}}>
@@ -6103,12 +6240,6 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                   </div>
                   <div style={sh.skinName}>{skin.name}</div>
                   <div style={sh.skinDesc}>{skin.desc}</div>
-                  {skin.cost===0
-                    ? <div style={sh.freeBadge}>Free</div>
-                    : owned
-                      ? null
-                      : <div style={sh.costBadge}>🪙 {skin.cost}</div>
-                  }
                   {active
                     ? <div style={sh.equippedBtn}>✓ Equipped</div>
                     : owned
@@ -6116,10 +6247,11 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                       : <button style={{...sh.buyBtn,...(!canBuy?sh.buyBtnDisabled:{})}}
                           onClick={async()=>{ if(!canBuy){showT("Not enough coins");return;} const ok=await onBuy(skin.id,skin.cost); showT(ok?`${skin.name} unlocked! 🎉`:"Purchase couldn't be completed"); }}
                           disabled={!canBuy}>
-                          {canBuy?"Buy":"Need more 🪙"}
+                          🪙 {skin.cost}
                         </button>
                   }
-                  {owned && (
+                  {skin.progressionStages?.length===5 && <button style={sh.progressionBtn} onClick={()=>setPreviewing(skin.id)}>Preview</button>}
+                  {owned && !skin.finalEvolution && (
                     <button style={{...sh.enhanceBtn,...(tier>=3?sh.enhanceBtnMax:{})}}
                       onClick={()=>setEnhancing(skin.id)}>
                       {tier>=3 ? "✨ Radiant" : `✦ Enhance${tier>0?` · ${tier}/3`:""}`}
@@ -6136,6 +6268,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
         <EnhanceModal skin={enhSkin} tier={enhancements[enhSkin.id]||0} coins={coins}
           onUpgrade={onEnhance} onClose={()=>setEnhancing(null)} onBack={()=>setEnhancing(null)}/>
       )}
+      {previewSkin && <SkinProgressionPreview skin={previewSkin} onClose={()=>setPreviewing(null)}/>}
     </div>
   );
 }
@@ -6169,22 +6302,23 @@ const sh = {
   clearFiltersBtn:{fontSize:12,fontWeight:600,color:"#2D6A4F",background:"#E8F5EE",border:"none",borderRadius:20,padding:"8px 18px",cursor:"pointer"},
 
   grid:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4,width:"100%",minWidth:0},
-  card:{minWidth:0,minHeight:278,background:"#F9FBF8",borderRadius:17,padding:"13px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4",boxShadow:"0 2px 8px rgba(26,42,32,0.05)",position:"relative"},
+  card:{minWidth:0,minHeight:472,background:"#F9FBF8",borderRadius:17,padding:"13px 10px 18px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4",boxShadow:"0 2px 8px rgba(26,42,32,0.05)",position:"relative"},
   cardActive:{border:"2px solid #2D6A4F",background:"#F0FBF6",boxShadow:"0 3px 12px rgba(45,106,79,0.12)"},
   newBadge:{position:"absolute",top:8,left:8,fontSize:9.5,fontWeight:800,color:"#fff",background:"linear-gradient(135deg,#FF8B6B,#FF6F61)",borderRadius:8,padding:"2px 7px",letterSpacing:0.6,boxShadow:"0 2px 5px rgba(255,111,97,0.35)"},
   flagshipBadge:{position:"absolute",top:8,left:8,fontSize:9,fontWeight:900,color:"#4B3B10",background:"linear-gradient(135deg,#FFF4A8,#E8C84E)",border:"1px solid #D8B83A",borderRadius:8,padding:"2px 7px",letterSpacing:0.8,boxShadow:"0 2px 7px rgba(190,145,25,0.24)",zIndex:2},
   tierBadge:{position:"absolute",top:8,right:9,fontSize:10,fontWeight:800,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:10,padding:"2px 7px",letterSpacing:1},
   enhanceBtn:{fontSize:11,fontWeight:700,color:"#7A5AA0",background:"#F4EEFA",border:"none",borderRadius:20,padding:"5px 13px",cursor:"pointer",marginTop:6},
   enhanceBtnMax:{color:"#B8860B",background:"#FFF8E7"},
-  preview:{height:110,width:"100%",borderRadius:12,background:"radial-gradient(ellipse 72% 58% at center 82%, rgba(45,106,79,0.08), transparent 74%)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"},
-  skinName:{width:"100%",minWidth:0,fontSize:12.5,fontWeight:700,color:"#1a1a2e",marginTop:5,marginBottom:2,textAlign:"center",lineHeight:1.25,overflowWrap:"anywhere"},
-  skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:5,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
-  freeBadge:{fontSize:10.5,color:"#56B68B",fontWeight:600,marginBottom:5,minHeight:14},
-  costBadge:{fontSize:10.5,color:"#B8860B",fontWeight:600,marginBottom:5,minHeight:14},
-  equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"#2D6A4F",fontWeight:700,padding:"6px 10px",background:"#E8F5EE",borderRadius:20,marginTop:"auto"},
-  equipBtn:{width:"100%",maxWidth:132,fontSize:11.5,fontWeight:600,color:"#2D6A4F",background:"#E8F5EE",border:"none",borderRadius:20,padding:"7px 10px",cursor:"pointer",marginTop:"auto"},
-  buyBtn:{width:"100%",maxWidth:132,fontSize:11.5,fontWeight:600,color:"#fff",background:"#2D6A4F",border:"none",borderRadius:20,padding:"7px 10px",cursor:"pointer",marginTop:"auto",whiteSpace:"normal"},
+  preview:{height:220,width:"100%",borderRadius:12,background:"radial-gradient(ellipse 72% 58% at center 82%, rgba(45,106,79,0.08), transparent 74%)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"},
+  skinName:{width:"100%",minWidth:0,fontSize:13,fontWeight:800,color:"#1a1a2e",marginTop:8,marginBottom:7,textAlign:"center",lineHeight:1.25,overflowWrap:"anywhere"},
+  skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:26,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
+  freeBadge:{fontSize:10.5,color:"#56B68B",fontWeight:600,marginBottom:4,minHeight:14},
+  costBadge:{fontSize:10.5,color:"#B8860B",fontWeight:700,marginBottom:4,minHeight:14},
+  equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"#2D6A4F",fontWeight:700,padding:"6px 10px",background:"#E8F5EE",borderRadius:20,marginTop:2},
+  equipBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#E8F5EE",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0},
+  buyBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"#fff",background:"#2D6A4F",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0,whiteSpace:"normal"},
   buyBtnDisabled:{background:"#ccc",cursor:"not-allowed"},
+  progressionBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",background:"#2D6A4F",border:"1px solid #2D6A4F",borderRadius:20,padding:"0 9px",cursor:"pointer",margin:"12px 0 12px",textAlign:"center",whiteSpace:"normal"},
   closeBtn:{display:"block",width:"100%",marginTop:18,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
 
@@ -8906,6 +9040,9 @@ function LoginScreen({ onLogin }) {
   const [fpQuestion,setFpQuestion]=useState("");
   const [fpAnswer,setFpAnswer]=useState("");
   const [fpNewPass,setFpNewPass]=useState("");
+  const [socialUser,setSocialUser]=useState(null);
+  const [socialUsername,setSocialUsername]=useState("");
+  const [emailSignup,setEmailSignup]=useState(false);
 
   const go=async()=>{
     const t=name.trim();
@@ -8918,9 +9055,17 @@ function LoginScreen({ onLogin }) {
     if(showRecovery && recA.trim() && recA.trim().length<2){setErr("Recovery answer is too short");return;}
     setLoading(true); setErr("");
     const recovery = (showRecovery && recA.trim()) ? { question:recQ, answer:recA } : null;
-    const result = await fbSavePassword(t, pass, recovery);
+    if(emailSignup&&!emailLogin){setLoading(false);setErr("Enter an email address to create an email account.");return;}
+    const result = emailSignup
+      ? await fbCreateEmailAccount(t,pass)
+      : await fbSavePassword(t, pass, recovery);
     setLoading(false);
     if(!result.ok){setErr(result.error);return;}
+    if(result.needsUsername){
+      setSocialUser(result.user);
+      setSocialUsername((result.user.displayName||result.user.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
+      return;
+    }
     onLogin(result.username||t, pass);
   };
 
@@ -8948,6 +9093,53 @@ function LoginScreen({ onLogin }) {
   };
 
   const backToLogin=()=>{ setMode("login");setFpStep(1);setErr("");setFpAnswer("");setFpNewPass("");setFpQuestion(""); };
+
+  const socialSignIn=async kind=>{
+    setLoading(true);setErr("");
+    const result=await fbSignInWithSocialProvider(kind);
+    setLoading(false);
+    if(!result.ok){setErr(result.error);return;}
+    if(result.needsUsername){
+      setSocialUser(result.user);
+      setSocialUsername((result.user.displayName||result.user.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
+      return;
+    }
+    onLogin(result.username,"");
+  };
+
+  const finishSocialSignIn=async()=>{
+    if(!socialUser)return;
+    setLoading(true);setErr("");
+    const result=await fbClaimSocialUsername(socialUser,socialUsername);
+    setLoading(false);
+    if(!result.ok){setErr(result.error);return;}
+    onLogin(result.username,"");
+  };
+
+  const cancelSocialSignIn=async()=>{
+    await firebaseSignOut(auth).catch(()=>{});
+    setSocialUser(null);setSocialUsername("");setErr("");
+  };
+
+  if(socialUser){
+    return (
+      <div style={S.loginWrap}>
+        <div style={S.loginCard}>
+          <div style={{fontSize:48,marginBottom:6}}>✨</div>
+          <h1 style={S.loginTitle}>Choose your username</h1>
+          <p style={S.loginSub}>This will be your name in Lumora{socialUser.email?` for ${socialUser.email}`:""}.</p>
+          <input style={{...S.input,...(err?S.inputErr:{})}} placeholder="Username" autoCapitalize="none"
+            value={socialUsername} onChange={e=>{setSocialUsername(e.target.value);setErr("");}}
+            onKeyDown={e=>e.key==="Enter"&&finishSocialSignIn()} maxLength={20} autoFocus/>
+          {err&&<p style={S.errText}>{err}</p>}
+          <button style={{...S.primaryBtn,opacity:loading?0.6:1}} onClick={finishSocialSignIn} disabled={loading}>
+            {loading?"Saving...":"Continue to Lumora"}
+          </button>
+          <button style={S.linkBtn} onClick={cancelSocialSignIn} disabled={loading}>← Use a different sign-in method</button>
+        </div>
+      </div>
+    );
+  }
 
   if(mode==="forgot"){
     return (
@@ -8993,7 +9185,7 @@ function LoginScreen({ onLogin }) {
         <h1 style={S.loginTitle}>Lumora</h1>
         <p style={S.loginSub}>Grow your focus. Build your future.</p>
         <input style={{...S.input,...(err&&!pass?S.inputErr:{})}}
-          placeholder="Username or email"
+          placeholder={emailSignup?"Email address":"Username or email"}
           aria-label="Username or email"
           autoCapitalize="none" autoComplete="username"
           value={name} onChange={e=>{setName(e.target.value);setErr("");}}
@@ -9020,10 +9212,24 @@ function LoginScreen({ onLogin }) {
         ))}
 
         {err&&<p style={S.errText}>{err}</p>}
-        <p style={S.loginHint}>New user? Pick a username and password.<br/>Returning? Log in with your username or connected email.</p>
+        <p style={S.loginHint}>{emailSignup
+          ? "Create your Lumora account with an email and password."
+          : "New user? Pick a username and password. Returning? Log in with your username or connected email."}</p>
         <button style={{...S.primaryBtn,opacity:loading?0.6:1}} onClick={go} disabled={loading}>
-          {loading?"Checking...":"Enter Classroom"}
+          {loading?(emailSignup?"Creating...":"Checking..."):(emailSignup?"Create email account":"Continue with email")}
         </button>
+        <button style={S.linkBtn} onClick={()=>{setEmailSignup(v=>!v);setErr("");}} disabled={loading}>
+          {emailSignup?"← I already have an account":"New with email? Create an account"}
+        </button>
+        <div style={{display:"flex",alignItems:"center",gap:9,width:"100%",margin:"14px 0 9px",color:"#8B978C",fontSize:11}}>
+          <span style={{height:1,background:"#DFE7DF",flex:1}} />
+          <span>or continue with</span>
+          <span style={{height:1,background:"#DFE7DF",flex:1}} />
+        </div>
+        <button style={{...S.primaryBtn,background:"#fff",color:"#27332A",border:"1px solid #D6E0D6",boxShadow:"none",opacity:loading?0.6:1}}
+          onClick={()=>socialSignIn("google")} disabled={loading}>G&nbsp;&nbsp;Continue with Google</button>
+        <button style={{...S.primaryBtn,background:"#1F2421",marginTop:8,opacity:loading?0.6:1}}
+          onClick={()=>socialSignIn("apple")} disabled={loading}>&nbsp;&nbsp;Continue with Apple</button>
         {AUTH_FUNCTIONS_ENABLED && <button style={S.linkBtn} onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
       </div>
     </div>
@@ -11441,7 +11647,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [authReady,setAuthReady]=useState(false);
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
-  const [mode,setMode]=useState(()=>lsRaw(LS_MODE,"timer"));
+  const [mode,setMode]=useState(()=>lsRaw(LS_MODE,"stopwatch"));
   const [duration,setDuration]=useState(25*60);
   const [timerStyle,setTimerStyle]=useState(()=>lsRaw(LS_TIMER_STYLE,"standard")==="pomodoro"?"pomodoro":"standard");
   const [pomodoro,setPomodoro]=useState(()=>createPomodoroState(lsGet(LS_POMODORO,{})));
@@ -11465,8 +11671,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [editingAssessmentIndex,setEditingAssessmentIndex]=useState(null);
   const [assessmentError,setAssessmentError]=useState("");
   const [exams,setExams]=useState(()=>lsGet(LS_EXAMS,[]));
-  const [activeSkin,setActiveSkin]=useState(()=>lsRaw(LS_SKIN,"default"));
-  const [ownedSkins,setOwnedSkins]=useState(()=>lsGet("studygrove_owned_skins",["default"]));
+  const [activeSkin,setActiveSkin]=useState(()=>{
+    const savedSkin=lsRaw(LS_SKIN,"default");
+    return TREE_SKINS.some(skin=>skin.id===savedSkin)?savedSkin:"default";
+  });
+  const [ownedSkins,setOwnedSkins]=useState(()=>{
+    const savedSkins=lsGet("studygrove_owned_skins",["default"]);
+    const available=savedSkins.filter(id=>TREE_SKINS.some(skin=>skin.id===id));
+    return [...new Set(["default",...available])];
+  });
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
   const [theme,setTheme]=useState(()=>lsRaw(LS_THEME,"light"));
   const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
@@ -11799,6 +12012,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   }, []);
 
   const subjectObj=subjects.find(s=>s.id===subject)||subjects[0];
+  const loginSkin=TREE_SKINS.find(entry=>entry.id===activeSkin)||TREE_SKINS[0];
+  const loginStageImage=getCharacterProgressionImage(loginSkin,0);
   const selectedTask=tasks.find(task=>task.id===selectedTaskId&&!task.completed)||null;
 
   const cacheTasks=useCallback((next,userKey=user)=>{
@@ -12647,7 +12862,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           setClaimedMilestoneRewards(prefs.claimedMilestoneRewards.filter(index=>Number.isInteger(index)&&index>=0&&index<MILESTONE_STAGES.length));
         }
         if(Array.isArray(prefs.ownedSkins) && prefs.ownedSkins.length){
-          setOwnedSkins(prefs.ownedSkins); lsSet("studygrove_owned_skins", prefs.ownedSkins);
+          const availableSkins=[...new Set(["default",...prefs.ownedSkins.filter(id=>TREE_SKINS.some(skin=>skin.id===id))])];
+          setOwnedSkins(availableSkins); lsSet("studygrove_owned_skins", availableSkins);
         }
         if(typeof prefs.activeSkin==="string" && TREE_SKINS.find(s=>s.id===prefs.activeSkin)){
           setActiveSkin(prefs.activeSkin); lsSetR(LS_SKIN, prefs.activeSkin);
@@ -13136,7 +13352,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
                   <FocusAmbience layer="back"/>
                   <div style={S.treeWrap}>
-                    <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
+                    {loginStageImage
+                      ? <img src={loginStageImage} alt={`${loginSkin.name} stage 1`} style={S.loginStageImage}/>
+                      : <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
+                    }
                   </div>
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                   <FocusAmbience layer="front"/>
@@ -13249,6 +13468,7 @@ const S = {
   plantHalo:{position:"absolute",top:-4,left:"50%",transform:"translateX(-50%)",width:232,height:232,borderRadius:"50%",pointerEvents:"none"},
   plantMound:{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:150,height:40,borderRadius:"50%",pointerEvents:"none"},
   treeWrap:{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",transform:"scale(1.22)",transformOrigin:"bottom center"},
+  loginStageImage:{width:188,height:236,objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 11px 13px rgba(29,49,35,.18))"},
   todayWrap:{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",marginBottom:2},
   todayLabel:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:"1.6px",textTransform:"uppercase"},
   todayTime:{fontSize:26,fontWeight:800,letterSpacing:"-0.5px",transition:"color 0.3s"},
