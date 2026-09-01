@@ -1021,7 +1021,7 @@ const WEEKLY_PODIUM_REWARDS = [300, 150, 100];
 
 // Collections power the shop's filter chips. Order here = chip order.
 const SKIN_COLLECTIONS = [
-  { id:"all",      label:"All",      icon:"🌱" },
+  { id:"all",      label:"All",      icon:"🏫" },
   { id:"characters",label:"Characters",icon:"🧑‍🎓" },
 ];
 
@@ -1050,6 +1050,35 @@ const CHARACTER_PROGRESSION_STAGES = {
   "bill-gates":["Lakeside Computer Student","Programming Hustler","PC Software Cofounder","Graphical Computing CEO","Computing and Philanthropy Legacy"],
 };
 const FOCUS_STAGE_RANGES = ["0–1 min","1–2 min","2–3 min","3–4 min","4–5 min"];
+const SKIN_TAGS = Object.freeze({
+  "lebron-james":["Sport"],
+  "lionel-messi":["Sport"],
+  "michael-jackson":["Music","Performance"],
+  "tiger-woods":["Sport"],
+  "william-shakespeare":["Literature","Performance"],
+  "marie-curie":["Science","Physics"],
+  "pythagoras":["Mathematics","Philosophy"],
+  "jk-rowling":["Literature"],
+  "ludwig-van-beethoven":["Music"],
+  "neil-armstrong":["Space","Engineering"],
+  "henry-ford":["Engineering","Business","Invention"],
+  "michelangelo":["Art","Architecture"],
+  "christopher-columbus":["History"],
+  "elon-musk":["Technology","Engineering","Business","Space"],
+  "bill-gates":["Technology","Business"],
+  "cristiano-ronaldo":["Sport"],
+  "einstein":["Science","Physics"],
+  "davinci":["Art","Engineering","Invention"],
+  "edison":["Engineering","Invention"],
+  "gallileo":["Science","Physics","Space"],
+});
+const SKIN_TAG_FILTERS = Object.freeze([...new Set(Object.values(SKIN_TAGS).flat())].sort());
+const SKIN_TAG_EMOJIS = Object.freeze({
+  Architecture:"🏛️", Art:"🎨", Business:"💼", Engineering:"⚙️",
+  History:"📜", Invention:"💡", Literature:"📚", Mathematics:"📐",
+  Music:"🎵", Performance:"🎭", Philosophy:"💭", Physics:"🍎",
+  Science:"🔬", Space:"🚀", Sport:"⚽", Technology:"💻",
+});
 
 const TREE_SKINS = [
   // Internal fallback for legacy sessions. It is intentionally not displayed
@@ -5588,6 +5617,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
   const isTimer   = isPomodoro||mode==="timer";
   const overtime  = !isPomodoro&&isTimer && elapsed > duration;       // studying past the target
   const overSecs  = overtime ? elapsed - duration : 0;
+  const overtimePercent = Math.round((elapsed/Math.max(duration,1))*100);
   const progress  = isTimer ? Math.min(elapsed/phaseDuration,1) : Math.min(elapsed/5400,1);
   const remaining = Math.max(phaseDuration-elapsed,0);
   const msgs = ["Stay focused 🌱","You're doing great 💪","Keep going! 🔥","Almost there ✨","In the zone 🎯"];
@@ -5653,7 +5683,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
           : isBreak&&paused ? "Break paused"
           : isBreak ? "Rest now — break time never earns coins"
           : paused ? "Paused — your learner is waiting"
-          : overtime ? `🌟 Overtime! ${fmtMins(duration)} goal smashed — still counting`
+          : overtime ? `${overtimePercent}% of original goal completed`
           : isPomodoro ? `Focus interval · round ${pomodoro.round}`
           : isTimer ? msgs[msgIdx] : "⏱ Stopwatch running"}
       </div>
@@ -6146,6 +6176,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   const [previewing, setPreviewing] = useState(null); // skin id being previewed
   const [query, setQuery] = useState("");
   const [activeCollection, setActiveCollection] = useState("all");
+  const [activeTag, setActiveTag] = useState(null);
   const [scrolling,setScrolling]=useState(false);
   const scrollTimerRef=useRef(null);
   const [chipRowRef, chipEdge] = useHScroll();
@@ -6155,8 +6186,10 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
 
   const q = query.trim().toLowerCase();
   const filtered = TREE_SHOP_CATALOGUE.filter(skin => {
+    const tags=SKIN_TAGS[skin.id]||[];
     if(activeCollection!=="all" && skin.collection!==activeCollection) return false;
-    if(q && !skin.name.toLowerCase().includes(q) && !skin.desc.toLowerCase().includes(q)) return false;
+    if(activeTag && !tags.includes(activeTag)) return false;
+    if(q && !skin.name.toLowerCase().includes(q) && !skin.desc.toLowerCase().includes(q) && !tags.some(tag=>tag.toLowerCase().includes(q))) return false;
     return true;
   });
   const onShopScroll=()=>{
@@ -6202,11 +6235,19 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
               const isActive = activeCollection===col.id;
               const count = col.id==="all" ? TREE_SHOP_CATALOGUE.length : TREE_SHOP_CATALOGUE.filter(s=>s.collection===col.id).length;
               return (
-                <button key={col.id} onClick={()=>setActiveCollection(col.id)}
+                <button key={col.id} onClick={()=>{setActiveCollection(col.id);setActiveTag(null);}}
                   style={{...sh.chip, ...(isActive?sh.chipActive:{})}}>
                   <span>{col.icon}</span> {col.label} <span style={{...sh.chipCount,...(isActive?sh.chipCountActive:{})}}>{count}</span>
                 </button>
               );
+            })}
+            {SKIN_TAG_FILTERS.map(tag=>{
+              const isActive=activeTag===tag;
+              const count=TREE_SHOP_CATALOGUE.filter(skin=>(SKIN_TAGS[skin.id]||[]).includes(tag)).length;
+              return <button key={tag} onClick={()=>setActiveTag(isActive?null:tag)}
+                aria-pressed={isActive} style={{...sh.chip,...(isActive?sh.chipActive:{})}}>
+                <span aria-hidden="true">{SKIN_TAG_EMOJIS[tag]}</span> {tag} <span style={{...sh.chipCount,...(isActive?sh.chipCountActive:{})}}>{count}</span>
+              </button>;
             })}
           </div>
           {!chipEdge.atStart && <div style={sh.chipFadeL}/>}
@@ -6220,7 +6261,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
             <div style={{fontSize:32,marginBottom:6}}>🌱</div>
             <div style={{fontWeight:700,color:"#1a1a2e",marginBottom:4}}>No skins match</div>
             <div style={{fontSize:12.5,color:"#8A9088",marginBottom:14}}>Try a different search or collection.</div>
-            <button style={sh.clearFiltersBtn} onClick={()=>{setQuery("");setActiveCollection("all");}}>Clear filters</button>
+            <button style={sh.clearFiltersBtn} onClick={()=>{setQuery("");setActiveCollection("all");setActiveTag(null);}}>Clear filters</button>
           </div>
         ) : (
           <div style={sh.grid} className="sg-shop-grid">
@@ -6229,6 +6270,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
               const active  = activeSkin === skin.id;
               const canBuy  = !owned && coins >= skin.cost;
               const tier    = enhancements[skin.id]||0;
+              const tags    = SKIN_TAGS[skin.id]||[];
               return (
                 <div key={skin.id} className="sg-card-anim sg-lift-card sg-shop-card" style={{...sh.card,...(active?sh.cardActive:{}),animationDelay:`${Math.min(idx*0.03,0.3)}s`}}>
                   {skin.flagship
@@ -6240,6 +6282,9 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
                   </div>
                   <div style={sh.skinName}>{skin.name}</div>
                   <div style={sh.skinDesc}>{skin.desc}</div>
+                  <div style={sh.tagRow} aria-label={`${skin.name} categories`}>
+                    {tags.map(tag=><span key={tag} style={sh.tag}><span aria-hidden="true">{SKIN_TAG_EMOJIS[tag]}</span> {tag}</span>)}
+                  </div>
                   {active
                     ? <div style={sh.equippedBtn}>✓ Equipped</div>
                     : owned
@@ -6311,7 +6356,9 @@ const sh = {
   enhanceBtnMax:{color:"#B8860B",background:"#FFF8E7"},
   preview:{height:220,width:"100%",borderRadius:12,background:"radial-gradient(ellipse 72% 58% at center 82%, rgba(45,106,79,0.08), transparent 74%)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"},
   skinName:{width:"100%",minWidth:0,fontSize:13,fontWeight:800,color:"#1a1a2e",marginTop:8,marginBottom:7,textAlign:"center",lineHeight:1.25,overflowWrap:"anywhere"},
-  skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:26,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
+  skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:7,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
+  tagRow:{width:"100%",minHeight:42,display:"flex",alignItems:"flex-start",justifyContent:"center",alignContent:"flex-start",gap:4,flexWrap:"wrap",marginBottom:16},
+  tag:{fontSize:9.5,fontWeight:750,lineHeight:1,color:"#397553",background:"#E8F5EE",border:"1px solid #CBE7D5",borderRadius:99,padding:"4px 7px",whiteSpace:"nowrap"},
   freeBadge:{fontSize:10.5,color:"#56B68B",fontWeight:600,marginBottom:4,minHeight:14},
   costBadge:{fontSize:10.5,color:"#B8860B",fontWeight:700,marginBottom:4,minHeight:14},
   equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"#2D6A4F",fontWeight:700,padding:"6px 10px",background:"#E8F5EE",borderRadius:20,marginTop:2},
