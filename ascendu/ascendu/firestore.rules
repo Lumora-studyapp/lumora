@@ -52,6 +52,30 @@ service cloud.firestore {
               && connection.requesterUid == viewerUid));
     }
 
+    function validGroupPresenceAccess(ownerUsername, viewerUid, data) {
+      let group = getAfter(/databases/$(database)/documents/leaderboard_groups/$(data.groupId)).data;
+      let owner = get(/databases/$(database)/documents/usernames/$(ownerUsername)).data;
+      let viewer = get(/databases/$(database)/documents/usernames/$(data.viewerUsername)).data;
+      return signedIn()
+        && data.ownerUsername == ownerUsername
+        && data.viewerUid == viewerUid
+        && owner.uid != null && viewer.uid == viewerUid
+        && ownerUsername in group.members
+        && data.viewerUsername in group.members;
+    }
+
+    function hasGroupPresenceAccess(ownerUsername) {
+      let grant = get(/databases/$(database)/documents/group_presence_access/$(ownerUsername)/viewers/$(request.auth.uid)).data;
+      let group = get(/databases/$(database)/documents/leaderboard_groups/$(grant.groupId)).data;
+      let viewer = get(/databases/$(database)/documents/usernames/$(grant.viewerUsername)).data;
+      return signedIn()
+        && grant.ownerUsername == ownerUsername
+        && grant.viewerUid == request.auth.uid
+        && viewer.uid == request.auth.uid
+        && ownerUsername in group.members
+        && grant.viewerUsername in group.members;
+    }
+
     match /roles/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -108,7 +132,8 @@ service cloud.firestore {
       // set of accepted friends individually, and the access grant is created
       // atomically when a friend request is accepted.
       allow get: if ownsUsername(username)
-        || (signedIn() && exists(/databases/$(database)/documents/friend_access/$(username)/viewers/$(request.auth.uid)));
+        || (signedIn() && exists(/databases/$(database)/documents/friend_access/$(username)/viewers/$(request.auth.uid)))
+        || hasGroupPresenceAccess(username);
       allow list: if false;
       allow create, update: if ownsUsername(username)
         && request.resource.data.username == username
@@ -116,7 +141,7 @@ service cloud.firestore {
         // Older clients did not send status; retain that narrow transition
         // path while all saved users receive the new bundle.
         && (!('status' in request.resource.data)
-          || request.resource.data.status in ['online', 'studying']);
+          || request.resource.data.status in ['online', 'studying', 'paused']);
       allow delete: if ownsUsername(username);
     }
 
@@ -148,6 +173,15 @@ service cloud.firestore {
       allow create, update: if validFriendAccess(ownerUsername, viewerUid, request.resource.data);
       allow delete: if ownsUsername(ownerUsername)
         || (signedIn() && request.auth.uid == viewerUid);
+    }
+
+    match /group_presence_access/{ownerUsername}/viewers/{viewerUid} {
+      allow get: if ownsUsername(ownerUsername)
+        || (signedIn() && request.auth.uid == viewerUid);
+      allow list: if false;
+      allow create, update: if validGroupPresenceAccess(ownerUsername, viewerUid, request.resource.data);
+      allow delete: if ownsUsername(ownerUsername)
+        || (signedIn() && resource.data.viewerUid == request.auth.uid);
     }
 
     // StudyGrove-compatible aggregate boards are retained. Client-side

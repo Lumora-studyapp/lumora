@@ -1148,6 +1148,52 @@ const getSavedCharacterStageIndex = (session, skin) => {
   return getCharacterStageIndexForSeconds(session?.secs,count);
 };
 
+// A completed lesson remains one session, even when its time is split across
+// subjects. Older history rows have no segments and naturally fall back to
+// their original single subject.
+const getSessionSubjectSegments = session => {
+  const fallbackSubject=typeof session?.subject==="string"?session.subject:"";
+  const fallbackSecs=Math.max(0,Math.round(Number(session?.secs)||0));
+  const raw=Array.isArray(session?.subjectSegments)?session.subjectSegments:[];
+  const totals={};
+  raw.forEach(segment=>{
+    const id=typeof segment?.subject==="string"?segment.subject:"";
+    const secs=Math.max(0,Math.round(Number(segment?.secs)||0));
+    if(id&&secs)totals[id]=(totals[id]||0)+secs;
+  });
+  const segments=Object.entries(totals).map(([subject,secs])=>({subject,secs}));
+  return segments.length?segments:(fallbackSubject&&fallbackSecs?[{subject:fallbackSubject,secs:fallbackSecs}]:[]);
+};
+
+const normalizeSessionSubjectSegments = (raw, fallbackSubject, totalSecs) => {
+  const requested={};
+  (Array.isArray(raw)?raw:[]).forEach(segment=>{
+    const id=typeof segment?.subject==="string"?segment.subject:"";
+    const secs=Math.max(0,Math.round(Number(segment?.secs)||0));
+    if(id&&secs)requested[id]=(requested[id]||0)+secs;
+  });
+  let segments=Object.entries(requested).map(([subject,secs])=>({subject,secs}));
+  const total=Math.max(0,Math.round(Number(totalSecs)||0));
+  const requestedTotal=segments.reduce((sum,segment)=>sum+segment.secs,0);
+  if(!segments.length)return fallbackSubject&&total?[{subject:fallbackSubject,secs:total}]:[];
+  if(requestedTotal===total)return segments;
+  segments=segments.map(segment=>({...segment,secs:Math.floor(segment.secs*total/requestedTotal)}));
+  const remainder=total-segments.reduce((sum,segment)=>sum+segment.secs,0);
+  segments[segments.length-1].secs+=remainder;
+  return segments.filter(segment=>segment.secs>0);
+};
+
+const subjectSegmentsFromMarkers = (markers, fallbackSubject, totalSecs) => {
+  const valid=(Array.isArray(markers)?markers:[]).filter(marker=>
+    typeof marker?.subject==="string"&&Number.isFinite(Number(marker?.startElapsed)));
+  const starts=valid.length?valid:[{subject:fallbackSubject,startElapsed:0}];
+  const raw=starts.map((marker,index)=>({
+    subject:marker.subject,
+    secs:Math.max(0,Math.round((index<starts.length-1?starts[index+1].startElapsed:totalSecs)-marker.startElapsed)),
+  }));
+  return normalizeSessionSubjectSegments(raw,starts[starts.length-1]?.subject||fallbackSubject,totalSecs);
+};
+
 // ── Tree Enhancements ─────────────────────────────────────────────────────────
 // Three permanent tiers per skin, rendered by ONE parameterized layer engine
 // (not hand-drawn variants) — each skin contributes only its palette + particle
@@ -1695,7 +1741,7 @@ function buildBadgeCtx({ history, streak, decorCount, subjects }) {
   const maxDaySecs = Object.values(dayTotals).reduce((a,b)=>Math.max(a,b),0);
   // All subjects studied this week?
   const ws = startOfWeek(new Date());
-  const weekSubj = new Set(hist.filter(s=>new Date(s.ts)>=ws).map(s=>s.subject));
+  const weekSubj = new Set(hist.filter(s=>new Date(s.ts)>=ws).flatMap(getSessionSubjectSegments).map(segment=>segment.subject));
   const allSubjectsThisWeek = subjects.length>0 && subjects.every(s=>weekSubj.has(s.id));
   return { totalSessions, maxDaySecs, streak, allSubjectsThisWeek, decorCount, hasNightOwl, hasEarlyBird };
 }
@@ -1764,7 +1810,10 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
 
   // 4) Fastest/most-focused subject by avg session length (needs ≥2 subjects w/ ≥3 sessions)
   const subjStats={};
-  hist.forEach(s=>{ (subjStats[s.subject]=subjStats[s.subject]||{secs:0,n:0}).secs+=s.secs; subjStats[s.subject].n++; });
+  hist.forEach(s=>getSessionSubjectSegments(s).forEach(segment=>{
+    (subjStats[segment.subject]=subjStats[segment.subject]||{secs:0,n:0}).secs+=segment.secs;
+    subjStats[segment.subject].n++;
+  }));
   const eligible=Object.entries(subjStats).filter(([,v])=>v.n>=3);
   if(eligible.length>=2){
     const byAvg=eligible.map(([id,v])=>({id,avg:v.secs/v.n})).sort((a,b)=>b.avg-a.avg);
@@ -1790,7 +1839,11 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
   const hasTargets = targets && Object.values(targets).some(v=>v>0);
   if(hasTargets){
     let goalSecs=0, doneSecs=0;
-    subjects.forEach(s=>{ if(targets[s.id]>0){ goalSecs+=targets[s.id]*H; doneSecs+=sum(thisWeek.filter(x=>x.subject===s.id)); } });
+    subjects.forEach(s=>{ if(targets[s.id]>0){
+      goalSecs+=targets[s.id]*H;
+      doneSecs+=thisWeek.reduce((total,session)=>total+getSessionSubjectSegments(session)
+        .filter(segment=>segment.subject===s.id).reduce((sum,segment)=>sum+segment.secs,0),0);
+    } });
     if(goalSecs>0){
       const pct=Math.min(999,Math.round((doneSecs/goalSecs)*100));
       out.push(pct>=100
@@ -1930,6 +1983,7 @@ const startOfYear  = d => new Date(d.getFullYear(), 0, 1);
 async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0) {
   const username = canonUsername(usernameRaw);
   const m=meta||{};
+  const subjectSegments=normalizeSessionSubjectSegments(m.subjectSegments,subjId,secs);
   const endTs=Number.isFinite(Number(m.endTs))&&Number(m.endTs)>0
     ? Number(m.endTs)
     : Date.now();
@@ -1949,6 +2003,7 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
   const prefsRef=doc(db,"prefs",username);
   const entry={
     subject:subjId,secs,ts:sessionTs,endTs,
+    ...(subjectSegments.length?{subjectSegments}:{}),
     ...(m.sessionId?{sessionId:m.sessionId}:{}),
     ...(skin&&skin!=="default"?{skin}:{}),
     startTs:sessionTs,
@@ -1969,7 +2024,7 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
     const board=data&&typeof data==="object"?data:{};
     const current=board[username]||{};
     const subjects={...(current.subjects||{})};
-    subjects[subjId]=(subjects[subjId]||0)+secs;
+    subjectSegments.forEach(segment=>{subjects[segment.subject]=(subjects[segment.subject]||0)+segment.secs;});
     return {...board,[username]:{
       totalSecs:(current.totalSecs||0)+secs,
       sessions:(current.sessions||0)+1,
@@ -2608,16 +2663,17 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
 
 // ── Friend presence ────────────────────────────────────────────────────────────
 // Signed-in users publish a small online heartbeat. Active focus replaces the
-// status with "studying" plus the selected subject. Reads are performed only
-// for accepted friends, which also matches the hardened Firestore rules.
+// status with "studying" or "paused" plus the selected subject. Presence reads
+// are limited to accepted friends and people who share a study group.
 const PRESENCE_TTL = 120 * 1000;
 async function fbHeartbeat(username, status="online", subjLabel="", subjEmoji="", subjColor="") {
   try {
+    const activeStatus=status==="studying"||status==="paused";
     await setDoc(doc(db, "presence", username), {
-      username,status:status==="studying"?"studying":"online",
-      subjLabel:status==="studying"?subjLabel:"",
-      subjEmoji:status==="studying"?subjEmoji:"",
-      subjColor:status==="studying"?subjColor:"",
+      username,status:activeStatus?status:"online",
+      subjLabel:activeStatus?subjLabel:"",
+      subjEmoji:activeStatus?subjEmoji:"",
+      subjColor:activeStatus?subjColor:"",
       ts:Date.now()
     });
   } catch(e) {}
@@ -2782,6 +2838,34 @@ async function fbSavePassword(usernameOrEmail, password, recovery) {
   }catch(error){
     return {ok:false,error:callableError(error,"Couldn't sign in. Try again.")};
   }
+}
+
+// Each user refreshes the two small access grants needed for their own group
+// peers. The rules also verify current membership on every read, so a stale
+// grant cannot reveal presence after somebody leaves a group.
+async function fbEnsureGroupPresenceAccess(usernameRaw, groups) {
+  const username=canonUsername(usernameRaw),myUid=auth.currentUser?.uid;
+  if(!username||!myUid)return [];
+  const peers=new Map();
+  (Array.isArray(groups)?groups:[]).forEach(group=>{
+    (Array.isArray(group?.members)?group.members:[]).map(canonUsername).filter(peer=>peer&&peer!==username)
+      .forEach(peer=>{if(!peers.has(peer))peers.set(peer,group.id);});
+  });
+  const details=await Promise.all([...peers.entries()].map(async([peer,groupId])=>{
+    try{
+      const snap=await getDoc(doc(db,"usernames",peer));
+      const peerUid=String(snap.data()?.uid||"");
+      if(!peerUid)return null;
+      const mine={groupId,ownerUsername:username,viewerUid:peerUid,viewerUsername:peer,updatedAt:Date.now()};
+      const theirs={groupId,ownerUsername:peer,viewerUid:myUid,viewerUsername:username,updatedAt:Date.now()};
+      await Promise.all([
+        setDoc(doc(db,"group_presence_access",username,"viewers",peerUid),mine),
+        setDoc(doc(db,"group_presence_access",peer,"viewers",myUid),theirs),
+      ]);
+      return {username:peer,uid:peerUid};
+    }catch{return null;}
+  }));
+  return details.filter(Boolean);
 }
 
 async function fbCreateEmailAccount(email,password){
@@ -3562,7 +3646,9 @@ function boardWithHistoryRow(data, username, sessions) {
       const secs=Math.max(0,Number(s.secs)||0);
       row.totalSecs+=secs;
       row.sessions+=1;
-      row.subjects[s.subject]=(row.subjects[s.subject]||0)+secs;
+      getSessionSubjectSegments(s).forEach(segment=>{
+        row.subjects[segment.subject]=(row.subjects[segment.subject]||0)+segment.secs;
+      });
     }
     next[username]=row;
   }
@@ -3818,7 +3904,9 @@ async function fbAdminMergeIdentity(admin, sourceRaw, targetRaw) {
     const out = { totalSecs:0, sessions:0, subjects:{} };
     for (const s of list) {
       out.totalSecs += s.secs; out.sessions += 1;
-      out.subjects[s.subject] = (out.subjects[s.subject]||0) + s.secs;
+      getSessionSubjectSegments(s).forEach(segment=>{
+        out.subjects[segment.subject] = (out.subjects[segment.subject]||0) + segment.secs;
+      });
     }
     return out;
   };
@@ -3917,7 +4005,9 @@ async function fbAdminResyncLeaderboard(admin, usernameRaw) {
     const out = { totalSecs:0, sessions:0, subjects:{} };
     for (const s of list) {
       out.totalSecs += s.secs; out.sessions += 1;
-      out.subjects[s.subject] = (out.subjects[s.subject]||0) + s.secs;
+      getSessionSubjectSegments(s).forEach(segment=>{
+        out.subjects[segment.subject] = (out.subjects[segment.subject]||0) + segment.secs;
+      });
     }
     return out;
   };
@@ -5635,7 +5725,7 @@ function SubjectSessionAmbience({ subject, paused=false }) {
   </div>;
 }
 
-function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd, coins, skin, enhance=0,
+function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elapsed, duration, paused, onPause, onEnd, coins, skin, enhance=0,
   presence, currentUser, timerStyle="standard", pomodoro=null, task=null, onSkipBreak, onStartNext }) {
   const isPomodoro=timerStyle==="pomodoro"&&pomodoro;
   const isBreak=!!isPomodoro&&pomodoro.phase==="break";
@@ -5646,8 +5736,7 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
   const overtimePercent = Math.round((elapsed/Math.max(duration,1))*100);
   const progress  = isTimer ? Math.min(elapsed/phaseDuration,1) : Math.min(elapsed/5400,1);
   const remaining = Math.max(phaseDuration-elapsed,0);
-  const msgs = ["Stay focused 🌱","You're doing great 💪","Keep going! 🔥","Almost there ✨","In the zone 🎯"];
-  const msgIdx = Math.floor((elapsed/60)%msgs.length);
+  const showModeLabel=isBreak||paused||overtime||isPomodoro;
   // What the big clock shows: countdown until 0, then counts UP as overtime
   const bigTime = isTimer ? (overtime ? `+${fmt(overSecs)}` : fmt(remaining)) : fmt(elapsed);
   const bigColor = paused ? "#8D9990" : isBreak ? "#4F7D68" : (overtime ? "#E08A2B" : subject.color);
@@ -5673,19 +5762,57 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
   const stagePercent=Math.min(100,Math.floor((focusSeconds/activeFocusStage.end)*100));
   const previousStageRef=useRef(stageIndex);
   const [stageGlowToken,setStageGlowToken]=useState(0);
+  const [subjectPickerOpen,setSubjectPickerOpen]=useState(false);
+  const [pendingSubjectId,setPendingSubjectId]=useState(subject.id);
+  const subjectWheelRef=useRef(null);
   useEffect(()=>{
     if(previousStageRef.current!==stageIndex){
       previousStageRef.current=stageIndex;
       setStageGlowToken(token=>token+1);
     }
   },[stageIndex]);
+  useEffect(()=>{
+    if(!subjectPickerOpen)return;
+    const index=Math.max(0,subjects.findIndex(item=>item.id===pendingSubjectId));
+    const frame=requestAnimationFrame(()=>subjectWheelRef.current?.scrollTo({top:index*52,behavior:"auto"}));
+    return ()=>cancelAnimationFrame(frame);
+  },[subjectPickerOpen,pendingSubjectId,subjects]);
+  const openSubjectPicker=()=>{
+    if(!paused)onPause();
+    setPendingSubjectId(subject.id);
+    setSubjectPickerOpen(true);
+  };
+  const confirmSubject=()=>{
+    if(pendingSubjectId!==subject.id)onChangeSubject?.(pendingSubjectId);
+    setSubjectPickerOpen(false);
+  };
   return (
     <div className={`sg-session-screen sg-focus-anim${isBreak?" sg-break-screen":""}`} style={{...fs.wrap,"--sg-focus-accent":`${subject.color}18`}}>
       {!isBreak&&<SubjectSessionAmbience subject={subject} paused={paused}/>}
       <div className="sg-session-top" style={fs.topBar}>
-        <div style={fs.subjectChip}><span>{isBreak?"☕":subject.emoji}</span><span style={{marginLeft:6,fontWeight:600}}>{isBreak?"Break":subject.label}</span></div>
+        <div style={fs.subjectControl}>
+          <div style={fs.subjectChip}><span>{isBreak?"☕":subject.emoji}</span><span style={{marginLeft:6,fontWeight:600}}>{isBreak?"Break":subject.label}</span></div>
+          {!isBreak&&subjects.length>1&&<button type="button" style={fs.subjectEditButton} onClick={openSubjectPicker} aria-label="Change subject">✎</button>}
+        </div>
         <div style={fs.coinBadge}><AnimatedNumber value={coins} prefix="🪙 "/></div>
       </div>
+      {subjectPickerOpen&&<div style={fs.subjectPickerBackdrop} role="dialog" aria-modal="true" aria-label="Choose a subject">
+        <div style={fs.subjectPickerCard}>
+          <div style={fs.subjectPickerMask}/>
+          <div ref={subjectWheelRef} style={fs.subjectWheel} onScroll={event=>{
+            const index=Math.max(0,Math.min(subjects.length-1,Math.round(event.currentTarget.scrollTop/52)));
+            setPendingSubjectId(subjects[index]?.id||pendingSubjectId);
+          }}>
+            {subjects.map(item=>{
+              const selected=item.id===pendingSubjectId;
+              return <button type="button" key={item.id} onClick={()=>setPendingSubjectId(item.id)} style={{...fs.subjectWheelItem,...(selected?fs.subjectWheelItemActive:{})}}>
+                <i style={{...fs.subjectDot,background:item.color}}/>{item.label}
+              </button>;
+            })}
+          </div>
+          <button type="button" style={fs.subjectDoneButton} onClick={confirmSubject}>Done</button>
+        </div>
+      </div>}
       {!isBreak&&presence&&<StudyingNow presence={presence} currentUser={currentUser} compact/>}
       {isPomodoro&&<div style={fs.roundLabel} aria-live="polite">Round {pomodoro.round} of {pomodoro.plannedRounds} · {isBreak?"Rest":"Focus"}</div>}
       <div className="sg-session-tree" style={fs.treeArea}>
@@ -5704,15 +5831,14 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
       {task&&<div className="sg-focus-task" title={task.title}>Task · {task.title}</div>}
       <div style={fs.focusProgressGroup}>
       <div className="sg-session-time" style={{...fs.time,color:bigColor}} aria-live="off">{bigTime}</div>
-      <div className="sg-session-mode" style={fs.modeLabel}>
+      {showModeLabel&&<div className="sg-session-mode" style={fs.modeLabel}>
         {isBreak&&pomodoro.awaitingNext ? "Break complete — begin when you’re ready"
           : isBreak&&paused ? "Break paused"
           : isBreak ? "Rest now — break time never earns coins"
           : paused ? "Paused — your learner is waiting"
           : overtime ? `${overtimePercent}% of original goal completed`
-          : isPomodoro ? `Focus interval · round ${pomodoro.round}`
-          : isTimer ? msgs[msgIdx] : "⏱ Stopwatch running"}
-      </div>
+          : `Focus interval · round ${pomodoro.round}`}
+      </div>}
       <div key={`timeline-${stageGlowToken}`} style={{...fs.timelineWrap,"--sg-stage-glow":subject.color}}>
         <div style={{...fs.progressTrack,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}><div style={{...fs.progressFill,width:`${(isBreak?Math.min(progress,1)*100:stagePercent)}%`,background:overtime?"#E0A04B":subject.color,...(stageGlowToken>0?{animation:"sgFocusStageGlow 3s ease-out"}:{})}}/></div>
         {!isBreak&&focusStages.slice(0,stageIndex+1).map((stage,index)=>{
@@ -5750,8 +5876,18 @@ function FocusScreen({ subject, mode, elapsed, duration, paused, onPause, onEnd,
 const fs = {
   wrap:{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",alignItems:"center",padding:"0 max(24px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))",overflow:"hidden",isolation:"isolate"},
   topBar:{position:"relative",zIndex:3,display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",maxWidth:400,paddingTop:"max(52px,calc(env(safe-area-inset-top) + 18px))"},
+  subjectControl:{display:"flex",alignItems:"center",gap:7},
   subjectChip:{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500},
+  subjectEditButton:{width:31,height:31,padding:"0 0 1px",border:"1px solid rgba(71,83,77,.16)",borderRadius:"50%",background:"#fff",boxShadow:"0 2px 7px rgba(29,47,37,.12)",color:"#7B8580",fontFamily:"Segoe UI Symbol, sans-serif",fontSize:20,fontWeight:700,lineHeight:1,cursor:"pointer"},
   coinBadge:{background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700},
+  subjectPickerBackdrop:{position:"fixed",inset:0,zIndex:12,display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"rgba(21,36,28,.3)",backdropFilter:"blur(5px)"},
+  subjectPickerCard:{position:"relative",width:"min(290px,88vw)",padding:"18px 18px 14px",borderRadius:24,background:"rgba(255,255,255,.96)",boxShadow:"0 16px 42px rgba(22,45,31,.25)"},
+  subjectPickerMask:{position:"absolute",zIndex:2,left:18,right:18,top:70,height:52,borderTop:"1px solid rgba(45,106,79,.2)",borderBottom:"1px solid rgba(45,106,79,.2)",borderRadius:8,pointerEvents:"none"},
+  subjectWheel:{height:156,overflowY:"auto",scrollSnapType:"y mandatory",scrollbarWidth:"none",padding:"52px 0",overscrollBehavior:"contain"},
+  subjectWheelItem:{width:"100%",height:52,border:0,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:9,scrollSnapAlign:"center",fontSize:15,fontWeight:650,color:"#9AA39D",cursor:"pointer",transition:"color .16s,transform .16s"},
+  subjectWheelItemActive:{color:"#2E5841",transform:"scale(1.04)"},
+  subjectDot:{width:10,height:10,borderRadius:"50%",boxShadow:"0 1px 3px rgba(22,43,31,.18)"},
+  subjectDoneButton:{width:"100%",marginTop:12,padding:"11px 0",border:0,borderRadius:13,background:"#477F5A",color:"#fff",fontSize:14,fontWeight:750,cursor:"pointer"},
   treeArea:{position:"relative",zIndex:2,flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%"},
   finalEvolutionWrap:{height:"min(50vh,460px)",width:"min(94vw,410px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end"},
   finalEvolutionImage:{maxWidth:"100%",maxHeight:"calc(100% - 34px)",objectFit:"contain",filter:"drop-shadow(0 12px 18px rgba(25,43,31,.2))"},
@@ -8690,8 +8826,10 @@ function StudyingNow({ presence, currentUser, compact=false }) {
   const others = presence.filter(p=>p.username!==currentUser);
   if(!others.length) return null;
   const studyingCount=others.filter(p=>p.status==="studying").length;
-  const summary=studyingCount
-    ? `${others.length} friend${others.length===1?"":"s"} online · ${studyingCount} studying`
+  const pausedCount=others.filter(p=>p.status==="paused").length;
+  const activeSummary=[studyingCount&&`${studyingCount} studying`,pausedCount&&`${pausedCount} paused`].filter(Boolean).join(" · ");
+  const summary=activeSummary
+    ? `${others.length} friend${others.length===1?"":"s"} online · ${activeSummary}`
     : `${others.length} friend${others.length===1?"":"s"} online`;
   if(compact){
     return (
@@ -8703,9 +8841,9 @@ function StudyingNow({ presence, currentUser, compact=false }) {
         <div style={sn.compactRowWrap}>
           <div style={sn.compactRow} ref={chipRowRef}>
             {others.map(p=>(
-              <span key={p.username} style={{...sn.compactChip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):"#C8D0CA"}}
-                title={p.status==="studying"?`Studying ${p.subjLabel}`:"Online"}>
-                <span>{p.status==="studying"?(p.subjEmoji||"📚"):"●"}</span>
+              <span key={p.username} style={{...sn.compactChip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):p.status==="paused"?"#B8A26C":"#C8D0CA"}}
+                title={p.status==="studying"?`Studying ${p.subjLabel}`:p.status==="paused"?`Paused · ${p.subjLabel}`:"Online"}>
+                <span>{p.status==="studying"?(p.subjEmoji||"📚"):p.status==="paused"?"⏸":"●"}</span>
                 <span style={sn.compactChipName}>{p.username}</span>
               </span>
             ))}
@@ -8722,9 +8860,9 @@ function StudyingNow({ presence, currentUser, compact=false }) {
       <span style={sn.label}>{summary}</span>
       <div style={sn.avatars}>
         {others.slice(0,6).map(p=>(
-          <span key={p.username} style={{...sn.chip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):"#C8D0CA"}}
-            title={p.status==="studying"?`${p.username} · studying ${p.subjLabel}`:`${p.username} · online`}>
-            <span style={{color:p.status==="studying"?"inherit":"#8FA098"}}>{p.status==="studying"?(p.subjEmoji||"📚"):"●"}</span>
+          <span key={p.username} style={{...sn.chip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):p.status==="paused"?"#B8A26C":"#C8D0CA"}}
+            title={p.status==="studying"?`${p.username} · studying ${p.subjLabel}`:p.status==="paused"?`${p.username} · paused ${p.subjLabel}`:`${p.username} · online`}>
+            <span style={{color:p.status==="studying"?"inherit":p.status==="paused"?"#927A3D":"#8FA098"}}>{p.status==="studying"?(p.subjEmoji||"📚"):p.status==="paused"?"⏸":"●"}</span>
             <span style={sn.chipName}>{p.username}</span>
           </span>
         ))}
@@ -9658,6 +9796,8 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const svgRef=useRef(null);
   const classroomRef=useRef(null);
   const panRef=useRef(null);
+  const touchPointersRef=useRef(new Map());
+  const pinchRef=useRef(null);
   // Several groves can exist in the DOM at once (for example, the Stats grove
   // behind a leaderboard visit sheet). SVG paint-server ids are document-wide,
   // and duplicate ids can make Safari resolve a modal's gradients/filters to
@@ -9747,14 +9887,41 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const sweepEventStart=compactAmbientCycle?0.5:0.66;
   const flockSeconds=compactAmbientCycle?26:22;
 
+  const clampZoom=value=>Math.max(1,Math.min(2.5,value));
   const beginPan=e=>{
-    if(e.button!==0)return;
     const classroom=classroomRef.current;
     if(!classroom)return;
+    if(e.pointerType==="touch"){
+      touchPointersRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      classroom.setPointerCapture?.(e.pointerId);
+      const pointers=[...touchPointersRef.current.values()];
+      if(pointers.length===2){
+        const [first,second]=pointers;
+        pinchRef.current={
+          distance:Math.hypot(second.x-first.x,second.y-first.y),
+          zoom,
+        };
+        panRef.current=null;
+        e.preventDefault();
+        return;
+      }
+    }else if(e.button!==0)return;
     panRef.current={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,left:classroom.scrollLeft,top:classroom.scrollTop};
     classroom.setPointerCapture?.(e.pointerId);
   };
   const pan=e=>{
+    if(e.pointerType==="touch"&&touchPointersRef.current.has(e.pointerId)){
+      touchPointersRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      const pinch=pinchRef.current;
+      const pointers=[...touchPointersRef.current.values()];
+      if(pinch&&pointers.length===2){
+        const [first,second]=pointers;
+        const distance=Math.hypot(second.x-first.x,second.y-first.y);
+        if(pinch.distance>0)setZoom(clampZoom(pinch.zoom*(distance/pinch.distance)));
+        e.preventDefault();
+        return;
+      }
+    }
     const active=panRef.current;
     const classroom=classroomRef.current;
     if(!active||active.pointerId!==e.pointerId||!classroom)return;
@@ -9762,6 +9929,10 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
     classroom.scrollTop=active.top-(e.clientY-active.startY);
   };
   const endPan=e=>{
+    if(e.pointerType==="touch"){
+      touchPointersRef.current.delete(e.pointerId);
+      if(touchPointersRef.current.size<2)pinchRef.current=null;
+    }
     if(panRef.current?.pointerId===e.pointerId)panRef.current=null;
   };
 
@@ -9791,8 +9962,8 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   return (
     <div ref={classroomRef} className="sg-classroom-scroll" style={fg.wrap} onPointerDown={beginPan} onPointerMove={pan} onPointerUp={endPan} onPointerCancel={endPan}>
       <div style={fg.zoomControls} aria-label="Classroom zoom controls" onPointerDown={e=>e.stopPropagation()}>
-        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>Math.max(1,value-0.25))} aria-label="Zoom out">−</button>
-        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>Math.min(2.5,value+0.25))} aria-label="Zoom in">+</button>
+        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>clampZoom(value-0.25))} aria-label="Zoom out">−</button>
+        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>clampZoom(value+0.25))} aria-label="Zoom in">+</button>
       </div>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H+60}`} width={`${zoom*100}%`} style={{display:"block",minWidth:`${W*zoom}px`,overflow:"visible"}}>
         <defs>
@@ -10533,7 +10704,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
 }
 
 const fg = {
-  wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"pan-x pan-y",userSelect:"none"},
+  wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"none",userSelect:"none"},
   zoomControls:{position:"sticky",top:8,left:"calc(100% - 80px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px 8px -38px auto",pointerEvents:"auto"},
   zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"rgba(255,255,255,.92)",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
   footer:{display:"flex",justifyContent:"center",gap:20,padding:"8px 0 12px",background:"rgba(0,0,0,0.18)",backdropFilter:"blur(4px)"},
@@ -10833,7 +11004,10 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
 
   // Each bucket tracks total + per-subject seconds, so bars stack by subject
   const mkBuckets = n => Array.from({length:n}, ()=>({ total:0, bySubj:{} }));
-  const addTo = (b,s) => { b.total += s.secs; b.bySubj[s.subject] = (b.bySubj[s.subject]||0) + s.secs; };
+  const addTo = (b,s) => {
+    b.total += s.secs;
+    getSessionSubjectSegments(s).forEach(segment=>{b.bySubj[segment.subject]=(b.bySubj[segment.subject]||0)+segment.secs;});
+  };
   const toSegments = bySubj => Object.entries(bySubj)
     .map(([id,secs])=>{
       const subj = subjects.find(x=>x.id===id) || { color:"#aaa", emoji:"✏️", label:"(removed)" };
@@ -10880,7 +11054,9 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
   const activeDays=new Set(inRange.map(s=>startOfDay(new Date(s.ts)).getTime())).size;
 
   const subjTotals={};
-  inRange.forEach(s=>{subjTotals[s.subject]=(subjTotals[s.subject]||0)+s.secs;});
+  inRange.forEach(s=>getSessionSubjectSegments(s).forEach(segment=>{
+    subjTotals[segment.subject]=(subjTotals[segment.subject]||0)+segment.secs;
+  }));
   const subjRows=Object.entries(subjTotals)
     .map(([id,secs])=>{
       const subj=subjects.find(x=>x.id===id)||{emoji:"✏️",label:"(removed)",color:"#aaa"};
@@ -11823,6 +11999,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [targets,setTargets]=useState(()=>lsGet(LS_TARGETS,{}));   // { subjId: hoursPerWeek }
   const [presence,setPresence]=useState([]);                        // accepted friends online now
   const [friendNetwork,setFriendNetwork]=useState({friends:[],incoming:[],outgoing:[],loading:true,error:""});
+  const [groupPresencePeers,setGroupPresencePeers]=useState([]);
   const [showTargets,setShowTargets]=useState(false);
   const [decorations,setDecorations]=useState(()=>lsGet(LS_DECOR,[]));   // owned decoration ids
   const [gardenLayout,setGardenLayout]=useState(()=>lsGet(LS_GARDEN_LAYOUT,{}));
@@ -11858,6 +12035,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const pomodoroTransitionRef=useRef(false);
   const pomodoroBoundaryRef=useRef(()=>{});
   const activeTaskRef=useRef(null);
+  const subjectSegmentMarkersRef=useRef([]);
   const queuedToastRef=useRef("");
   const finishingSessionRef=useRef(false);
   const intervalAudioRef=useRef(null);
@@ -12063,7 +12241,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     });
   },[user,prefsReady]);
 
-  // ── Presence: publish online or studying while this signed-in tab is open ──
+  // ── Presence: publish online, studying or paused while this signed-in tab is open ──
   useEffect(()=>{
     // Wait for the account's cloud preferences before publishing a subject.
     // Otherwise a fast login switch can briefly advertise the previous
@@ -12072,9 +12250,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(privacyPrefs.sharePresence===false){fbClearPresence(user);return;}
     const earningFocus=timerStyle!=="pomodoro"||pomodoroRef.current.phase==="focus";
     const publish=()=>{
-      const studying=running&&!paused&&earningFocus;
+      const status=running&&paused?"paused":running&&!paused&&earningFocus?"studying":"online";
       const subj = subjects.find(s=>s.id===subject) || subjects[0];
-      fbHeartbeat(user,studying?"studying":"online",subj?.label,subj?.emoji,subj?.color);
+      fbHeartbeat(user,status,subj?.label,subj?.emoji,subj?.color);
     };
     publish();
     const hb=setInterval(publish,45*1000);
@@ -12090,16 +12268,31 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return ()=>window.removeEventListener("pagehide", onUnload);
   },[user]);
 
-  // Poll only accepted friends' small presence documents. This remains a
-  // bounded read even when Lumora grows to many users.
+  // A group member is allowed to see presence only from people who currently
+  // share that group. These grants are refreshed here for existing groups as
+  // well as newly joined groups.
+  useEffect(()=>{
+    if(!user||!prefsReady)return;
+    let active=true;
+    (async()=>{
+      const result=await fbLoadGroups(user);
+      const peers=await fbEnsureGroupPresenceAccess(user,result.groups||[]);
+      if(active)setGroupPresencePeers(peers);
+    })();
+    return()=>{active=false;};
+  },[user,prefsReady,tab]);
+
+  // Poll only friends and current group peers' small presence documents.
   useEffect(()=>{
     if(!user || !prefsReady) return;
+    const contacts=[...friendNetwork.friends,...groupPresencePeers].filter((contact,index,list)=>
+      list.findIndex(item=>normalizeFriendUsername(item?.username||item)===normalizeFriendUsername(contact?.username||contact))===index);
     let active = true;
-    const load = async ()=>{ const p = await fbLoadFriendPresence(friendNetwork.friends); if(active) setPresence(p); };
+    const load = async ()=>{ const p = await fbLoadFriendPresence(contacts); if(active) setPresence(p); };
     load();
     const iv = setInterval(load, 30*1000);
     return ()=>{ active=false; clearInterval(iv); };
-  },[user,prefsReady,tab,running,friendNetwork.friends]);
+  },[user,prefsReady,tab,running,friendNetwork.friends,groupPresencePeers]);
   const intervalRef  = useRef(null);
   const startTimeRef = useRef(null);
   const baseElapsed  = useRef(0);
@@ -12248,6 +12441,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return {
       subject,mode,duration,startTs:startTimeRef.current,sessionStartTs:sessionStartRef.current,
       base:baseElapsed.current,paused:!!paused,skin:activeSkin,
+      subjectSegmentMarkers:subjectSegmentMarkersRef.current,
       sessionId:sessionIdRef.current,username:canonUsername(user),tabId:tabIdRef.current,hb:Date.now(),
       timerMode:timerStyle,
       ...(timerStyle==="pomodoro"?{pomodoro:sanitizePomodoroState(pomodoroRef.current)}:{}),
@@ -12426,6 +12620,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       mode:completedTimerMode==="pomodoro"?"timer":mode,
       timerMode:completedTimerMode,
       ...getCompletedCharacterStageMeta(activeSkin,secs),
+      subjectSegments:completedSubjectSegments(secs),
       ...(completedTimerMode==="pomodoro"?{
         completedRounds:completedPomo.completedRounds,
         plannedRounds:completedPomo.plannedRounds,
@@ -12565,6 +12760,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               sessionId:recoverySessionId,startTs:a.sessionStartTs||Date.now()-secs*1000,endTs:Date.now(),
               goalSecs:advanced.state.focusLengthMinutes*60,mode:"timer",timerMode:"pomodoro",
               ...getCompletedCharacterStageMeta(a.skin,secs),
+              subjectSegments:subjectSegmentsFromMarkers(a.subjectSegmentMarkers,a.subject,secs),
               completedRounds:advanced.state.completedRounds,plannedRounds:advanced.state.plannedRounds,
               focusLengthMinutes:advanced.state.focusLengthMinutes,breakLengthMinutes:advanced.state.breakLengthMinutes,
               ...(recoveredTask?{taskId:recoveredTask.id,taskTitle:recoveredTask.title}:{}),
@@ -12590,6 +12786,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           sessionStartRef.current=a.sessionStartTs||Date.now();
           sessionIdRef.current=recoverySessionId;
           activeTaskRef.current=recoveredTask;
+          subjectSegmentMarkersRef.current=Array.isArray(a.subjectSegmentMarkers)&&a.subjectSegmentMarkers.length
+            ? a.subjectSegmentMarkers : [{subject:a.subject,startElapsed:0}];
           baseElapsed.current=advanced.elapsed;startTimeRef.current=null;setElapsed(advanced.elapsed);
           localStorage.setItem(LS_ACTIVE,JSON.stringify({...a,
             username:canonUsername(user),startTs:shouldPause?null:Date.now(),base:advanced.elapsed,paused:shouldPause,
@@ -12621,6 +12819,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             goalSecs:a.mode==="timer" ? a.duration||0 : 0,
             mode:a.mode||"timer",
             ...getCompletedCharacterStageMeta(a.skin,secs),
+            subjectSegments:subjectSegmentsFromMarkers(a.subjectSegmentMarkers,a.subject,secs),
           },coinsEarned);
           if(!saveResult?.ok){
             const prefs=await fbLoadPrefs(user);
@@ -12640,6 +12839,25 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return ()=>{cancelled=true;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[user,prefsReady,otherTabActive]);
+
+  const completedSubjectSegments=secs=>{
+    return subjectSegmentsFromMarkers(subjectSegmentMarkersRef.current,subject,secs);
+  };
+
+  const changeFocusSubject=id=>{
+    if(!subjects.some(item=>item.id===id)||id===subject)return;
+    const atElapsed=Math.max(0,Math.round(baseElapsed.current));
+    const markers=subjectSegmentMarkersRef.current.length
+      ? subjectSegmentMarkersRef.current
+      : [{subject,startElapsed:0}];
+    subjectSegmentMarkersRef.current=[...markers,{subject:id,startElapsed:atElapsed}];
+    setSubject(id);lsSetR(LS_SUBJECT,id);
+    const active=parseActive(localStorage.getItem(LS_ACTIVE));
+    if(active&&active.tabId===tabIdRef.current){
+      localStorage.setItem(LS_ACTIVE,JSON.stringify({...active,subject:id,subjectSegmentMarkers:subjectSegmentMarkersRef.current,
+        startTs:null,base:atElapsed,paused:true,hb:Date.now()}));
+    }
+  };
 
   const startSession=()=>{
     // A shop preview is temporary and must never carry into an active session.
@@ -12664,6 +12882,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     sessionStartRef.current=Date.now();   // wall-clock start, for analytics
     sessionIdRef.current=`session_${genTabId()}`;
     pauseCountRef.current=0;
+    subjectSegmentMarkersRef.current=[{subject,startElapsed:0}];
     activeTaskRef.current=selectedTask?{id:selectedTask.id,title:selectedTask.title}:null;
     if(timerStyle==="pomodoro"){
       const fresh=createPomodoroState(pomodoroRef.current);
@@ -12777,7 +12996,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
     setDecorations([]);setGardenLayout({});setTasks([]);setTasksError("");setTasksLoading(false);setSelectedTaskId("");
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
-    setLb({weekly:[],allTime:[]});setPresence([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
+    setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
     setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
   };
@@ -13137,7 +13356,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const out = {};
     if(Array.isArray(history)){
       const ws = startOfWeek(new Date());
-      history.forEach(s=>{ if(new Date(s.ts) >= ws) out[s.subject] = (out[s.subject]||0) + s.secs; });
+      history.forEach(s=>{ if(new Date(s.ts) >= ws)getSessionSubjectSegments(s).forEach(segment=>{
+        out[segment.subject]=(out[segment.subject]||0)+segment.secs;
+      }); });
     }
     return out;
   })();
@@ -13264,6 +13485,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {running||paused ? (
         <FocusScreen subject={subjectObj} mode={mode} elapsed={elapsed} duration={duration}
           paused={paused} onPause={pauseSession} onEnd={endSession} coins={coins} skin={activeSkin} enhance={enhancements[activeSkin]||0}
+          subjects={subjects} onChangeSubject={changeFocusSubject}
           presence={pomodoro.phase==="break"&&timerStyle==="pomodoro"?null:presence} currentUser={user}
           timerStyle={timerStyle} pomodoro={pomodoro} task={activeTaskRef.current}
           onSkipBreak={skipPomodoroBreak} onStartNext={startNextPomodoro}/>

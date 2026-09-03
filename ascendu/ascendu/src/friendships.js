@@ -45,13 +45,14 @@ export function filterBoardForFriends(entries, currentUsername, friends) {
 
 export function normalizePresenceRecord(value) {
   const record = value && typeof value === "object" ? value : {};
-  const status = record.status === "studying" || (!record.status && record.subjLabel) ? "studying" : "online";
+  const status = record.status === "paused" ? "paused" : (record.status === "studying" || (!record.status && record.subjLabel) ? "studying" : "online");
+  const hasSubject = status === "studying" || status === "paused";
   return {
     username: normalizeFriendUsername(record.username),
     status,
-    subjLabel: status === "studying" ? String(record.subjLabel || "Study") : "",
-    subjEmoji: status === "studying" ? String(record.subjEmoji || "📚") : "",
-    subjColor: status === "studying" ? String(record.subjColor || "#56B68B") : "#A7B0A9",
+    subjLabel: hasSubject ? String(record.subjLabel || "Study") : "",
+    subjEmoji: hasSubject ? String(record.subjEmoji || "📚") : "",
+    subjColor: hasSubject ? String(record.subjColor || "#56B68B") : "#A7B0A9",
     ts: Number(record.ts || 0),
   };
 }
