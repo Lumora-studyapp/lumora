@@ -113,6 +113,8 @@ const APP_CSS = `
 }
 .sg-shell ::-webkit-scrollbar { height:5px; width:5px; }
 .sg-shell ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:8px; }
+.sg-shell .sg-classroom-scroll { scrollbar-width:none; -ms-overflow-style:none; }
+.sg-shell .sg-classroom-scroll::-webkit-scrollbar { display:none; width:0; height:0; }
 .sg-shell {
   overflow-x: hidden;
   isolation: isolate;
@@ -1124,6 +1126,28 @@ const getCharacterProgressionImage = (skin, stageIndex=0) => {
   return `/Images/${skin.name} (${stageIndex+1}) - ${stageName}.png`;
 };
 
+// Focus stages advance once per completed minute, then remain on the final
+// evolution. Keeping this calculation in one place makes the Focus screen,
+// saved session and classroom snapshot agree exactly.
+const getCharacterStageIndexForSeconds = (seconds, stageCount=FOCUS_STAGE_RANGES.length) =>
+  Math.min(Math.max(0,stageCount-1),Math.max(0,Math.floor((Number(seconds)||0)/60)));
+
+const getCompletedCharacterStageMeta = (skinId, focusSeconds) => {
+  const skin=TREE_SKINS.find(entry=>entry.id===skinId);
+  if(!skin?.progressionStages?.length)return {};
+  const characterStageIndex=getCharacterStageIndexForSeconds(focusSeconds,skin.progressionStages.length);
+  return {characterStageIndex,characterStageName:skin.progressionStages[characterStageIndex]};
+};
+
+const getSavedCharacterStageIndex = (session, skin) => {
+  const count=skin?.progressionStages?.length||FOCUS_STAGE_RANGES.length;
+  const saved=Number(session?.characterStageIndex);
+  if(Number.isFinite(saved))return Math.min(Math.max(0,count-1),Math.trunc(saved));
+  // Sessions completed before stage snapshots existed retain a useful,
+  // duration-based stage rather than turning back into a legacy tree.
+  return getCharacterStageIndexForSeconds(session?.secs,count);
+};
+
 // ── Tree Enhancements ─────────────────────────────────────────────────────────
 // Three permanent tiers per skin, rendered by ONE parameterized layer engine
 // (not hand-drawn variants) — each skin contributes only its palette + particle
@@ -1932,6 +1956,8 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
     ...(typeof m.goalSecs==="number"&&m.goalSecs>0?{goalSecs:m.goalSecs}:{}),
     ...(m.mode?{mode:m.mode}:{}),
     ...(m.timerMode?{timerMode:m.timerMode}:{}),
+    ...(Number.isFinite(Number(m.characterStageIndex))?{characterStageIndex:Math.max(0,Math.trunc(Number(m.characterStageIndex)))}:{}),
+    ...(typeof m.characterStageName==="string"&&m.characterStageName?{characterStageName:m.characterStageName.slice(0,80)}:{}),
     ...(Number.isFinite(Number(m.completedRounds))?{completedRounds:Math.max(0,Math.trunc(Number(m.completedRounds)))}:{}),
     ...(Number.isFinite(Number(m.plannedRounds))?{plannedRounds:Math.max(1,Math.trunc(Number(m.plannedRounds)))}:{}),
     ...(Number.isFinite(Number(m.focusLengthMinutes))?{focusLengthMinutes:Math.max(1,Math.trunc(Number(m.focusLengthMinutes)))}:{}),
@@ -5764,7 +5790,7 @@ function FocusAmbience({ layer }) {
   if (layer === "back") return (
     <svg viewBox={`0 0 ${W} ${H}`} style={base} preserveAspectRatio="xMidYMax meet" aria-hidden="true">
       {/* Acorn the squirrel stops to inspect */}
-      <g transform="translate(104,189)" opacity="0.9">
+      <g transform="translate(54,189)" opacity="0.9">
         <ellipse cx="0" cy="0" rx="2.6" ry="3.2" fill="#B08350"/>
         <path d="M-3 -2.2 Q0 -4.6 3 -2.2 L2.4 -1 Q0 -2.6 -2.4 -1 Z" fill="#7A5230"/>
         <line x1="0" y1="-4.4" x2="0.6" y2="-3" stroke="#7A5230" strokeWidth="0.9"/>
@@ -5772,8 +5798,8 @@ function FocusAmbience({ layer }) {
       {/* Squirrel — dashes in, stops at the acorn, darts behind the trunk, exits */}
       <g opacity="0.94">
         <animateTransform attributeName="transform" type="translate"
-          values="-50 0; 96 0; 96 0; 168 0; 168 0; 430 0; 430 0"
-          keyTimes="0; 0.14; 0.30; 0.44; 0.60; 0.80; 1"
+          values="-50 0; 48 0; 48 0; -50 0; -50 0"
+          keyTimes="0; 0.18; 0.58; 0.80; 1"
           dur="19s" repeatCount="indefinite" calcMode="linear"/>
         <g transform="translate(0,190)">
           <animateTransform attributeName="transform" type="translate" values="0 0; 0 -2; 0 0" dur="0.4s" repeatCount="indefinite" additive="sum"/>
@@ -5801,7 +5827,7 @@ function FocusAmbience({ layer }) {
         </g>
       </g>
       {/* back grass tufts, peeking out either side of the mound */}
-      {[[64,198,0],[300,196,0.6],[122,203,1.1]].map(([gx,gy,d],i)=>(
+      {[[34,198,0],[338,196,0.6],[64,203,1.1]].map(([gx,gy,d],i)=>(
         <g key={i} opacity="0.55">
           <animateTransform attributeName="transform" type="rotate"
             values={`-3 ${gx} ${gy}; 3 ${gx} ${gy}; -3 ${gx} ${gy}`} dur={`${3.4+i*0.7}s`} begin={`${d}s`} repeatCount="indefinite"/>
@@ -5810,13 +5836,13 @@ function FocusAmbience({ layer }) {
         </g>
       ))}
       {/* a tiny mushroom + pebbles by the mound's edge */}
-      <g transform="translate(282,201)" opacity="0.85">
+      <g transform="translate(336,201)" opacity="0.85">
         <rect x="-1.4" y="-3.6" width="2.8" height="4" rx="1.2" fill="#EFE3CE"/>
         <path d="M-4.4 -3 Q0 -8.4 4.4 -3 Q0 -1.6 -4.4 -3 Z" fill={night?"#B05A50":"#D96C5A"}/>
         <circle cx="-1.6" cy="-4.6" r="0.7" fill="#fff" opacity="0.85"/>
         <circle cx="1.4" cy="-4" r="0.5" fill="#fff" opacity="0.85"/>
       </g>
-      {[[74,205,2.2],[80,207,1.4],[296,206,1.8]].map(([px,py,pr],i)=>(
+      {[[36,205,2.2],[44,207,1.4],[348,206,1.8]].map(([px,py,pr],i)=>(
         <ellipse key={i} cx={px} cy={py} rx={pr} ry={pr*0.6} fill={night?"#5A6A60":"#B9C4B4"} opacity="0.7"/>
       ))}
     </svg>
@@ -5834,10 +5860,10 @@ function FocusAmbience({ layer }) {
       {/* Bird visitor — glides down from the canopy, pecks about, flies off */}
       <g opacity="0.95">
         <animateTransform attributeName="transform" type="translate"
-          values="110 -170; 0 0; 0 0; 110 -170; 110 -170"
+          values="58 -170; 0 0; 0 0; 58 -170; 58 -170"
           keyTimes="0; 0.10; 0.62; 0.74; 1" dur="27s" repeatCount="indefinite"
           calcMode="spline" keySplines="0.3 0 0.4 1;0 0 1 1;0.5 0 0.7 1;0 0 1 1"/>
-        <g transform="translate(300,192)">
+        <g transform="translate(320,192)">
           {/* peck: quick tilt forward, twice, then look up */}
           <animateTransform attributeName="transform" type="rotate"
             values="0 0 2; 0 0 2; 24 0 2; 0 0 2; 24 0 2; 0 0 2; -8 0 2; 0 0 2"
@@ -5855,7 +5881,7 @@ function FocusAmbience({ layer }) {
       </g>
 
       {/* Falling leaves — spawn near the canopy, sway down, fade at the ground */}
-      {[[168,44,"#7FB86A",7,0],[222,58,"#F4C04B",9,2.4],[148,70,"#9BC46A",8,4.8],[238,40,"#E0955A",10,6.5],[196,36,"#C4906A",11,9]].map(([lx,ly,c,dur,d],i)=>(
+      {[[86,44,"#7FB86A",7,0],[292,58,"#F4C04B",9,2.4],[108,70,"#9BC46A",8,4.8],[304,40,"#E0955A",10,6.5],[72,36,"#C4906A",11,9]].map(([lx,ly,c,dur,d],i)=>(
         <g key={i}>
           <animateTransform attributeName="transform" type="translate"
             values={`0 0; ${i%2?14:-12} ${(190-ly)*0.5}; ${i%2?-6:10} ${190-ly}`}
@@ -5871,10 +5897,10 @@ function FocusAmbience({ layer }) {
       ))}
 
       {/* Day/dusk: butterflies wandering · Night: fireflies pulsing */}
-      {!night ? [[86,96,"#E8A7C4",13,0],[292,84,"#A7C4E8",16,3]].map(([bx,by,c,dur,d],i)=>(
+      {!night ? [[76,96,"#E8A7C4",13,0],[304,84,"#A7C4E8",16,3]].map(([bx,by,c,dur,d],i)=>(
         <g key={i} opacity="0.8">
           <animateTransform attributeName="transform" type="translate"
-            values="0 0; 16 -14; 30 4; 12 14; 0 0" dur={`${dur}s`} begin={`${d}s`} repeatCount="indefinite"
+            values={i===0?"0 0; 14 -14; 26 4; 10 14; 0 0":"0 0; -14 -14; -26 4; -10 14; 0 0"} dur={`${dur}s`} begin={`${d}s`} repeatCount="indefinite"
             calcMode="spline" keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1" keyTimes="0;0.25;0.5;0.75;1"/>
           <g transform={`translate(${bx},${by})`}>
             <ellipse cx="-2.4" cy="0" rx="2.6" ry="3.6" fill={c}>
@@ -5894,7 +5920,7 @@ function FocusAmbience({ layer }) {
       ))}
 
       {/* Drifting pollen motes rising through the light (day only) */}
-      {!night && [[120,150,0],[260,168,2],[176,120,4],[236,140,6]].map(([px,py,d],i)=>(
+      {!night && [[88,150,0],[292,168,2],[108,120,4],[278,140,6]].map(([px,py,d],i)=>(
         <circle key={i} cx={px} cy={py} r="1.1" fill="#FFF3C4">
           <animate attributeName="cy" values={`${py};${py-34}`} dur={`${9+i*2}s`} begin={`${d}s`} repeatCount="indefinite"/>
           <animate attributeName="cx" values={`${px};${px+(i%2?8:-8)};${px}`} dur={`${5+i}s`} begin={`${d}s`} repeatCount="indefinite"/>
@@ -5903,7 +5929,7 @@ function FocusAmbience({ layer }) {
       ))}
 
       {/* Occasional wind streaks — two soft curves that breathe through */}
-      {[[70,88,0],[210,128,4.5]].map(([wx,wy,d],i)=>(
+      {[[42,88,0],[278,128,4.5]].map(([wx,wy,d],i)=>(
         <path key={i} d={`M${wx} ${wy} q22 -7 44 0 q14 5 26 -2`} stroke={night?"#9fb4e8":"#B9CFC2"} strokeWidth="1.4"
           fill="none" strokeLinecap="round" opacity="0">
           <animate attributeName="opacity" values="0;0;0.4;0" keyTimes="0;0.55;0.72;1" dur="9s" begin={`${d}s`} repeatCount="indefinite"/>
@@ -5912,7 +5938,7 @@ function FocusAmbience({ layer }) {
       ))}
 
       {/* front grass + two tiny flowers at the mound's lip */}
-      {[[128,207,0.3],[252,206,0.9],[196,210,1.5]].map(([gx,gy,d],i)=>(
+      {[[34,207,0.3],[64,206,0.9],[316,210,1.5],[346,206,2.1]].map(([gx,gy,d],i)=>(
         <g key={i} opacity="0.7">
           <animateTransform attributeName="transform" type="rotate"
             values={`-4 ${gx} ${gy}; 4 ${gx} ${gy}; -4 ${gx} ${gy}`} dur={`${3+i*0.6}s`} begin={`${d}s`} repeatCount="indefinite"/>
@@ -5920,7 +5946,7 @@ function FocusAmbience({ layer }) {
             stroke={night?"#557A5C":"#8FC479"} strokeWidth="1.7" fill="none" strokeLinecap="round"/>
         </g>
       ))}
-      {[[148,204,"#F4A7B9"],[236,203,"#F4C04B"]].map(([fx,fy,c],i)=>(
+      {[[88,204,"#F4A7B9"],[292,203,"#F4C04B"]].map(([fx,fy,c],i)=>(
         <g key={i} opacity="0.85">
           <animateTransform attributeName="transform" type="rotate"
             values={`-3 ${fx} ${fy+6}; 3 ${fx} ${fy+6}; -3 ${fx} ${fy+6}`} dur={`${3.6+i}s`} repeatCount="indefinite"/>
@@ -9626,10 +9652,12 @@ const GARDEN_BIRD_SPECS = [
   {x:45,y:19,scale:.78,flap:.76,flapDelay:-.37,bob:2.4,bobDur:3.9,bobDelay:-.5,tiltA:"-2deg",tiltB:"1.2deg"},
 ];
 
-// Isometric SVG grid — each session plants a tree, coloured by subject
 function ForestGarden({ sessions, subjects, range, decorations = [], enhancements = {}, layout = {} }) {
   const [hovered, setHovered] = useState(null);
+  const [zoom,setZoom] = useState(1.25);
   const svgRef=useRef(null);
+  const classroomRef=useRef(null);
+  const panRef=useRef(null);
   // Several groves can exist in the DOM at once (for example, the Stats grove
   // behind a leaderboard visit sheet). SVG paint-server ids are document-wide,
   // and duplicate ids can make Safari resolve a modal's gradients/filters to
@@ -9647,6 +9675,22 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const renderBudget=getGardenRenderBudget(trees.length);
   const subjectById=useMemo(()=>new Map(subjects.map(s=>[s.id,s])),[subjects]);
   const skinById=useMemo(()=>new Map(TREE_SKINS.map(s=>[s.id,s])),[]);
+
+  // Keep the tile platform—not the wall/blackboard—centred whenever the range
+  // or zoom changes. At higher zoom levels the cursor can still pan across the
+  // full classroom.
+  useEffect(()=>{
+    const classroom=classroomRef.current;
+    if(!classroom)return;
+    const frame=requestAnimationFrame(()=>{
+      classroom.scrollLeft=Math.max(0,(classroom.scrollWidth-classroom.clientWidth)/2);
+      const renderedWidth=svgRef.current?.getBoundingClientRect().width||W*zoom;
+      const scale=renderedWidth/W;
+      const platformCentreY=(originY+(gridSize-1)*CELL*0.42)*scale;
+      classroom.scrollTop=Math.max(0,platformCentreY-classroom.clientHeight*0.5);
+    });
+    return ()=>cancelAnimationFrame(frame);
+  },[gridSize,zoom]);
 
   // Stop SMIL timelines when the garden is off-screen or the tab is hidden.
   // This matters on the long Stats page, where the SVG can otherwise keep
@@ -9676,9 +9720,9 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const CELL  = Math.min(44, 340 / (1.2 * gridSize));
   const tScale = CELL / 36; // trees scale with the cells
   const W     = 390;
-  const H     = 260;
+  const H     = 320;
   const originX = W / 2;
-  const originY = Math.max(64, 158 - gridSize * (CELL * 0.28)); // keep plot vertically centred, leave room for tall skins
+  const originY = Math.max(64, 158 - gridSize * (CELL * 0.28)) + 76;
 
   const isoX = (col, row) => originX + (col - row) * (CELL * 0.6);
   const isoY = (col, row) => originY + (col + row) * (CELL * 0.28);
@@ -9703,10 +9747,29 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const sweepEventStart=compactAmbientCycle?0.5:0.66;
   const flockSeconds=compactAmbientCycle?26:22;
 
+  const beginPan=e=>{
+    if(e.button!==0)return;
+    const classroom=classroomRef.current;
+    if(!classroom)return;
+    panRef.current={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,left:classroom.scrollLeft,top:classroom.scrollTop};
+    classroom.setPointerCapture?.(e.pointerId);
+  };
+  const pan=e=>{
+    const active=panRef.current;
+    const classroom=classroomRef.current;
+    if(!active||active.pointerId!==e.pointerId||!classroom)return;
+    classroom.scrollLeft=active.left-(e.clientX-active.startX);
+    classroom.scrollTop=active.top-(e.clientY-active.startY);
+  };
+  const endPan=e=>{
+    if(panRef.current?.pointerId===e.pointerId)panRef.current=null;
+  };
+
   // One tiny highlight per crown makes every tree participate in the scene,
   // but the highlights fade as one or two shared groups. This avoids creating
   // an independent animation timeline for every session in a large grove.
-  const treeEffectPoints=renderBudget.treeShimmerPhases?slots.flatMap(({r,c})=>{
+  const treeEffectPoints=[];
+  /* const treeEffectPoints=renderBudget.treeShimmerPhases?slots.flatMap(({r,c})=>{
     const tIdx=slotTree.get(`${r}-${c}`);
     if(tIdx===undefined)return [];
     const tree=trees[tIdx];
@@ -9723,11 +9786,15 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
     else if(shape==="muffin"||shape==="cupcake"||shape==="cake")fy=y-h-cr*0.15;
     const size=Math.max(0.72,cr*0.09);
     return [{key:`tree-glint-${r}-${c}`,phase:(r+c)%renderBudget.treeShimmerPhases,x:fx,y:fy,size}];
-  }):[];
+  }):[]; */
 
   return (
-    <div style={fg.wrap}>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H+60}`} width="100%" style={{display:"block",overflow:"visible"}}>
+    <div ref={classroomRef} className="sg-classroom-scroll" style={fg.wrap} onPointerDown={beginPan} onPointerMove={pan} onPointerUp={endPan} onPointerCancel={endPan}>
+      <div style={fg.zoomControls} aria-label="Classroom zoom controls" onPointerDown={e=>e.stopPropagation()}>
+        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>Math.max(1,value-0.25))} aria-label="Zoom out">−</button>
+        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>Math.min(2.5,value+0.25))} aria-label="Zoom in">+</button>
+      </div>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H+60}`} width={`${zoom*100}%`} style={{display:"block",minWidth:`${W*zoom}px`,overflow:"visible"}}>
         <defs>
           {/* Sky gradient */}
           <linearGradient id={`${gardenSvgId}-sky`} x1="0" y1="0" x2="0" y2="1">
@@ -9906,6 +9973,19 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
           }
           const tIdx = slotTree.get(`${r}-${c}`);
           if (tIdx === undefined) return null;
+          const completedSession=trees[tIdx];
+          const completedSkin=skinById.get(completedSession.skin)||null;
+          const completedStage=getSavedCharacterStageIndex(completedSession,completedSkin);
+          const completedImage=getCharacterProgressionImage(completedSkin,completedStage)||completedSkin?.characterImage;
+          const characterHeight=Math.max(42,62*tScale);
+          // Each occupied classroom tile now holds the exact character stage
+          // reached on completion. There are deliberately no labels, tooltips
+          // or legacy tree fallbacks in this scene.
+          return completedImage ? <g key={`character-${r}-${c}`} data-classroom-character="true">
+            <ellipse cx={isoX(c,r)} cy={isoY(c,r)+CELL*0.28+1} rx={characterHeight*.27} ry={characterHeight*.075} fill="#000" opacity={0.15}/>
+            <image href={completedImage} x={isoX(c,r)-characterHeight*.34} y={isoY(c,r)+CELL*0.28-characterHeight+2}
+              width={characterHeight*.68} height={characterHeight} preserveAspectRatio="xMidYMax meet"/>
+          </g> : null;
           const tree  = trees[tIdx];
           const x     = isoX(c, r);
           const y     = isoY(c, r) + CELL * 0.28; // sit in tile centre
@@ -10448,16 +10528,14 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
         <rect x="-20" y="-20" width={W+40} height={H+100} fill={`url(#${gardenSvgId}-vig)`}/>
       </svg>
 
-      <div style={fg.footer}>
-        <span style={fg.stat}>✨ {trees.length} growth moment{trees.length!==1?"s":""} this {range}</span>
-        <span style={fg.stat}>⏱ {fmtHrs(trees.reduce((a,t)=>a+t.secs,0))} total</span>
-      </div>
     </div>
   );
 }
 
 const fg = {
-  wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"hidden",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style"},
+  wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"pan-x pan-y",userSelect:"none"},
+  zoomControls:{position:"sticky",top:8,left:"calc(100% - 80px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px 8px -38px auto",pointerEvents:"auto"},
+  zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"rgba(255,255,255,.92)",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
   footer:{display:"flex",justifyContent:"center",gap:20,padding:"8px 0 12px",background:"rgba(0,0,0,0.18)",backdropFilter:"blur(4px)"},
   stat:{fontSize:12,color:"rgba(255,255,255,0.82)",fontWeight:600},
 };
@@ -10676,7 +10754,8 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
           const isSelected=item&&selected?.type===item.type&&selected?.id===item.id;
           const subj=tree?(subjects.find(x=>x.id===tree.subject)||{emoji:"✏️",color:"#56B68B"}):null;
           const skinDef=tree?(TREE_SKINS.find(skin=>skin.id===(tree.skin||"default"))||TREE_SKINS[0]):null;
-          const treeTier=tree?Math.max(0,Math.min(3,Number(enhancements?.[skinDef.id])||0)):0;
+          const stageIndex=tree?getSavedCharacterStageIndex(tree,skinDef):0;
+          const characterImage=tree?(getCharacterProgressionImage(skinDef,stageIndex)||skinDef?.characterImage):null;
           return <div key={key} style={{...ge.tile,...(isSelected?ge.tileSelected:{})}}
             onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";}}
             onDrop={e=>drop(e,key)}
@@ -10686,7 +10765,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
               aria-label={`Move ${skinDef.name} growth marker`}
               onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseOrMove(e,item,key);}}}>
               <span style={{...ge.treeThumb,background:`linear-gradient(160deg,${subj.color}20,#F7FBF5)`}}>
-                <TreeSVG progress={1} color={subj.color} paused skin={skinDef.id} enhance={treeTier} thumbnail/>
+                {characterImage&&<img src={characterImage} alt="" style={{width:"100%",height:"100%",objectFit:"contain",objectPosition:"center bottom"}}/>}
               </span>
               <span style={ge.itemSub}>{subj.emoji}</span>
             </div>}
@@ -12346,6 +12425,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       goalSecs: completedTimerMode==="pomodoro" ? completedPomo.focusLengthMinutes*60 : mode==="timer" ? duration : 0,
       mode:completedTimerMode==="pomodoro"?"timer":mode,
       timerMode:completedTimerMode,
+      ...getCompletedCharacterStageMeta(activeSkin,secs),
       ...(completedTimerMode==="pomodoro"?{
         completedRounds:completedPomo.completedRounds,
         plannedRounds:completedPomo.plannedRounds,
@@ -12484,6 +12564,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             const saveResult=await fbSaveSession(user,a.subject,secs,a.skin,{
               sessionId:recoverySessionId,startTs:a.sessionStartTs||Date.now()-secs*1000,endTs:Date.now(),
               goalSecs:advanced.state.focusLengthMinutes*60,mode:"timer",timerMode:"pomodoro",
+              ...getCompletedCharacterStageMeta(a.skin,secs),
               completedRounds:advanced.state.completedRounds,plannedRounds:advanced.state.plannedRounds,
               focusLengthMinutes:advanced.state.focusLengthMinutes,breakLengthMinutes:advanced.state.breakLengthMinutes,
               ...(recoveredTask?{taskId:recoveredTask.id,taskTitle:recoveredTask.title}:{}),
@@ -12539,6 +12620,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             endTs:Date.now(),
             goalSecs:a.mode==="timer" ? a.duration||0 : 0,
             mode:a.mode||"timer",
+            ...getCompletedCharacterStageMeta(a.skin,secs),
           },coinsEarned);
           if(!saveResult?.ok){
             const prefs=await fbLoadPrefs(user);
@@ -13431,7 +13513,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 )}
                 <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":`linear-gradient(135deg,${subjectObj.color},var(--sg-theme-accent-strong,#2D6A4F))`,...(otherTabActive?{cursor:"not-allowed"}:{})}}
                   onClick={startSession} disabled={otherTabActive}>
-                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"Start Learning ✨"}
+                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"Start Learning"}
                 </button>
 
                 {/* Weekly target progress (only if set) */}
