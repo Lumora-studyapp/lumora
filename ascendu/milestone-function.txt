@@ -1,0 +1,121 @@
+﻿function MilestonePath({ history }) {
+  const [hover,setHover] = useState(null);
+  const [tip,setTip]     = useState(null); // { left, tail, unlocked } once measured
+  const trackRef = useRef(null);
+  const totalHours = Array.isArray(history)
+    ? history.reduce((a,s)=>a+(Number(s.secs)||0),0)/3600
+    : 0;
+  const stageCount = MILESTONE_STAGES.length;
+
+  // The track is a flex row of fixed-width dots and stretching segments, so the
+  // dots' real centres are NOT evenly spaced â€” a percentage guess drifts by a
+  // few pixels. Measure the hovered dot on the fly so the speech-bubble tail
+  // always lands dead-centre on its stage.
+    const positionTip = useCallback((index, unlockedOverride) => {
+      const track = trackRef.current;
+      if(!track || index==null) return;
+      const dot = track.querySelector(`[data-stage="${index}"]`);
+      if(!dot) return;
+      const trackRect=track.getBoundingClientRect();
+      const dotRect  =dot.getBoundingClientRect();
+      const width      = trackRect.width;
+      const bubbleWidth= width*(MILESTONE_TIP_W/100);
+      const centre = dotRect.left - trackRect.left + dotRect.width/2;
+      const margin = 3;
+      let left = centre - bubbleWidth/2;
+      // Edge stages â€” Infant (first) and Sage (last) â€” let the bubble spill
+      // past the track so the triangle can stay dead-centre on its circle;
+      // the box then slides out so its straight edge sits flush with the
+      // outer edge of the triangle above the dot.
+      const firstStage = index === 0;
+      const lastStage  = index === stageCount - 1;
+      if(!firstStage && left < margin) left = margin;
+      if(!lastStage && left + bubbleWidth > width - margin) left = width - margin - bubbleWidth;
+      // Edge boxes slide OUT so their straight edge â€” where the rounded corner
+      // ends (14px) â€” lines up flush with the outer edge of the triangle (9px
+      // half-base) pointing at the circle. Mirror-symmetric: Infant slides
+      // left, Sage slides right by the exact same amount, so the proportions
+      // match on both sides. The rounded tip may peek 5px past the triangle's
+      // edge; that's what makes the corners look deliberately aligned rather
+      // than awkwardly tucked. The tail is still recomputed from the final
+      // left below, so the triangle never leaves the middle of its circle.
+      const EDGE_FLUSH = 14 + 9; // bubble corner radius + triangle half-base
+      const EDGE_PAD = 3;        // extra symmetric nudge: infant slides left, sage slides right
+      if(firstStage) left = centre - EDGE_FLUSH - EDGE_PAD;
+      if(lastStage)  left = centre - (bubbleWidth - EDGE_FLUSH) + EDGE_PAD;
+      // Triangle always points at the middle of its stage circle.
+      const tail = centre - left;
+      setTip({ left, tail,
+        unlocked: unlockedOverride ?? totalHours >= MILESTONE_STAGES[index].max });
+    }, [totalHours]);
+
+  const showTip = useCallback((index) => {
+    setHover(index);
+    positionTip(index);
+  }, [positionTip]);
+
+  const hideTip = useCallback(() => {
+    setHover(null);
+    setTip(null);
+  }, []);
+
+
+  // Keep the bubble perfectly aimed if the window resizes while it's open.
+  useEffect(() => {
+    if(hover==null) return;
+    const onResize = () => positionTip(hover);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [hover, positionTip]);
+
+    return (
+      <section style={mp.cardOpen} aria-label="Progress level">
+        <div style={mp.header}>
+          <span style={mp.title}>Progress Level</span>
+          <span style={mp.hours}>â³ {fmtHrs(totalHours*3600)} lifetime</span>
+        </div>
+      <div style={mp.track} ref={trackRef}>
+        {MILESTONE_STAGES.map((stage,i)=>{
+          const green = totalHours >= stage.max;
+          const prevGreen = i>0 && totalHours >= MILESTONE_STAGES[i-1].max;
+          return (
+            <div key={stage.name} style={{display:"contents"}}>
+              {i>0 && <div aria-hidden="true" style={{...mp.seg, background:(green&&prevGreen)?MILESTONE_GREEN:MILESTONE_GREY, boxShadow:(green&&prevGreen)?"0 0 7px rgba(55,165,91,.7), 0 0 12px rgba(55,165,91,.3)":"none"}}/>}
+                <button type="button" data-stage={i}
+                  aria-label={`${stage.name} â€” ${stage.min} to ${stage.max} hours (${green?"unlocked":"locked"})`}
+                  style={{...mp.dot, ...(green?mp.dotGreen:mp.dotGrey), ...(hover===i?{transform:"scale(1.25)"}:{})}}
+                  onMouseEnter={()=>showTip(i)}
+                  onMouseLeave={()=>hideTip()}
+                  onFocus={()=>showTip(i)}
+                  onBlur={()=>hideTip()}/>
+            </div>
+          );
+        })}
+          {hover!==null && tip!==null && hover<stageCount && (()=>{
+            const stage = MILESTONE_STAGES[hover];
+            const attained = totalHours >= stage.max;
+            const remaining = Math.max(0, stage.max - totalHours);
+            const hasImage = !!stage.image;
+            return (
+              <div style={{...mp.tipWrap, left:tip.left}} className="sg-tip-fade" role="tooltip">
+                <div style={hasImage ? mp.tipBoxImage(attained) : mp.tipBox(attained)}>
+                  <span style={{...mp.tipArrow(attained), left:tip.tail-9}}/>
+                  <span style={mp.tipName(attained)}>{stage.name}</span>
+                  <span style={mp.tipRange(attained)}>{stage.min}â€“{stage.max} hours</span>
+                  {hasImage && (
+                    <span style={mp.tipImageWrap}>
+                      <img src={stage.image} alt="" loading="lazy" style={mp.tipImage}/>
+                    </span>
+                  )}
+                  <span style={mp.tipStatus(attained)}>
+                    {attained ? "(Completed)" : `(${fmtRemaining(remaining)} remaining)`}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+      </div>
+      <div aria-hidden="true" style={mp.dividerOpen}/>
+    </section>
+  );
+}

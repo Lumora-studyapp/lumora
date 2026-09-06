@@ -1,0 +1,28 @@
+.sg-stage-badge{position:absolute;inset:0;z-index:5;display:block;isolation:isolate;pointer-events:none;color:var(--stage-color)}
+.sg-stage-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.sg-stage-burst{position:absolute;inset:0;pointer-events:none;animation:sg-stage-lifetime 1550ms linear both}
+.sg-stage-burst svg{position:absolute;width:700px;height:700px;max-width:none;max-height:none;left:50%;top:50%;margin:-350px 0 0 -350px;overflow:visible}
+.sg-stage-rings{z-index:1}.sg-stage-front{z-index:4;top:60%!important}.sg-stage-shimmer-front{z-index:5;top:60%!important}
+.sg-stage-character{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;transform-origin:center bottom;will-change:transform,opacity}
+.sg-stage-character img{display:block;max-width:min(94vw,410px);max-height:min(50vh,460px);object-fit:contain;transform-origin:bottom center;filter:drop-shadow(0 14px 22px rgba(25,43,31,.22))}
+.sg-stage-character-old{animation:sg-stage-skin-out 1550ms linear both}
+.sg-stage-character-new{animation:sg-stage-skin-in 1550ms linear both}
+.sg-stage-arrows{animation:sg-stage-rise 1550ms linear both;will-change:transform,opacity}
+.sg-stage-white{animation:sg-stage-bright 1550ms linear both}
+.sg-stage-light{animation:sg-stage-light 1550ms linear both}
+.sg-stage-dots{animation:sg-stage-shimmer 1550ms linear both;will-change:transform,opacity}
+.sg-stage-ring{transform-origin:160px 160px;animation:sg-stage-ring 1550ms cubic-bezier(.16,.55,.3,1) both;will-change:transform,opacity}
+.sg-stage-ring-1{animation-delay:65ms}.sg-stage-ring-2{animation-delay:130ms}
+.sg-stage-echo{animation:sg-stage-echo 1550ms linear both;will-change:transform,opacity}
+.sg-stage-echo-1{translate:0 24px}.sg-stage-echo-2{translate:0 48px}
+@keyframes sg-stage-lifetime{from{opacity:1}to{opacity:1}}
+@keyframes sg-stage-rise{0%{transform:translateY(165px);opacity:0}4%{opacity:1}14%{transform:translateY(28px)}28%{transform:translateY(18px)}68%{transform:translateY(-4px);opacity:1}80%{transform:translateY(-18px)}89%{transform:translateY(-95px);opacity:1}96%,100%{transform:translateY(-210px);opacity:0}}
+@keyframes sg-stage-bright{0%,5%{opacity:0}15%,30%{opacity:1}42%,73%{opacity:.72}84%{opacity:1}100%{opacity:0}}
+@keyframes sg-stage-light{0%{opacity:0}15%,28%{opacity:1}55%{opacity:.35}87%,100%{opacity:0}}
+@keyframes sg-stage-ring{0%,10%{transform:scale(.5);opacity:0}18%{opacity:.7}55%{opacity:.38}90%,100%{transform:scale(2.55);opacity:0}}
+@keyframes sg-stage-echo{0%,10%{transform:translateY(38px);opacity:0}25%{opacity:.35}72%{transform:translateY(-35px);opacity:.3}90%{opacity:.22}100%{transform:translateY(-142px);opacity:0}}
+@keyframes sg-stage-shimmer{0%{transform:translateY(88px);opacity:0}8%{opacity:.65}20%{transform:translateY(24px);opacity:1}70%{transform:translateY(-8px);opacity:.65}82%{opacity:1}94%,100%{transform:translateY(-140px);opacity:0}}
+@keyframes sg-stage-skin-out{0%,72%{transform:translateY(0);opacity:1}84%,100%{transform:translateY(-16%);opacity:0}}
+@keyframes sg-stage-skin-in{0%,72%{transform:translateY(16%) scale(.76);opacity:0}76%{transform:translateY(10%) scale(.86);opacity:.2}85%{transform:translateY(0) scale(1.08);opacity:1}91%{transform:translateY(0) scale(.965)}96%{transform:translateY(0) scale(1.025)}100%{transform:translateY(0) scale(1);opacity:1}}
+html[data-animation-disabled="true"] .sg-stage-burst{display:none}
+@media(prefers-reduced-motion:reduce){.sg-stage-burst{display:none}}

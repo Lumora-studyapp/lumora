@@ -1,0 +1,5 @@
+package com.lumora.app;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {}

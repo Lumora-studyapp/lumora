@@ -6,4 +6,5 @@ dist/
 firebase-debug.log
 firebase-debug.*.log
 .vercel/
+artifacts/
 
