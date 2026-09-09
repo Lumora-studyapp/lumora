@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   GROUP_REWARD_MIN_PARTICIPANTS,
+  groupCanReachRewards,
   groupRewardEligibility,
   groupRows,
   selectLargestEligibleRewardGroup,
@@ -20,11 +21,17 @@ test("group rows preserve members with no study time while participant mode excl
   assert.deepEqual(groupRows(group, entries(2), { participantsOnly: true }).map(row => row.username), ["user1", "user2"]);
 });
 
-test("weekly group rewards require five participating members", () => {
+test("weekly group rewards require three participating members", () => {
   const group = { members: entries(6).map(row => row.username) };
-  assert.equal(GROUP_REWARD_MIN_PARTICIPANTS, 5);
-  assert.equal(groupRewardEligibility(group, entries(4)).eligible, false);
-  assert.equal(groupRewardEligibility(group, entries(5)).eligible, true);
+  assert.equal(GROUP_REWARD_MIN_PARTICIPANTS, 3);
+  assert.equal(groupRewardEligibility(group, entries(2)).eligible, false);
+  assert.equal(groupRewardEligibility(group, entries(3)).eligible, true);
+});
+
+test("rotating rewards are shown only to groups large enough to qualify", () => {
+  assert.equal(groupCanReachRewards({ members: ["one", "two"] }), false);
+  assert.equal(groupCanReachRewards({ members: ["one", "two", "three"] }), true);
+  assert.equal(groupCanReachRewards({ members: ["One", "one", "two"] }), false);
 });
 
 test("one reward uses the largest eligible group by membership", () => {

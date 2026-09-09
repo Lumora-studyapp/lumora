@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
+import SubjectColourPicker from "./SubjectColourPicker.jsx";
+import {attachClassroomGestures} from "./classroomGestures.js";
 import PRIVACY_POLICY_HTML from "./privacyPolicy.html?raw";
 import { auth, db, functions } from "./firebase.js";
 import {
@@ -12,7 +14,7 @@ import {
 import {
   formatStudyDate, getPreviousStudyWeekKey, getPreviousStudyWeekStart,
   getStudyDayOfWeek, getStudyWeekKey,
-  shiftStudyDay, shiftStudyWeek, startOfStudyDay, startOfStudyWeek,
+  shiftStudyDay, splitStudySessionByWeek, shiftStudyWeek, startOfStudyDay, startOfStudyWeek,
 } from "./studyWeek.js";
 import { getWeeklyRewardMode, pickDeterministicUnowned } from "./rewardRotation.js";
 import {
@@ -23,7 +25,7 @@ import {
   normalizeFriendUsername, normalizePresenceRecord,
 } from "./friendships.js";
 import {
-  GROUP_REWARD_MIN_PARTICIPANTS, groupRewardEligibility, groupRows,
+  GROUP_REWARD_MIN_PARTICIPANTS, groupCanReachRewards, groupRewardEligibility, groupRows,
   selectLargestEligibleRewardGroup,
 } from "./groupRewards.js";
 import {
@@ -50,7 +52,8 @@ const PRIVACY_POLICY_WITHOUT_BRANDING = PRIVACY_POLICY_HTML
   .replace(/<span style="display: block;margin: 0 auto 3\.125rem;[\s\S]*?<\/span>\s*(?=<div data-custom-class="body">)/i,"")
   .replace(/<div style="display: none;"><a class="privacy123"[\s\S]*?<\/a><\/div>/gi,"")
   .replace(/https:\/\/app\.termly\.io\/dsar\/[a-z0-9-]+/gi,"mailto:lumora.studyapp@gmail.com?subject=Data%20subject%20access%20request")
-  .replace(/<br><div><span data-custom-class='body_text'>This Privacy Policy was created using Termly's[\s\S]*?<\/div>\s*$/i,"");
+  .replace(/<br><div><span data-custom-class='body_text'>This Privacy Policy was created using Termly's[\s\S]*?<\/div>\s*$/i,"")
+  .replace("</head>","<style>:root,html,body{background:transparent!important}</style></head>");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const LS_USER     = "studygrove_username";
@@ -62,6 +65,12 @@ const LS_COINS    = "studygrove_coins";
 const ADMIN_USERS = (import.meta.env.VITE_LUMORA_ADMIN_USERNAMES || "")
   .split(",").map(canon => canon.trim().normalize("NFC").toLowerCase()).filter(Boolean);
 const TEST_COIN_USERS = Object.freeze(["phamalam","v2trapps"]);
+const DEV_UNLIMITED_COINS = import.meta.env.DEV;
+const DEV_COIN_BALANCE = 999_999_999;
+const capitalizeSubjectLabel=value=>{
+  const label=String(value||"").trim();
+  return label?label.charAt(0).toLocaleUpperCase()+label.slice(1):label;
+};
 const AUTH_FUNCTIONS_ENABLED = import.meta.env.VITE_LUMORA_AUTH_FUNCTIONS === "true";
 const ANNOUNCEMENT_ADMIN = ADMIN_USERS[0] || "";
 const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
@@ -111,8 +120,72 @@ export const APP_CSS = `
   70%  { box-shadow: 0 0 0 7px rgba(52,199,89,0); }
   100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); }
 }
-.sg-shell ::-webkit-scrollbar { height:5px; width:5px; }
-.sg-shell ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:8px; }
+.sg-shell {
+  --sg-scrollbar-thumb:var(--sg-theme-accent,#2D6A4F);
+  scrollbar-width:thin;
+  scrollbar-color:var(--sg-scrollbar-thumb) transparent;
+}
+.sg-assessment-grid-icon { color:var(--sg-scrollbar-thumb)!important; }
+.sg-shell * {
+  scrollbar-width:thin;
+  scrollbar-color:var(--sg-scrollbar-thumb) transparent;
+}
+/* Chromium must use the WebKit scrollbar below. Keeping the Firefox colour
+   properties active here makes Windows render its native arrow buttons over
+   our custom track, which is why sheets and editors differed from the shop. */
+@supports selector(::-webkit-scrollbar) {
+  .sg-shell,
+  .sg-shell * {
+    scrollbar-width:auto;
+    scrollbar-color:auto;
+  }
+}
+.sg-shell ::-webkit-scrollbar { height:7px; width:7px; background:transparent; }
+.sg-shell ::-webkit-scrollbar-track,
+.sg-shell ::-webkit-scrollbar-corner { background:transparent; }
+.sg-shell ::-webkit-scrollbar-thumb {
+  min-height:34px;
+  border:1px solid transparent;
+  border-radius:999px;
+  background:var(--sg-scrollbar-thumb,var(--sg-theme-accent,#2D6A4F));
+  background-clip:padding-box;
+}
+.sg-shell ::-webkit-scrollbar:horizontal { height:8px; }
+.sg-shell ::-webkit-scrollbar-track:horizontal {
+  margin-inline:8px;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--sg-theme-panel-solid,#fff) 46%,transparent);
+}
+.sg-shell ::-webkit-scrollbar-thumb:horizontal {
+  border-radius:999px;
+  background:linear-gradient(90deg,var(--sg-theme-accent,#2D6A4F),var(--sg-theme-accent-2,#56B68B));
+  background-clip:padding-box;
+}
+.sg-shell .sg-subject-scroll::-webkit-scrollbar-track { margin-inline:17px; }
+.sg-shell ::-webkit-scrollbar-button,
+.sg-shell ::-webkit-scrollbar-button:single-button,
+.sg-shell ::-webkit-scrollbar-button:vertical:decrement,
+.sg-shell ::-webkit-scrollbar-button:vertical:increment,
+.sg-shell ::-webkit-scrollbar-button:horizontal:decrement,
+.sg-shell ::-webkit-scrollbar-button:horizontal:increment {
+  display:none!important;
+  width:0!important;
+  height:0!important;
+  background:transparent!important;
+}
+.sg-shell .sg-sheet-anim {
+  box-sizing:border-box;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+}
+.sg-shell .sg-sheet-anim::-webkit-scrollbar-track { margin-block:26px 16px; }
+.sg-shell .sg-assessment-editor,
+.sg-shell .sg-pop-anim[role="dialog"] {
+  box-sizing:border-box;
+  scrollbar-gutter:stable;
+}
+.sg-shell .sg-assessment-editor::-webkit-scrollbar-track,
+.sg-shell .sg-pop-anim[role="dialog"]::-webkit-scrollbar-track { margin-block:18px; }
 .sg-shell .sg-classroom-scroll { scrollbar-width:none; -ms-overflow-style:none; }
 .sg-shell .sg-classroom-scroll::-webkit-scrollbar { display:none; width:0; height:0; }
 .sg-shell {
@@ -161,6 +234,10 @@ export const APP_CSS = `
    Each scene supplies a distinct two-colour palette while semantic tokens keep
    text, controls and focus states readable in light and dark appearance modes. */
 .sg-shell[data-background] {
+  --sg-theme-neutral:color-mix(in srgb,var(--sg-theme-accent) 16%,#f1f2ef);
+  --sg-theme-sheet:linear-gradient(160deg,color-mix(in srgb,var(--sg-theme-accent) 24%,#f2f0ef),color-mix(in srgb,var(--sg-theme-accent-2) 18%,#f1f0ef));
+  --sg-theme-control-track:color-mix(in srgb,var(--sg-theme-accent) 24%,#e9eae7);
+  --sg-theme-accent-wash:color-mix(in srgb,var(--sg-theme-accent) 18%,#f2f4f1);
   --sg-theme-accent-2:color-mix(in srgb,var(--sg-theme-accent) 68%,#f4b96a);
   --sg-theme-highlight:color-mix(in srgb,var(--sg-theme-accent) 56%,#fff1b8);
   --sg-theme-accent-strong:color-mix(in srgb,var(--sg-theme-accent) 78%,#14251c);
@@ -179,8 +256,8 @@ export const APP_CSS = `
 }
 /* Scene-specific complementary colours make themes feel intentional rather
    than like one green tint was placed over every background. */
-.sg-shell[data-background="classic-grove"]{--sg-theme-accent-2:#e5a84e;--sg-theme-highlight:#dff29b}
-.sg-shell[data-background="midnight-minimal"]{--sg-theme-accent-2:#5f78c9;--sg-theme-highlight:#9bd8d0}
+.sg-shell[data-background="classic-grove"]{--sg-theme-accent:#6e9b72;--sg-theme-accent-2:#e5a84e;--sg-theme-highlight:#dff29b}
+.sg-shell[data-background="midnight-minimal"]{--sg-theme-accent:#527a8f;--sg-theme-accent-2:#5f78c9;--sg-theme-highlight:#9bd8d0}
 .sg-shell[data-background="sunset-loft"]{--sg-theme-accent:#d78045;--sg-theme-accent-2:#8b72c7;--sg-theme-highlight:#ffd28a}
 .sg-shell[data-background="sakura-lake"]{--sg-theme-accent:#d978a0;--sg-theme-accent-2:#8b78ce;--sg-theme-highlight:#ffd0df}
 .sg-shell[data-background="rainfall-sanctuary"]{--sg-theme-accent:#4f8ba7;--sg-theme-accent-2:#65a88e;--sg-theme-highlight:#b9e2ee}
@@ -188,8 +265,8 @@ export const APP_CSS = `
 .sg-shell[data-background="lantern-study-hall"]{--sg-theme-accent:#c54f3c;--sg-theme-accent-2:#e79736;--sg-theme-highlight:#ffd16d}
 .sg-shell[data-background="violet-moonlands"]{--sg-theme-accent:#8064cf;--sg-theme-accent-2:#d173b6;--sg-theme-highlight:#c7b7ff}
 .sg-shell[data-background="celestial-garden"]{--sg-theme-accent:#596dc4;--sg-theme-accent-2:#a363ca;--sg-theme-highlight:#f4c969}
-.sg-shell[data-background="underwater-classroom"]{--sg-theme-accent:#288ea6;--sg-theme-accent-2:#45ad83;--sg-theme-highlight:#87e0df}
-.sg-shell[data-background="planetarium-classroom"]{--sg-theme-accent:#5e69b8;--sg-theme-accent-2:#9a66c5;--sg-theme-highlight:#f1c768}
+.sg-shell[data-background="ocean-observatory"]{--sg-theme-accent:#288ea6;--sg-theme-accent-2:#45ad83;--sg-theme-highlight:#87e0df}
+.sg-shell[data-background="starlight-planetarium"]{--sg-theme-accent:#5e69b8;--sg-theme-accent-2:#9a66c5;--sg-theme-highlight:#f1c768}
 [data-theme="dark"] .sg-shell[data-background]{
   --sg-theme-panel:color-mix(in srgb,rgba(20,25,35,.8) 68%,var(--sg-theme-accent) 32%);
   --sg-theme-panel-solid:color-mix(in srgb,#171b22 73%,var(--sg-theme-accent) 27%);
@@ -225,13 +302,47 @@ export const APP_CSS = `
   box-shadow:0 9px 28px var(--sg-theme-shadow)!important;
   color:var(--sg-theme-text)!important;
 }
-.sg-main-header{
-  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-panel-solid) 82%,transparent),color-mix(in srgb,var(--sg-theme-panel-soft) 68%,transparent))!important;
-  border-bottom-color:var(--sg-theme-border)!important;
+.sg-shell .sg-pop-anim.sg-add-subject-modal{
+  background:color-mix(in srgb,#fff 80%,var(--sg-theme-accent,#56B68B) 20%)!important;
+}
+[data-theme="dark"] .sg-shell .sg-pop-anim.sg-add-subject-modal{
+  background:color-mix(in srgb,#171b22 73%,var(--sg-theme-accent,#56B68B) 27%)!important;
+}
+.sg-main-header,
+.sg-main-nav{
+  position:relative;
+  isolation:isolate;
+  background:transparent!important;
+}
+.sg-main-header::before,
+.sg-main-nav::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+}
+.sg-main-header::before{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-accent) 18%,transparent),color-mix(in srgb,var(--sg-theme-accent-2) 16%,transparent));
+}
+.sg-main-nav::before{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-accent-2) 16%,transparent),color-mix(in srgb,var(--sg-theme-accent) 12%,transparent));
 }
 .sg-main-nav {
-  border-color:var(--sg-theme-border)!important;
-  background:var(--sg-theme-nav-gradient)!important;
+  border-bottom:1px solid color-mix(in srgb,var(--sg-theme-accent,#56B68B) 45%,transparent)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.sg-shell[data-background] .sg-assessment-summary{
+  background:var(--sg-theme-neutral)!important;
+}
+.sg-shell[data-background] .sg-sheet-anim,
+.sg-shell[data-background] .sg-sheet-theme-header,
+.sg-shell[data-background] .sg-privacy-policy-frame{
+  background:var(--sg-theme-sheet)!important;
+}
+[data-theme="dark"] .sg-shell[data-background] .sg-assessment-summary{
+  --sg-assessment-fill:var(--sg-theme-panel-solid)!important;
 }
 .sg-main-nav .sg-main-nav-button {
   color:var(--sg-theme-muted)!important;
@@ -289,17 +400,17 @@ export const APP_CSS = `
   border-color:var(--sg-theme-border)!important;
   box-shadow:0 8px 24px var(--sg-theme-shadow),inset 0 1px 0 rgba(255,255,255,.38)!important;
 }
-.sg-shell[data-background] .sg-card-anim:nth-child(3n+1),
-.sg-shell[data-background] .sg-tap-card:nth-child(3n+1){
-  border-top-color:var(--sg-theme-accent)!important;
+.sg-shell .sg-card-anim,
+.sg-shell .sg-main-menu-sheet .sg-tap-card,
+.sg-shell .sg-background-card{
+  background-origin:border-box;
+  background-clip:border-box;
+  border-top-color:transparent!important;
 }
-.sg-shell[data-background] .sg-card-anim:nth-child(3n+2),
-.sg-shell[data-background] .sg-tap-card:nth-child(3n+2){
-  border-top-color:var(--sg-theme-accent-2)!important;
-}
-.sg-shell[data-background] .sg-card-anim:nth-child(3n),
-.sg-shell[data-background] .sg-tap-card:nth-child(3n){
-  border-top-color:var(--sg-theme-highlight)!important;
+.sg-shell[data-background] .sg-card-anim,
+.sg-shell[data-background] .sg-main-menu-sheet .sg-tap-card,
+.sg-shell[data-background] .sg-background-card{
+  box-shadow:0 8px 24px var(--sg-theme-shadow)!important;
 }
 .sg-shell[data-background] input:not([type="range"]),
 .sg-shell[data-background] select,
@@ -495,9 +606,19 @@ export const APP_CSS = `
 .sg-assessment-week {
   display: grid;
   grid-template-columns: repeat(7,minmax(0,1fr));
-  gap: 3px;
+  gap: 5px;
   width: 100%;
   min-width: 0;
+}
+.sg-assessment-week > button:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: -3px;
+  width: 1px;
+  background: color-mix(in srgb,var(--sg-theme-border,#D7E2D8) 72%,transparent);
+  pointer-events: none;
 }
 @media (max-width: 340px) {
   .sg-assessment-editor .sg-assessment-essential {
@@ -743,7 +864,14 @@ export const APP_CSS = `
 
 /* Shop layout safeguards. Inline styles provide the default two-column grid;
    these classes handle genuinely narrow viewports without widening the sheet. */
-.sg-shop-sheet { width: min(100%, 460px) !important; max-width: 100vw !important; }
+.sg-shop-sheet { width:min(100%,440px)!important; max-width:100%!important; min-width:0; box-sizing:border-box; scrollbar-width:thin; }
+@supports selector(::-webkit-scrollbar) {
+  .sg-shop-sheet { scrollbar-width:auto; scrollbar-color:auto; }
+}
+.sg-shop-sheet::-webkit-scrollbar { width:6px; background:transparent; }
+.sg-shop-sheet::-webkit-scrollbar-track { margin-block:26px 8px; background:transparent; }
+.sg-shop-sheet::-webkit-scrollbar-thumb { background:var(--sg-scrollbar-thumb,var(--sg-theme-accent,#2D6A4F)); border-radius:8px; }
+.sg-shop-sheet::-webkit-scrollbar-button { display:none; }
 .sg-shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 .sg-shop-card { min-width: 0; overflow: hidden; }
 @media (max-width: 370px) {
@@ -751,9 +879,6 @@ export const APP_CSS = `
 }
 
 /* Cards subtly lift on hover (desktop) — a quiet invitation, not a jump */
-@media (max-width: 700px) {
-  .sg-subj-scroll-arrow { display:none !important; }
-}
 @media (hover: hover) {
   .sg-lift-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(26,42,32,0.10); }
   .sg-tap-card:hover  { transform: translateY(-1.5px); box-shadow: 0 6px 16px rgba(26,42,32,0.08); }
@@ -820,33 +945,79 @@ export const APP_CSS = `
 .sg-energy-pulse{animation:sgStormPulse 3.8s ease-in-out infinite}.sg-storm-arc{animation:sgStormArc 7.5s ease-in-out infinite}.sg-storm-orb{animation:sgStormOrb 4.8s ease-in-out infinite}.sg-storm-float{animation:sgStormFloat 5.6s ease-in-out infinite}
 .sg-garden-paused .sg-energy-pulse,.sg-garden-paused .sg-storm-arc,.sg-garden-paused .sg-storm-orb,.sg-garden-paused .sg-storm-float{animation-play-state:paused!important}
 .sg-duration-slider{width:100%;height:5px;border-radius:999px;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;background:linear-gradient(90deg,var(--sg-slider-color) 0 var(--sg-slider-progress),#E5EAE3 var(--sg-slider-progress) 100%)}
-.sg-duration-slider::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
-.sg-duration-slider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
+.sg-duration-slider::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--sg-theme-neutral,#fff);border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
+.sg-duration-slider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:var(--sg-theme-neutral,#fff);border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
 .sg-duration-slider:focus-visible{outline:3px solid color-mix(in srgb,var(--sg-slider-color) 28%,transparent);outline-offset:8px}
-.sg-timer-style{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;background:#EAF0E7;border-radius:13px;margin-bottom:10px}
-.sg-timer-style button{min-height:40px;border:0;border-radius:10px;background:transparent;color:#788177;font-size:12px;font-weight:700;cursor:pointer}
-.sg-timer-style button[aria-pressed="true"]{background:#fff;color:#2D6A4F;box-shadow:0 1px 4px rgba(35,64,43,.1)}
+.sg-timer-style{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0;overflow:hidden;background:#EAF0E7;border-radius:13px;margin-bottom:10px}
+.sg-timer-style button{min-height:46px;border:0;border-radius:13px;background:transparent;color:#788177;font-size:12px;font-weight:700;cursor:pointer}
+.sg-timer-style button[aria-pressed="true"]{background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-accent-strong,#2D6A4F);box-shadow:0 1px 4px var(--sg-theme-shadow,rgba(35,64,43,.1))}
 .sg-pomodoro-presets{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:1px 1px 5px;overscroll-behavior-inline:contain}
 .sg-pomodoro-presets::-webkit-scrollbar{display:none}
-.sg-pomodoro-presets button{flex:0 0 auto;min-height:40px;padding:7px 12px;border:1px solid #DDE7DA;border-radius:18px;background:#fff;color:#747D73;font-size:12px;font-weight:700;cursor:pointer}
-.sg-pomodoro-presets button[aria-pressed="true"]{border-color:var(--sg-accent);background:color-mix(in srgb,var(--sg-accent) 10%,white);color:var(--sg-accent)}
+.sg-shell[data-background] .sg-pomodoro-presets button{flex:0 0 auto;min-height:40px;padding:7px 12px;border:1px solid #DDE7DA;border-radius:18px;background:transparent!important;box-shadow:none!important;color:#747D73;font-size:12px;font-weight:700;cursor:pointer}
+.sg-shell[data-background] .sg-pomodoro-presets button[aria-pressed="true"]{border-color:var(--sg-theme-accent)!important;background:transparent!important;color:var(--sg-theme-accent-strong)!important;box-shadow:none!important}
 .sg-pomo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .sg-pomo-field label{display:block;font-size:9.5px;font-weight:750;letter-spacing:.35px;text-transform:uppercase;color:#929A91;margin:0 0 4px}
-.sg-pomo-field input,.sg-pomo-field select{width:100%;min-height:38px;border:1px solid #DDE5DB;border-radius:10px;background:#fff;color:#31443A;padding:7px 8px;font:600 12px/1.2 Inter,system-ui,sans-serif}
+.sg-pomo-field input,.sg-pomo-field select{width:100%;min-height:38px;border:1px solid #DDE5DB;border-radius:10px;background:var(--sg-theme-neutral,#fff);color:#31443A;padding:7px 8px;font:600 12px/1.2 Inter,system-ui,sans-serif}
+.sg-shell[data-background] .sg-pomo-field input,.sg-shell[data-background] .sg-pomo-field select{box-shadow:none!important}
 .sg-task-card button:focus-visible,.sg-task-card input:focus-visible,.sg-task-card select:focus-visible,
 .sg-timer-style button:focus-visible,.sg-pomodoro-presets button:focus-visible{outline:3px solid rgba(45,106,79,.2);outline-offset:2px}
-.sg-task-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px 40px;gap:4px;align-items:center;padding:11px 0;border-top:1px solid #EDF1EB}
-.sg-task-row:first-child{border-top:0}
-.sg-task-check{width:40px;height:40px;border-radius:50%;border:1px solid #DCE5D9;background:#fff;color:#2D6A4F;cursor:pointer;transition:transform .16s ease,background .16s ease,border-color .16s ease}
+.sg-centered-chevron{display:inline-flex;align-items:center;justify-content:center;line-height:1;vertical-align:middle}
+.sg-task-row{display:grid;grid-template-columns:26px minmax(0,1fr) 40px 40px;gap:4px;align-items:center;padding:11px 0;border-top:1px solid #EDF1EB}
+.sg-task-row:first-child{border-top:1px solid #EDF1EB}
+.sg-task-row:last-child{border-bottom:1px solid #EDF1EB}
+.sg-task-check{position:relative;width:24px;height:24px;justify-self:center;padding:0;border-radius:50%;border:1px solid var(--sg-theme-border,#DCE5D9);background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-accent-strong,#2D6A4F);font-size:12px;line-height:1;cursor:pointer;transition:transform .16s ease,background .16s ease,border-color .16s ease}
+.sg-shell[data-background] .sg-task-check[data-overdue="true"]{border:2px solid #D94B4B!important;background:color-mix(in srgb,var(--sg-theme-panel-solid,#FFF) 84%,#F6B9B9)!important;box-shadow:0 0 0 3px rgba(217,75,75,.16),0 3px 9px rgba(139,28,28,.22)!important}
 .sg-task-check[data-checked="true"]{background:#E6F3E8;border-color:#94B99B;transform:scale(.94)}
-.sg-task-title{min-width:0;color:#34453B;font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}
+.sg-task-title{min-width:0;padding-left:7px;color:#34453B;font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}
 .sg-task-title[data-complete="true"]{color:#99A29A;text-decoration:line-through}
+.sg-task-row[data-completing="true"] .sg-task-title{animation:sgTaskStrike .3s ease forwards}
+.sg-task-row[data-completing="true"] .sg-task-check::after{content:"";position:absolute;inset:-1px;border:2px solid color-mix(in srgb,var(--sg-theme-accent,#2D6A4F) 48%,var(--sg-theme-neutral,#fff));border-radius:50%;pointer-events:none;animation:sgTaskRipple .48s ease-out forwards}
+@keyframes sgTaskStrike{from{color:#34453B;text-decoration-color:transparent}to{color:#99A29A;text-decoration:line-through;text-decoration-color:currentColor}}
+@keyframes sgTaskRipple{0%{opacity:.7;transform:scale(.7)}100%{opacity:0;transform:scale(2.05)}}
 .sg-task-icon{width:40px;height:40px;border:0;border-radius:10px;background:transparent;color:#8A948A;cursor:pointer}
-.sg-task-icon[aria-pressed="true"]{background:#E8F4EB;color:#2D6A4F}
+.sg-task-icon[aria-pressed="true"]{background:var(--sg-theme-accent-wash,#E8F4EB);color:var(--sg-theme-accent-strong,#2D6A4F)}
 .sg-task-edit{display:grid;grid-template-columns:minmax(0,1fr) minmax(92px,.55fr);gap:7px;margin-top:7px}
-.sg-task-edit input,.sg-task-edit select{min-width:0;min-height:40px;border:1px solid #DDE5DB;border-radius:10px;background:#fff;padding:8px 10px;color:#31443A;font-size:12px}
-.sg-task-due{grid-column:1/-1}
+.sg-task-edit input,.sg-task-edit select{min-width:0;min-height:40px;border:1px solid #DDE5DB;border-radius:10px;background:var(--sg-theme-neutral,#fff);padding:8px 10px;color:#31443A;font-size:12px}
+.sg-shell[data-background] .sg-task-edit select.sg-task-select{appearance:none;-webkit-appearance:none;padding-right:32px!important;background-color:var(--sg-theme-panel-solid,#fff)!important;background-image:linear-gradient(45deg,transparent 50%,var(--sg-theme-muted,#718078) 50%),linear-gradient(135deg,var(--sg-theme-muted,#718078) 50%,transparent 50%)!important;background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px!important;background-size:5px 5px,5px 5px!important;background-repeat:no-repeat!important;cursor:pointer}
+.sg-task-card:has(.sg-task-dropdown-trigger[aria-expanded="true"]){position:relative;z-index:35;overflow:visible!important}
+.sg-task-dropdown{min-width:0;position:relative}
+.sg-task-dropdown:has(.sg-task-dropdown-trigger[aria-expanded="true"]){z-index:45}
+.sg-task-dropdown.sg-task-recurrence{grid-column:1/-1}
+.sg-task-dropdown-trigger{width:100%;min-height:42px;display:grid;grid-template-columns:25px minmax(0,1fr) 18px;align-items:center;gap:8px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:12px;background:var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff));color:var(--sg-theme-text,#31443A);padding:7px 10px;font:600 12px/1.2 Inter,system-ui,sans-serif;text-align:left;cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
+.sg-task-dropdown-trigger:hover,.sg-task-dropdown-trigger[aria-expanded="true"]{border-color:color-mix(in srgb,var(--sg-theme-accent,#56B68B) 58%,var(--sg-theme-border,#DDE5DB));background:color-mix(in srgb,var(--sg-theme-highlight,#EEF6F0) 20%,var(--sg-theme-panel-solid,#fff));box-shadow:0 0 0 3px color-mix(in srgb,var(--sg-theme-accent,#56B68B) 12%,transparent)}
+.sg-task-dropdown-leading{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:var(--sg-theme-accent-wash,#E8F5EE);font-size:14px;line-height:1}
+.sg-task-dropdown-chevron{justify-self:end;color:var(--sg-theme-muted,#718078);font-size:11px;transition:transform .18s ease}
+.sg-task-dropdown-trigger[aria-expanded="true"] .sg-task-dropdown-chevron{transform:rotate(180deg)}
+.sg-task-dropdown-menu{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:50;display:flex;flex-direction:column;gap:3px;padding:6px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:14px;background:var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff));box-shadow:0 9px 24px var(--sg-theme-shadow,rgba(25,45,31,.14));max-height:min(260px,52dvh);overflow-y:auto}
+.sg-task-dropdown-option{width:100%;min-height:38px;display:grid;grid-template-columns:27px minmax(0,1fr) 20px;align-items:center;gap:8px;border:0;border-radius:10px;background:transparent;color:var(--sg-theme-text,#31443A);padding:6px 8px;font:600 12px/1.2 Inter,system-ui,sans-serif;text-align:left;cursor:pointer}
+.sg-task-dropdown-option:hover{background:color-mix(in srgb,var(--sg-theme-highlight,#E8F5EE) 35%,transparent)}
+.sg-task-dropdown-option[aria-selected="true"]{background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F);font-weight:800}
+.sg-task-dropdown-option-icon{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:color-mix(in srgb,var(--sg-theme-highlight,#EEF6F0) 55%,transparent);font-size:14px}
+.sg-task-dropdown-check{justify-self:end;color:var(--sg-theme-accent-strong,#2D6A4F);font-size:13px}
+.sg-time-picker{position:relative;min-width:0}
+.sg-time-picker-trigger{width:100%;min-height:42px;display:grid;grid-template-columns:25px minmax(0,1fr) 18px;align-items:center;gap:8px;border:1.5px solid var(--sg-theme-border,#DDE6DA);border-radius:11px;background:var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff));color:var(--sg-theme-text,#26362C);padding:7px 9px;font:600 12px/1.2 Inter,system-ui,sans-serif;text-align:left;cursor:pointer}
+.sg-time-picker-trigger[aria-expanded="true"]{border-color:var(--sg-theme-accent,#56B68B);box-shadow:0 0 0 3px color-mix(in srgb,var(--sg-theme-accent,#56B68B) 14%,transparent)}
+.sg-time-picker-icon{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F)}
+.sg-time-picker-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:70;width:min(250px,calc(100vw - 52px));padding:10px;border:1px solid var(--sg-theme-border,#DDE6DA);border-radius:14px;background:var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff));box-shadow:0 10px 28px var(--sg-theme-shadow,rgba(25,45,31,.16))}
+.sg-time-picker-fields{display:grid;grid-template-columns:minmax(0,1fr) 8px minmax(0,1fr);align-items:center;gap:5px}
+.sg-time-picker-fields input{width:100%;min-width:0;height:40px;border:1px solid var(--sg-theme-border,#DDE6DA);border-radius:10px;background:var(--sg-theme-panel-soft,#F7FAF6);color:var(--sg-theme-text,#26362C);font:750 14px/1 Inter,system-ui,sans-serif;text-align:center;padding:6px!important}
+.sg-time-picker-period{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px}
+.sg-time-picker-period button,.sg-time-picker-actions button{min-height:34px;border:0;border-radius:9px;background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F);font-size:10.5px;font-weight:800;cursor:pointer}
+.sg-time-picker-period button[aria-pressed="true"]{background:var(--sg-theme-accent,#56B68B);color:#fff}
+.sg-time-picker-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}.sg-time-picker-actions button:last-child{background:var(--sg-theme-accent,#56B68B);color:#fff}
+.sg-task-date-picker{grid-column:1/-1;position:relative;min-width:0}
+.sg-task-date-picker:has(.sg-task-calendar){z-index:70}
+.sg-task-date-button{width:100%;min-height:42px;display:flex;align-items:center;gap:9px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:11px;background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-text,#31443A);padding:8px 11px;font-size:12px;text-align:left;cursor:pointer}
+.sg-task-date-button>span:first-child{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F);font-size:17px;line-height:1}
+.sg-task-date-button>span:nth-child(2){flex:1}.sg-task-date-button>span:last-child{color:var(--sg-theme-muted,#718078);font-size:10px}
+.sg-task-calendar{position:absolute;top:calc(100% + 6px);right:0;z-index:70;width:min(350px,calc(100vw - 36px));box-sizing:border-box;margin:0;padding:12px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:14px;background:var(--sg-theme-panel-solid,#fff);box-shadow:0 10px 28px var(--sg-theme-shadow,rgba(25,45,31,.16))}
+.sg-task-calendar-header{display:grid;grid-template-columns:30px 1fr 30px;align-items:center;gap:6px;margin-bottom:7px}.sg-task-calendar-header strong{text-align:center;font-size:12px;color:var(--sg-theme-text,#31443A)}
+.sg-task-calendar-header button{width:30px;height:30px;display:grid;place-items:center;border:0;border-radius:9px;background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F);font-size:17px;line-height:1;cursor:pointer}
+.sg-task-calendar-weekdays,.sg-task-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}.sg-task-calendar-weekdays span{text-align:center;color:var(--sg-theme-muted,#89938C);font-size:8.5px;font-weight:800;padding:3px 0}
+.sg-task-calendar-day{aspect-ratio:1;border:0;border-radius:9px;background:transparent;color:var(--sg-theme-text,#31443A);font-size:10.5px;font-weight:650;cursor:pointer}.sg-task-calendar-day[data-outside="true"]{opacity:.35}.sg-task-calendar-day[data-today="true"]{box-shadow:inset 0 0 0 1px var(--sg-theme-border,#BFDAC8)}.sg-task-calendar-day[data-selected="true"]{background:var(--sg-theme-accent)!important;color:#fff!important;font-weight:800}
+.sg-task-calendar-footer{display:flex;justify-content:space-between;gap:7px;margin-top:8px}.sg-task-calendar-footer button{border:0;border-radius:9px;background:var(--sg-theme-accent-wash,#E8F5EE);color:var(--sg-theme-accent-strong,#2D6A4F);padding:7px 10px;font-size:10.5px;font-weight:750;cursor:pointer}
 .sg-task-schedule{grid-column:1/-1}
+.sg-task-recurrence{grid-column:1/-1;cursor:pointer}
 .sg-task-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:7px}
 .sg-task-actions button{min-height:38px;border:0;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
 .sg-break-screen{background:linear-gradient(160deg,#EAF4EF 0%,#F7F2E9 100%)!important}
@@ -855,7 +1026,7 @@ export const APP_CSS = `
   .sg-pomo-grid{grid-template-columns:1fr 1fr}
   .sg-pomo-field:last-child{grid-column:1/-1}
   .sg-task-edit{grid-template-columns:1fr}
-  .sg-task-due,.sg-task-schedule{grid-column:auto}
+  .sg-task-schedule,.sg-task-recurrence{grid-column:auto}
 }
 @media (max-height:720px){
   .sg-session-screen{padding-bottom:max(14px,env(safe-area-inset-bottom))!important}
@@ -1017,8 +1188,8 @@ const SESSION_GLOW_LAYOUT = [
   {bottom:"23%",left:"17%",size:18,dx:"6px",dy:"-9px",rx:"-2px",ry:"3px",dur:26,delay:-13,opacityLow:.03,opacityMid:.07,opacityHigh:.1},
 ];
 
-const EMOJI_OPTIONS = ["📐","📖","🔬","🏛️","🌏","📊","🎨","✏️","💻","🎵","🏃","🧪","📝","🌍","🔭","💡","📚","🧠","⚙️","🎯"];
-const COLOR_OPTIONS = ["#5B8DEF","#E07B54","#56B68B","#C57BDB","#E8B84B","#6ECBD1","#F07B8F","#A0A0B0","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4"];
+const EMOJI_OPTIONS = ["📐","📖","🔬","🏛️","📊","🎨","✏️","💻","🎵","🏃","🧪","📝","🌍","🔭","💡","📚","🧠","⚙️","🎯","🍎"];
+const COLOR_OPTIONS = ["#FF0000","#FF4700","#FFB100","#E8FF00","#006B35","#00FF8E","#00FFED","#00CFFF","#003399","#C400FF","#FF69B4","#FFB6D9","#AD1457","#808080","#000000"];
 const COINS_PER_MIN = 1;
 const WEEKLY_PODIUM_REWARDS = [300, 150, 100];
 
@@ -1874,7 +2045,7 @@ function buildInsights({ history, subjects, targets, streak, coins }) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Keep the long-standing helper names inside App.jsx, but route all of them to
-// the single Melbourne Sunday-midnight contract in studyWeek.js.
+// the single Melbourne Monday 04:00 contract in studyWeek.js.
 const getWeekKeyFor = getStudyWeekKey;
 const getWeekKey = () => getStudyWeekKey();
 const getPreviousCompletedWeek = getPreviousStudyWeekStart;
@@ -1988,17 +2159,15 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
   const endTs=Number.isFinite(Number(m.endTs))&&Number(m.endTs)>0
     ? Number(m.endTs)
     : Date.now();
-  // Attribute the session to the calendar day/week on which it began. Using
-  // Date.now() here made a session started before midnight appear to vanish
-  // from that day's history (and, on Sunday night, from that week's board)
-  // when it was completed after midnight. The full duration still remains one
-  // session and one tree; endTs preserves the real completion time.
+  // The session remains one history entry. Weekly totals below split its focus
+  // time at Monday 04:00 if it crosses the host account's reset boundary.
   const requestedStart=Number(m.startTs);
   const sessionTs=Number.isFinite(requestedStart)&&requestedStart>0&&requestedStart<=endTs
     ? requestedStart
     : Math.max(0,endTs-Math.max(0,Number(secs)||0)*1000);
-  const weekKey = getWeekKeyFor(sessionTs);
-  const wRef=doc(db,"leaderboard_weekly",weekKey);
+  const weeklyChunks=splitStudySessionByWeek(sessionTs,endTs,secs);
+  const weekKey=weeklyChunks[0]?.weekKey||getWeekKeyFor(sessionTs);
+  const weeklyRefs=weeklyChunks.map(chunk=>doc(db,"leaderboard_weekly",chunk.weekKey));
   const aRef=doc(db,"leaderboard_alltime","data");
   const hRef=doc(db,"history",username);
   const prefsRef=doc(db,"prefs",username);
@@ -2021,21 +2190,30 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
     ...(m.taskId?{taskId:String(m.taskId).slice(0,80)}:{}),
     ...(m.taskTitle?{taskTitle:cleanTaskTitle(m.taskTitle)}:{}),
   };
-  const bumpBoard=data=>{
+  const subjectsForChunk=(chunk,index)=>{
+    const result={};
+    subjectSegments.forEach(segment=>{
+      const already=weeklyChunks.slice(0,index).reduce((sum,earlier)=>sum+Math.round(segment.secs*earlier.secs/secs),0);
+      const amount=index===weeklyChunks.length-1?segment.secs-already:Math.round(segment.secs*chunk.secs/secs);
+      if(amount>0)result[segment.subject]=amount;
+    });
+    return result;
+  };
+  const bumpBoard=(data,addedSecs=secs,addedSessions=1,addedSubjects=null)=>{
     const board=data&&typeof data==="object"?data:{};
     const current=board[username]||{};
     const subjects={...(current.subjects||{})};
-    subjectSegments.forEach(segment=>{subjects[segment.subject]=(subjects[segment.subject]||0)+segment.secs;});
+    Object.entries(addedSubjects||Object.fromEntries(subjectSegments.map(segment=>[segment.subject,segment.secs]))).forEach(([id,amount])=>{subjects[id]=(subjects[id]||0)+amount;});
     return {...board,[username]:{
-      totalSecs:(current.totalSecs||0)+secs,
-      sessions:(current.sessions||0)+1,
+      totalSecs:(current.totalSecs||0)+addedSecs,
+      sessions:(current.sessions||0)+addedSessions,
       subjects,
     }};
   };
   try {
     return await runTransaction(db,async tx=>{
-      const [wSnap,aSnap,hSnap,prefsSnap]=await Promise.all([
-        tx.get(wRef),tx.get(aRef),tx.get(hRef),tx.get(prefsRef),
+      const [weeklySnaps,aSnap,hSnap,prefsSnap]=await Promise.all([
+        Promise.all(weeklyRefs.map(ref=>tx.get(ref))),tx.get(aRef),tx.get(hRef),tx.get(prefsRef),
       ]);
       const history=hSnap.exists()?(hSnap.data().sessions||[]):[];
       const prefs=prefsSnap.exists()?prefsSnap.data():{};
@@ -2052,7 +2230,9 @@ async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0)
 
       // One commit keeps history (source of truth), both derived boards and
       // the wallet in lockstep. A transaction retry reuses the same entry ts.
-      tx.set(wRef,bumpBoard(wSnap.exists()?wSnap.data():{}));
+      weeklyChunks.forEach((chunk,index)=>tx.set(weeklyRefs[index],bumpBoard(
+        weeklySnaps[index].exists()?weeklySnaps[index].data():{},chunk.secs,chunk.sessions,subjectsForChunk(chunk,index),
+      )));
       tx.set(aRef,bumpBoard(aSnap.exists()?aSnap.data():{}));
       tx.set(hRef,{sessions:[...history,entry].slice(-2000)});
       if(change>0)tx.set(prefsRef,{coins:coinBalance},{merge:true});
@@ -2181,7 +2361,7 @@ async function fbLoadWeekBoard(wk) {
 
 // ── Invite-only group leaderboards ──────────────────────────────────────────
 // Groups reuse the verified aggregate session totals. A group becomes reward
-// eligible only after five distinct members participate during the week.
+// eligible after three distinct members participate during the week.
 const GROUP_MAX_MEMBERS=20;
 const GROUP_MAX_PER_USER=3;
 const cleanGroupName=raw=>(raw||"").trim().replace(/\s+/g," ").slice(0,24);
@@ -3082,9 +3262,17 @@ async function fbClaimMilestoneReward(usernameRaw, stageIndex) {
 // for every write, and Firestore rules enforce the same ownership boundary.
 const taskCacheKey=username=>`studygrove_tasks_${canonUsername(username)}`;
 const newTaskId=()=>`task_${genTabId().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,42)}`;
-const cleanTaskTitle=value=>String(value||"").trim().replace(/\s+/g," ").slice(0,180);
+const cleanTaskTitle=value=>{
+  const title=String(value||"").trim().replace(/\s+/g," ");
+  return title ? `${title.charAt(0).toLocaleUpperCase()}${title.slice(1)}`.slice(0,180) : "";
+};
 const cleanTaskSubject=value=>String(value||"").trim().slice(0,80);
 const cleanTaskDueDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value||""))?String(value):"";
+const TASK_RECURRENCE_OPTIONS=Object.freeze([
+  {value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"monthly",label:"Monthly"},
+]);
+const cleanTaskRecurrence=value=>TASK_RECURRENCE_OPTIONS.some(option=>option.value===value)?value:"";
+const taskRecurrenceLabel=value=>TASK_RECURRENCE_OPTIONS.find(option=>option.value===value)?.label||"";
 const taskDateKey=date=>{
   const local=new Date(date.getFullYear(),date.getMonth(),date.getDate());
   return `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,"0")}-${String(local.getDate()).padStart(2,"0")}`;
@@ -3093,7 +3281,7 @@ const taskDateFromShortcut=(value,now=new Date())=>{
   const text=String(value||"").trim().toLowerCase().replace(/\.$/,"");
   if(!text)return "";
   const date=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  if(["today","tdy"].includes(text))return taskDateKey(date);
+  if(["today","tdy","tod"].includes(text))return taskDateKey(date);
   if(["tomorrow","tmr","tomo"].includes(text)){date.setDate(date.getDate()+1);return taskDateKey(date);}
   const days=["sun","mon","tue","wed","thu","fri","sat"];
   const day=days.findIndex(name=>text===name||text===`${name}s`||text===`${name}day`);
@@ -3101,24 +3289,23 @@ const taskDateFromShortcut=(value,now=new Date())=>{
   date.setDate(date.getDate()+((day-date.getDay()+7)%7));
   return taskDateKey(date);
 };
-const nextRecurringTaskDate=(date=new Date())=>{
-  const next=new Date(date.getFullYear(),date.getMonth(),date.getDate());
-  next.setDate(next.getDate()+1);
-  return taskDateKey(next);
-};
 const taskRef=(username,id)=>doc(db,"tasks",canonUsername(username),"items",String(id));
-const normalizeTask=(id,data={})=>({
-  id:String(id),
-  title:cleanTaskTitle(data.title),
-  completed:data.completed===true,
-  subject:cleanTaskSubject(data.subject),
-  dueDate:cleanTaskDueDate(data.dueDate),
-  recurring:data.recurring===true,
-  order:Number.isFinite(Number(data.order))?Number(data.order):Number(data.createdAtMs)||Date.now(),
-  createdAtMs:Number(data.createdAtMs)||Date.now(),
-  updatedAtMs:Number(data.updatedAtMs)||Number(data.createdAtMs)||Date.now(),
-  completedAtMs:Number(data.completedAtMs)||0,
-});
+const normalizeTask=(id,data={})=>{
+  const recurrence=cleanTaskRecurrence(data.recurrence)||(data.recurring===true?"daily":"");
+  return {
+    id:String(id),
+    title:cleanTaskTitle(data.title),
+    completed:data.completed===true,
+    subject:cleanTaskSubject(data.subject),
+    dueDate:cleanTaskDueDate(data.dueDate),
+    recurrence,
+    recurring:!!recurrence,
+    order:Number.isFinite(Number(data.order))?Number(data.order):Number(data.createdAtMs)||Date.now(),
+    createdAtMs:Number(data.createdAtMs)||Date.now(),
+    updatedAtMs:Number(data.updatedAtMs)||Number(data.createdAtMs)||Date.now(),
+    completedAtMs:Number(data.completedAtMs)||0,
+  };
+};
 
 async function fbLoadTasks(usernameRaw,password){
   const username=canonUsername(usernameRaw);
@@ -3143,7 +3330,7 @@ async function fbCreateTask(usernameRaw,password,id,input){
     const now=Date.now();
     const task=normalizeTask(id,{
       title,completed:false,subject:cleanTaskSubject(input?.subject),
-      dueDate:cleanTaskDueDate(input?.dueDate),recurring:input?.recurring===true,order:Number(input?.order)||now,
+      dueDate:cleanTaskDueDate(input?.dueDate),recurrence:cleanTaskRecurrence(input?.recurrence),order:Number(input?.order)||now,
       createdAtMs:now,updatedAtMs:now,
     });
     await runTransaction(db,async tx=>{
@@ -3171,7 +3358,7 @@ async function fbUpdateTask(usernameRaw,password,id,patch){
         ...(Object.prototype.hasOwnProperty.call(patch||{},"title")?{title:cleanTaskTitle(patch.title)}:{}),
         ...(Object.prototype.hasOwnProperty.call(patch||{},"subject")?{subject:cleanTaskSubject(patch.subject)}:{}),
         ...(Object.prototype.hasOwnProperty.call(patch||{},"dueDate")?{dueDate:cleanTaskDueDate(patch.dueDate)}:{}),
-        ...(Object.prototype.hasOwnProperty.call(patch||{},"recurring")?{recurring:patch.recurring===true}:{}),
+        ...(Object.prototype.hasOwnProperty.call(patch||{},"recurrence")?{recurrence:cleanTaskRecurrence(patch.recurrence),recurring:false}:{}),
         ...(Object.prototype.hasOwnProperty.call(patch||{},"completed")?{
           completed:patch.completed===true,
           completedAtMs:patch.completed===true?now:0,
@@ -3180,7 +3367,7 @@ async function fbUpdateTask(usernameRaw,password,id,patch){
       });
       if(!next.title)throw new Error("Task titles cannot be empty.");
       tx.set(ref,{
-        title:next.title,completed:next.completed,subject:next.subject,dueDate:next.dueDate,recurring:next.recurring,
+        title:next.title,completed:next.completed,subject:next.subject,dueDate:next.dueDate,recurrence:next.recurrence,recurring:next.recurring,
         order:next.order,createdAtMs:next.createdAtMs,updatedAtMs:now,
         completedAtMs:next.completedAtMs,
         updatedAt:serverTimestamp(),
@@ -3464,10 +3651,10 @@ async function fbPurchaseSkin(usernameRaw,skinId){
       const owned=Array.isArray(prefs.ownedSkins)&&prefs.ownedSkins.length?prefs.ownedSkins:["default"];
       const coins=typeof prefs.coins==="number"?prefs.coins:0;
       if(owned.includes(skinId))return {ok:false,reason:"owned",coinBalance:coins,ownedSkins:owned};
-      if(coins<skin.cost)return {ok:false,reason:"coins",coinBalance:coins,ownedSkins:owned};
+      if(!DEV_UNLIMITED_COINS&&coins<skin.cost)return {ok:false,reason:"coins",coinBalance:coins,ownedSkins:owned};
       const ownedSkins=[...new Set([...owned,skinId])];
-      const coinBalance=coins-skin.cost;
-      tx.set(prefsRef,{coins:coinBalance,ownedSkins,activeSkin:skinId},{merge:true});
+      const coinBalance=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins-skin.cost;
+      tx.set(prefsRef,DEV_UNLIMITED_COINS?{ownedSkins,activeSkin:skinId}:{coins:coinBalance,ownedSkins,activeSkin:skinId},{merge:true});
       return {ok:true,coinBalance,ownedSkins,activeSkin:skinId,skin};
     });
   }catch(e){console.error("Skin purchase error:",e);return {ok:false,reason:"network",error:e.message};}
@@ -3491,10 +3678,10 @@ async function fbUpgradeSkin(usernameRaw,skinId,expectedTier=null){
       if(expectedTier!==null && tier!==expectedTier)return {ok:false,reason:"stale",coinBalance:coins,enhancements};
       const nextTier=tier+1;
       const cost=enhanceCost(skin,nextTier);
-      if(coins<cost)return {ok:false,reason:"coins",coinBalance:coins,enhancements};
+      if(!DEV_UNLIMITED_COINS&&coins<cost)return {ok:false,reason:"coins",coinBalance:coins,enhancements};
       const nextEnhancements={...enhancements,[skinId]:nextTier};
-      const coinBalance=coins-cost;
-      tx.set(prefsRef,{coins:coinBalance,enhancements:nextEnhancements},{merge:true});
+      const coinBalance=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins-cost;
+      tx.set(prefsRef,DEV_UNLIMITED_COINS?{enhancements:nextEnhancements}:{coins:coinBalance,enhancements:nextEnhancements},{merge:true});
       return {ok:true,coinBalance,enhancements:nextEnhancements,tier:nextTier,cost,skin};
     });
   }catch(e){console.error("Skin enhancement error:",e);return {ok:false,reason:"network",error:e.message};}
@@ -3512,10 +3699,10 @@ async function fbPurchaseDecoration(usernameRaw,decorId){
       const decorations=Array.isArray(prefs.decorations)?prefs.decorations:[];
       const coins=typeof prefs.coins==="number"?prefs.coins:0;
       if(decorations.includes(decorId))return {ok:false,reason:"owned",coinBalance:coins,decorations};
-      if(coins<decor.cost)return {ok:false,reason:"coins",coinBalance:coins,decorations};
+      if(!DEV_UNLIMITED_COINS&&coins<decor.cost)return {ok:false,reason:"coins",coinBalance:coins,decorations};
       const nextDecorations=[...new Set([...decorations,decorId])];
-      const coinBalance=coins-decor.cost;
-      tx.set(prefsRef,{coins:coinBalance,decorations:nextDecorations},{merge:true});
+      const coinBalance=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins-decor.cost;
+      tx.set(prefsRef,DEV_UNLIMITED_COINS?{decorations:nextDecorations}:{coins:coinBalance,decorations:nextDecorations},{merge:true});
       return {ok:true,coinBalance,decorations:nextDecorations,decor};
     });
   }catch(e){console.error("Decoration purchase error:",e);return {ok:false,reason:"network",error:e.message};}
@@ -3533,10 +3720,11 @@ async function fbPurchaseBackground(usernameRaw,backgroundId){
       const coins=typeof prefs.coins==="number"?prefs.coins:0;
       // The cost is resolved exclusively from the trusted local catalogue.
       // No UI-supplied price enters this transaction.
-      const result=evaluateBackgroundPurchase(backgroundId,prefs.ownedBackgrounds,coins);
+      const result=evaluateBackgroundPurchase(backgroundId,prefs.ownedBackgrounds,DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins);
       if(!result.ok)return result;
-      tx.set(prefsRef,{coins:result.coinBalance,ownedBackgrounds:result.ownedBackgrounds},{merge:true});
-      return result;
+      const coinBalance=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:result.coinBalance;
+      tx.set(prefsRef,DEV_UNLIMITED_COINS?{ownedBackgrounds:result.ownedBackgrounds}:{coins:coinBalance,ownedBackgrounds:result.ownedBackgrounds},{merge:true});
+      return {...result,coinBalance};
     });
   }catch(e){
     console.error("Background purchase error:",e);
@@ -4165,7 +4353,10 @@ function useHScroll(contentKey="") {
     // fire whatever button happened to be under the cursor on release.
     let dragging = false, moved = false, startX = 0, startScroll = 0;
     const onDown = (e) => {
-      if(el.scrollWidth <= el.clientWidth) return;
+      if(e.button!==0 || el.scrollWidth <= el.clientWidth) return;
+      // Leave native scrollbar arrows and thumb dragging to the browser.
+      const bounds=el.getBoundingClientRect();
+      if(e.clientY>=bounds.top+el.clientTop+el.clientHeight || e.clientX>=bounds.left+el.clientLeft+el.clientWidth)return;
       dragging = true; moved = false;
       startX = e.clientX; startScroll = el.scrollLeft;
     };
@@ -5839,7 +6030,6 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
   };
   return (
     <div className={`sg-session-screen sg-focus-anim${isBreak?" sg-break-screen":""}`} style={{...fs.wrap,"--sg-focus-accent":`${subject.color}18`}}>
-      {!isBreak&&<SubjectSessionAmbience subject={subject} paused={paused}/>}
       <div className="sg-session-top" style={fs.topBar}>
         <div style={fs.subjectControl}>
           <div style={fs.subjectChip}><span>{isBreak?"☕":subject.emoji}</span><span style={{marginLeft:6,fontWeight:600}}>{isBreak?"Break":subject.label}</span></div>
@@ -5909,15 +6099,15 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
         : <>{activeFocusStage.label} · {stagePercent}% complete</>}</div>
       </div>
       {isBreak?<div className="sg-break-actions" style={fs.breakActions}>
-        {!pomodoro.awaitingNext&&<button style={{...fs.pauseBtn,background:paused?subject.color:"#fff",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
+        {!pomodoro.awaitingNext&&<button style={{...fs.pauseBtn,background:paused?subject.color:"var(--sg-theme-neutral,#fff)",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
           {paused?"▶ Resume break":"⏸ Pause break"}
         </button>}
         {pomodoro.awaitingNext
           ? <button style={{...fs.pauseBtn,background:subject.color,color:"#fff",border:`2px solid ${subject.color}`}} onClick={onStartNext}>Start next focus round</button>
-          : <button style={{...fs.pauseBtn,background:"#fff",color:"#4F7D68",border:"2px solid #8EB9A5"}} onClick={onSkipBreak}>Skip break</button>}
+          : <button style={{...fs.pauseBtn,background:"var(--sg-theme-neutral,#fff)",color:"#4F7D68",border:"2px solid #8EB9A5"}} onClick={onSkipBreak}>Skip break</button>}
         <button style={fs.endBtn} onClick={onEnd}>Finish session</button>
       </div>:<div style={fs.btnRow}>
-          <button style={{...fs.pauseBtn,background:paused?subject.color:"#fff",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
+          <button style={{...fs.pauseBtn,background:paused?subject.color:"var(--sg-theme-neutral,#fff)",color:paused?"#fff":subject.color,border:`2px solid ${subject.color}`}} onClick={onPause}>
             {paused?"▶ Resume":"⏸ Pause"}
           </button>
           <button style={fs.endBtn} onClick={onEnd}>{isPomodoro?"Finish now":"End session"}</button>
@@ -5932,21 +6122,21 @@ const fs = {
   topBar:{position:"relative",zIndex:3,display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",maxWidth:400,paddingTop:"max(52px,calc(env(safe-area-inset-top) + 18px))"},
   subjectControl:{display:"flex",alignItems:"center",gap:7},
   subjectChip:{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500},
-  subjectEditButton:{width:31,height:31,padding:"0 0 1px",border:"1px solid rgba(71,83,77,.16)",borderRadius:"50%",background:"#fff",boxShadow:"0 2px 7px rgba(29,47,37,.12)",color:"#7B8580",fontFamily:"Segoe UI Symbol, sans-serif",fontSize:20,fontWeight:700,lineHeight:1,cursor:"pointer"},
+  subjectEditButton:{width:31,height:31,padding:"0 0 1px",border:"1px solid rgba(71,83,77,.16)",borderRadius:"50%",background:"var(--sg-theme-neutral,#fff)",boxShadow:"0 2px 7px rgba(29,47,37,.12)",color:"#7B8580",fontFamily:"Segoe UI Symbol, sans-serif",fontSize:20,fontWeight:700,lineHeight:1,cursor:"pointer"},
   coinBadge:{background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700},
   subjectPickerBackdrop:{position:"fixed",inset:0,zIndex:12,display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"rgba(21,36,28,.3)",backdropFilter:"blur(5px)"},
-  subjectPickerCard:{position:"relative",width:"min(290px,88vw)",padding:"18px 18px 14px",borderRadius:24,background:"rgba(255,255,255,.96)",boxShadow:"0 16px 42px rgba(22,45,31,.25)"},
+  subjectPickerCard:{position:"relative",width:"min(290px,88vw)",padding:"18px 18px 14px",borderRadius:24,background:"var(--sg-theme-neutral,rgba(255,255,255,.96))",boxShadow:"0 16px 42px rgba(22,45,31,.25)"},
   subjectPickerMask:{position:"absolute",zIndex:2,left:18,right:18,top:70,height:52,borderTop:"1px solid rgba(45,106,79,.2)",borderBottom:"1px solid rgba(45,106,79,.2)",borderRadius:8,pointerEvents:"none"},
   subjectWheel:{height:156,overflowY:"auto",scrollSnapType:"y mandatory",scrollbarWidth:"none",padding:"52px 0",overscrollBehavior:"contain"},
   subjectWheelItem:{width:"100%",height:52,border:0,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:9,scrollSnapAlign:"center",fontSize:15,fontWeight:650,color:"#9AA39D",cursor:"pointer",transition:"color .16s,transform .16s"},
   subjectWheelItemActive:{color:"#2E5841",transform:"scale(1.04)"},
   subjectDot:{width:10,height:10,borderRadius:"50%",boxShadow:"0 1px 3px rgba(22,43,31,.18)"},
-  subjectDoneButton:{width:"100%",marginTop:12,padding:"11px 0",border:0,borderRadius:13,background:"#477F5A",color:"#fff",fontSize:14,fontWeight:750,cursor:"pointer"},
+  subjectDoneButton:{width:"100%",marginTop:12,padding:"11px 0",border:0,borderRadius:13,background:"var(--sg-theme-accent,#477F5A)",color:"#fff",fontSize:14,fontWeight:750,cursor:"pointer"},
   treeArea:{position:"relative",zIndex:2,flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%"},
   finalEvolutionWrap:{height:"min(50vh,460px)",width:"min(94vw,410px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end"},
   finalEvolutionImage:{maxWidth:"100%",maxHeight:"calc(100% - 34px)",objectFit:"contain",filter:"drop-shadow(0 12px 18px rgba(25,43,31,.2))"},
   progressionImage:{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",filter:"drop-shadow(0 14px 22px rgba(25,43,31,.22))"},
-  finalEvolutionLabel:{flexShrink:0,marginTop:5,whiteSpace:"nowrap",padding:"6px 11px",borderRadius:999,background:"rgba(255,255,255,.88)",boxShadow:"0 3px 12px rgba(28,50,34,.13)",fontSize:11,fontWeight:800,color:"#35664A"},
+  finalEvolutionLabel:{flexShrink:0,marginTop:5,whiteSpace:"nowrap",padding:"6px 11px",borderRadius:999,background:"var(--sg-theme-neutral,rgba(255,255,255,.88))",boxShadow:"0 3px 12px rgba(28,50,34,.13)",fontSize:11,fontWeight:800,color:"var(--sg-theme-accent-strong,#35664A)"},
   focusProgressGroup:{position:"relative",zIndex:3,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",transform:"translateY(-12px)"},
   time:{position:"relative",zIndex:3,fontSize:72,fontWeight:900,letterSpacing:"-3px",lineHeight:1,marginBottom:6,transition:"color 0.3s"},
   modeLabel:{position:"relative",zIndex:3,fontSize:15,color:"#666",marginBottom:20,fontWeight:500,textAlign:"center"},
@@ -6211,7 +6401,7 @@ function CompleteScreen({ subject, secs, coinsEarned, streak, streakExtended, ti
 
 const cs = {
   wrap:{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20},
-  card:{background:"#fff",borderRadius:24,padding:"36px 28px",textAlign:"center",maxWidth:320,width:"100%",boxShadow:"0 16px 48px rgba(0,0,0,0.2)"},
+  card:{background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"36px 28px",textAlign:"center",maxWidth:320,width:"100%",boxShadow:"0 16px 48px rgba(0,0,0,0.2)"},
   title:{fontSize:24,fontWeight:800,color:"#1a1a2e",margin:"0 0 8px"},
   sub:{fontSize:14,color:"#888",margin:"0 0 20px"},
   stat:{fontSize:48,fontWeight:900,letterSpacing:"-2px",marginBottom:8},
@@ -6222,16 +6412,23 @@ const cs = {
   streakPillHot:{background:"linear-gradient(180deg,#FFF4E0,#FFE9C4)",borderColor:"#F4C04B",color:"#B8741A",boxShadow:"0 2px 10px rgba(244,162,58,0.25)"},
   taskCard:{display:"flex",alignItems:"center",gap:8,background:"#F3F7F2",border:"1px solid #DFE8DC",borderRadius:12,padding:"8px 9px",margin:"0 0 11px",textAlign:"left"},
   taskCopy:{flex:1,minWidth:0,fontSize:11,color:"#64736A",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
-  taskButton:{minHeight:34,border:"1px solid #C7DCCB",borderRadius:10,background:"#fff",color:"#2D6A4F",fontSize:10.5,fontWeight:750,padding:"6px 9px",cursor:"pointer",whiteSpace:"nowrap"},
+  taskButton:{minHeight:34,border:"1px solid #C7DCCB",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:10.5,fontWeight:750,padding:"6px 9px",cursor:"pointer",whiteSpace:"nowrap"},
   btn:{display:"block",width:"100%",padding:"14px 0",border:"none",borderRadius:14,fontSize:16,fontWeight:700,color:"#fff",cursor:"pointer"},
 };
 
 // ── Add Subject Modal ─────────────────────────────────────────────────────────
 function AddSubjectModal({ onAdd, onClose, existing }) {
+  useEffect(()=>{
+    const elements=[document.documentElement,document.body];
+    const previous=elements.map(el=>({overflow:el.style.overflow,overscrollBehavior:el.style.overscrollBehavior}));
+    elements.forEach(el=>{el.style.overflow="hidden";el.style.overscrollBehavior="none";});
+    return()=>elements.forEach((el,index)=>Object.assign(el.style,previous[index]));
+  },[]);
+  const [customColourOpen,setCustomColourOpen]=useState(false);
   const [label,setLabel]=useState(""); const [emoji,setEmoji]=useState("📝");
-  const [color,setColor]=useState("#56B68B"); const [err,setErr]=useState("");
+  const [color,setColor]=useState("#00FF8E"); const [err,setErr]=useState("");
   const handle=()=>{
-    const t=label.trim();
+    const t=capitalizeSubjectLabel(label);
     if(!t){setErr("Enter a name");return;}
     if(t.length>18){setErr("Max 18 chars");return;}
     if(existing.some(s=>s.label.toLowerCase()===t.toLowerCase())){setErr("Already exists");return;}
@@ -6239,7 +6436,7 @@ function AddSubjectModal({ onAdd, onClose, existing }) {
   };
   return (
     <div style={am.overlay} className="sg-overlay-anim" onClick={onClose}>
-      <div style={am.modal} className="sg-pop-anim" onClick={e=>e.stopPropagation()}>
+      <div style={am.modal} className="sg-pop-anim sg-add-subject-modal" onClick={e=>e.stopPropagation()}>
         <h3 style={am.title}>Add Subject</h3>
         <input style={{...am.input,...(err?am.inputErr:{})}} placeholder="e.g. Chemistry"
           value={label} onChange={e=>{setLabel(e.target.value);setErr("");}}
@@ -6251,8 +6448,9 @@ function AddSubjectModal({ onAdd, onClose, existing }) {
         ))}</div>
         <p style={am.lbl}>Colour</p>
         <div style={am.colorRow}>{COLOR_OPTIONS.map(c=>(
-          <button key={c} style={{...am.swatch,background:c,...(color===c?am.swatchOn:{})}} onClick={()=>setColor(c)}/>
-        ))}</div>
+          <button key={c} aria-label={`Select colour ${c}`} aria-pressed={color.toLowerCase()===c.toLowerCase()} style={{...am.swatch,background:c,...(color.toLowerCase()===c.toLowerCase()?am.swatchOn:{})}} onClick={()=>{setColor(c);setCustomColourOpen(false);}}/>
+        ))}<button type="button" aria-label="Choose custom colour" aria-expanded={customColourOpen} title="Choose custom colour" onClick={()=>setCustomColourOpen(open=>!open)} style={{...am.swatch,background:'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)',border:0,padding:0,appearance:'none',flexShrink:0,aspectRatio:'1',borderRadius:'50%',overflow:'hidden',clipPath:'circle(50%)'}}/></div>
+        {customColourOpen&&<SubjectColourPicker color={color} onChange={setColor}/>}
         <div style={{display:"flex",gap:8,marginTop:20}}>
           <button style={am.cancelBtn} onClick={onClose}>Cancel</button>
           <button style={{...am.addBtn,background:color}} onClick={handle}>Add</button>
@@ -6264,15 +6462,15 @@ function AddSubjectModal({ onAdd, onClose, existing }) {
 
 const am = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20},
-  modal:{background:"#fff",borderRadius:20,padding:"24px 20px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(0,0,0,0.18)"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:20,padding:"24px 20px",width:"100%",maxWidth:340,maxHeight:"calc(100dvh - 40px)",overflowY:"auto",overscrollBehavior:"contain",boxShadow:"0 8px 32px rgba(0,0,0,0.18)"},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:"0 0 14px"},
   lbl:{fontSize:12,fontWeight:600,color:"#888",margin:"12px 0 6px"},
   input:{display:"block",width:"100%",padding:"10px 12px",border:"1.5px solid #E0E8DC",borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box"},
   inputErr:{borderColor:"#E07B54"},
   err:{color:"#E07B54",fontSize:12,margin:"4px 0 0"},
-  emojiGrid:{display:"grid",gridTemplateColumns:"repeat(10,1fr)",gap:4},
-  emojiBtn:{background:"#f5f5f5",border:"1.5px solid transparent",borderRadius:8,padding:"4px 2px",fontSize:16,cursor:"pointer"},
-  emojiOn:{border:"1.5px solid #2D6A4F",background:"#E8F5EE"},
+  emojiGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(32px,1fr))",gap:4},
+  emojiBtn:{minWidth:0,minHeight:32,display:"grid",placeItems:"center",background:"#f5f5f5",border:"1.5px solid transparent",borderRadius:8,padding:"4px 2px",fontSize:16,cursor:"pointer"},
+  emojiOn:{border:"1.5px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)"},
   colorRow:{display:"flex",flexWrap:"wrap",gap:8},
   swatch:{width:28,height:28,borderRadius:"50%",border:"2px solid transparent",cursor:"pointer"},
   swatchOn:{border:"3px solid #1a1a2e",transform:"scale(1.2)"},
@@ -6367,7 +6565,7 @@ function SkinProgressionPreview({ skin, onClose }) {
 
 const sp = {
   overlay:{position:"fixed",inset:0,zIndex:340,background:"rgba(16,23,20,.58)",display:"flex",alignItems:"center",justifyContent:"center",padding:18},
-  modal:{width:"min(100%,390px)",maxHeight:"calc(100dvh - 36px)",overflowY:"auto",background:"#fff",borderRadius:24,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(0,0,0,.28)"},
+  modal:{width:"min(100%,390px)",maxHeight:"calc(100dvh - 36px)",overflowY:"auto",background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(0,0,0,.28)"},
   header:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12},
   kicker:{fontSize:9.5,fontWeight:850,letterSpacing:1.15,color:"#3E8E68"},
   title:{fontSize:19,fontWeight:800,color:"#1A2A20",margin:"3px 0 0",lineHeight:1.16},
@@ -6378,7 +6576,7 @@ const sp = {
   stageLabel:{textAlign:"center",fontSize:12.5,fontWeight:750,color:"#41564A",margin:"13px 0 10px",lineHeight:1.35},
   focusRange:{fontSize:11,fontWeight:700,color:"#3D9467",marginTop:3},
   controls:{display:"grid",gridTemplateColumns:"38px minmax(0,1fr) 38px",alignItems:"center",gap:8},
-  arrow:{height:38,border:0,borderRadius:12,background:"#E5F3E9",color:"#276443",fontSize:25,lineHeight:1,cursor:"pointer"},
+  arrow:{height:38,border:0,borderRadius:12,background:"#E5F3E9",color:"var(--sg-theme-accent-strong,#276443)",fontSize:25,lineHeight:1,cursor:"pointer"},
   arrowDisabled:{background:"#F0F2EF",color:"#B6BDB7",cursor:"not-allowed"},
   pips:{display:"flex",justifyContent:"center",gap:7},
   pip:{width:9,height:9,padding:0,border:0,borderRadius:"50%",background:"#D7DED8",cursor:"pointer"},
@@ -6395,7 +6593,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   const [activeTag, setActiveTag] = useState(null);
   const [scrolling,setScrolling]=useState(false);
   const scrollTimerRef=useRef(null);
-  const [chipRowRef, chipEdge] = useHScroll();
+  const [chipRowRef] = useHScroll();
   const showT = m => { setToast(m); setTimeout(()=>setToast(null),2000); };
   const enhSkin = enhancing ? TREE_SKINS.find(s=>s.id===enhancing) : null;
   const previewSkin = previewing ? TREE_SKINS.find(s=>s.id===previewing) : null;
@@ -6418,7 +6616,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
   return (
     <div style={sh.overlay} className="sg-overlay-anim" onClick={onClose}>
       <div style={sh.modal} className="sg-sheet-anim sg-shop-sheet" onClick={e=>e.stopPropagation()} onScroll={onShopScroll}>
-        <div style={sh.header}>
+        <div style={sh.header} className="sg-sheet-theme-header">
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {onBack && <button style={sh.backBtn} onClick={onBack} title="Back">←</button>}
             <div>
@@ -6466,8 +6664,6 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
               </button>;
             })}
           </div>
-          {!chipEdge.atStart && <div style={sh.chipFadeL}/>}
-          {!chipEdge.atEnd && <div style={sh.chipFadeR}/>}
         </div>
 
         {toast && <div style={sh.toast}>{toast}</div>}
@@ -6536,7 +6732,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
 
 const sh = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300,padding:0,overflow:"hidden"},
-  modal:{background:"#fff",borderRadius:"26px 26px 0 0",padding:"22px max(14px,env(safe-area-inset-right)) max(34px,calc(env(safe-area-inset-bottom) + 18px)) max(14px,env(safe-area-inset-left))",width:"100%",maxWidth:460,maxHeight:"min(88dvh,88vh)",overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"26px 26px 0 0",padding:"22px max(14px,env(safe-area-inset-right)) max(34px,calc(env(safe-area-inset-bottom) + 18px)) max(14px,env(safe-area-inset-left))",width:"100%",maxWidth:460,maxHeight:"min(88dvh,88vh)",overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"},
   header:{position:"sticky",top:-22,zIndex:12,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,margin:"-22px 0 10px",padding:"22px 0 10px",background:"linear-gradient(180deg,#fff 82%,rgba(255,255,255,.94))"},
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1,marginTop:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
@@ -6545,7 +6741,7 @@ const sh = {
 
   searchWrap:{position:"relative",display:"flex",alignItems:"center",marginBottom:10},
   searchIcon:{position:"absolute",left:13,fontSize:13,opacity:0.55,pointerEvents:"none"},
-  searchInput:{width:"100%",boxSizing:"border-box",padding:"10px 34px 10px 34px",border:"1.5px solid #E8EDE4",background:"#F9FBF8",borderRadius:14,fontSize:13.5,color:"#1a1a2e",outline:"none",transition:"border-color .15s, box-shadow .15s"},
+  searchInput:{width:"100%",boxSizing:"border-box",padding:"10px 34px 10px 34px",border:"1.5px solid #E8EDE4",background:"var(--sg-theme-neutral,#F9FBF8)",borderRadius:14,fontSize:13.5,color:"#1a1a2e",outline:"none",transition:"border-color .15s, box-shadow .15s"},
   searchClear:{position:"absolute",right:8,background:"#E8EDE4",border:"none",borderRadius:"50%",width:20,height:20,fontSize:10,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1},
 
   chipRowWrap:{position:"relative",width:"100%",minWidth:0,maxWidth:"100%",overflow:"hidden",marginBottom:8},
@@ -6553,18 +6749,18 @@ const sh = {
   chipFadeL:{position:"absolute",left:0,top:0,bottom:4,width:26,background:"linear-gradient(to right,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
   chipFadeR:{position:"absolute",right:0,top:0,bottom:4,width:26,background:"linear-gradient(to left,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
   chip:{flexShrink:0,display:"flex",alignItems:"center",gap:5,fontSize:12.5,fontWeight:600,color:"#5A6A5C",background:"#F5F7F2",border:"1.5px solid transparent",borderRadius:20,padding:"7px 13px",cursor:"pointer",whiteSpace:"nowrap"},
-  chipActive:{color:"#2D6A4F",background:"#E8F5EE",border:"1.5px solid #BFE3CE"},
-  chipCount:{fontSize:10,fontWeight:700,color:"#9AA69C",background:"#fff",borderRadius:8,padding:"1px 5px",marginLeft:1},
-  chipCountActive:{color:"#2D6A4F",background:"#D7EEDF"},
+  chipActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1.5px solid #BFE3CE"},
+  chipCount:{fontSize:10,fontWeight:700,color:"#9AA69C",background:"var(--sg-theme-neutral,#fff)",borderRadius:8,padding:"1px 5px",marginLeft:1},
+  chipCountActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"#D7EEDF"},
 
   toast:{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:12,textAlign:"center"},
 
   emptyState:{textAlign:"center",padding:"30px 10px 10px"},
-  clearFiltersBtn:{fontSize:12,fontWeight:600,color:"#2D6A4F",background:"#E8F5EE",border:"none",borderRadius:20,padding:"8px 18px",cursor:"pointer"},
+  clearFiltersBtn:{fontSize:12,fontWeight:600,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"none",borderRadius:20,padding:"8px 18px",cursor:"pointer"},
 
   grid:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4,width:"100%",minWidth:0},
-  card:{minWidth:0,minHeight:472,background:"#F9FBF8",borderRadius:17,padding:"13px 10px 18px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4",boxShadow:"0 2px 8px rgba(26,42,32,0.05)",position:"relative"},
-  cardActive:{border:"2px solid #2D6A4F",background:"#F0FBF6",boxShadow:"0 3px 12px rgba(45,106,79,0.12)"},
+  card:{minWidth:0,minHeight:472,background:"var(--sg-theme-neutral,#F9FBF8)",borderRadius:17,padding:"13px 10px 18px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4",boxShadow:"0 2px 8px rgba(26,42,32,0.05)",position:"relative"},
+  cardActive:{border:"2px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#F0FBF6)",boxShadow:"0 3px 12px rgba(45,106,79,0.12)"},
   newBadge:{position:"absolute",top:8,left:8,fontSize:9.5,fontWeight:800,color:"#fff",background:"linear-gradient(135deg,#FF8B6B,#FF6F61)",borderRadius:8,padding:"2px 7px",letterSpacing:0.6,boxShadow:"0 2px 5px rgba(255,111,97,0.35)"},
   flagshipBadge:{position:"absolute",top:8,left:8,fontSize:9,fontWeight:900,color:"#4B3B10",background:"linear-gradient(135deg,#FFF4A8,#E8C84E)",border:"1px solid #D8B83A",borderRadius:8,padding:"2px 7px",letterSpacing:0.8,boxShadow:"0 2px 7px rgba(190,145,25,0.24)",zIndex:2},
   tierBadge:{position:"absolute",top:8,right:9,fontSize:10,fontWeight:800,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:10,padding:"2px 7px",letterSpacing:1},
@@ -6574,14 +6770,14 @@ const sh = {
   skinName:{width:"100%",minWidth:0,fontSize:13,fontWeight:800,color:"#1a1a2e",marginTop:8,marginBottom:7,textAlign:"center",lineHeight:1.25,overflowWrap:"anywhere"},
   skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:7,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
   tagRow:{width:"100%",minHeight:42,display:"flex",alignItems:"flex-start",justifyContent:"center",alignContent:"flex-start",gap:4,flexWrap:"wrap",marginBottom:16},
-  tag:{fontSize:9.5,fontWeight:750,lineHeight:1,color:"#397553",background:"#E8F5EE",border:"1px solid #CBE7D5",borderRadius:99,padding:"4px 7px",whiteSpace:"nowrap"},
+  tag:{fontSize:9.5,fontWeight:750,lineHeight:1,color:"var(--sg-theme-accent-strong,#397553)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1px solid #CBE7D5",borderRadius:99,padding:"4px 7px",whiteSpace:"nowrap"},
   freeBadge:{fontSize:10.5,color:"#56B68B",fontWeight:600,marginBottom:4,minHeight:14},
   costBadge:{fontSize:10.5,color:"#B8860B",fontWeight:700,marginBottom:4,minHeight:14},
-  equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"#2D6A4F",fontWeight:700,padding:"6px 10px",background:"#E8F5EE",borderRadius:20,marginTop:2},
-  equipBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#E8F5EE",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0},
-  buyBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"#fff",background:"#2D6A4F",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0,whiteSpace:"normal"},
+  equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,padding:"6px 10px",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20,marginTop:2},
+  equipBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0},
+  buyBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"#fff",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0,whiteSpace:"normal"},
   buyBtnDisabled:{background:"#ccc",cursor:"not-allowed"},
-  progressionBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",background:"#2D6A4F",border:"1px solid #2D6A4F",borderRadius:20,padding:"0 9px",cursor:"pointer",margin:"12px 0 12px",textAlign:"center",whiteSpace:"normal"},
+  progressionBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",background:"var(--sg-theme-accent,#2D6A4F)",border:"1px solid var(--sg-theme-accent,#2D6A4F)",borderRadius:20,padding:"0 9px",cursor:"pointer",margin:"12px 0 12px",textAlign:"center",whiteSpace:"normal"},
   closeBtn:{display:"block",width:"100%",marginTop:18,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
 
@@ -6647,7 +6843,7 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
           {[1,2,3].map(t=>(
             <div key={t} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flex:1}}>
               <div style={{...em.pipBar,...(t<=tier?em.pipBarOn:{}),...(t===previewTier?{outline:"2px solid #2D6A4F55",outlineOffset:2}:{})}}/>
-              <span style={{...em.pipLabel,...(t<=tier?{color:"#2D6A4F",fontWeight:700}:{})}}>{tierMeta(t).name}</span>
+              <span style={{...em.pipLabel,...(t<=tier?{color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700}:{})}}>{tierMeta(t).name}</span>
             </div>
           ))}
         </div>
@@ -6682,10 +6878,10 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
 }
 const em = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:320},
-  modal:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"88vh",overflowY:"auto"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"88vh",overflowY:"auto"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},
   back:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
-  kicker:{fontSize:10,fontWeight:800,letterSpacing:1.5,color:"#2D6A4F"},
+  kicker:{fontSize:10,fontWeight:800,letterSpacing:1.5,color:"var(--sg-theme-accent-strong,#2D6A4F)"},
   title:{fontSize:19,fontWeight:700,color:"#1a1a2e",margin:0,letterSpacing:-0.2},
   coinBal:{fontSize:14,fontWeight:700,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:20,padding:"4px 12px"},
   previewWrap:{display:"flex",alignItems:"center",gap:4,margin:"4px 0 6px"},
@@ -6698,16 +6894,16 @@ const em = {
   pipBar:{height:6,width:"100%",borderRadius:4,background:"#E7ECE5",transition:"background 0.4s ease"},
   pipBarOn:{background:"linear-gradient(90deg,#56B68B,#2D6A4F)"},
   pipLabel:{fontSize:10.5,color:"#9AA69C",fontWeight:600},
-  detailCard:{background:"#F9FBF8",border:"1px solid #EEF2EC",borderRadius:14,padding:"13px 15px",marginTop:12},
+  detailCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,padding:"13px 15px",marginTop:12},
   detailName:{fontSize:14,fontWeight:700,color:"#1a1a2e",display:"flex",alignItems:"center",gap:7},
-  ownedTag:{fontSize:10,fontWeight:700,color:"#2D6A4F",background:"#E8F5EE",borderRadius:10,padding:"2px 8px"},
+  ownedTag:{fontSize:10,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:10,padding:"2px 8px"},
   lockedTag:{fontSize:10,fontWeight:700,color:"#8A8FA0",background:"#EEF0F4",borderRadius:10,padding:"2px 8px"},
   detailBlurb:{fontSize:12.5,color:"#7A857C",lineHeight:1.55,marginTop:4},
   upgradeBtn:{display:"block",width:"100%",marginTop:14,padding:"14px 0",background:"linear-gradient(135deg,#2D6A4F,#3E8E68)",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#fff",cursor:"pointer",boxShadow:"0 4px 14px rgba(45,106,79,0.25)"},
   upgradeBtnDisabled:{background:"#D5DBD3",boxShadow:"none",cursor:"not-allowed",color:"#fff"},
   shortNote:{textAlign:"center",fontSize:12.5,color:"#C0392B",fontWeight:600,marginTop:8},
   applyNote:{textAlign:"center",fontSize:11.5,color:"#A9B2A9",marginTop:8,lineHeight:1.5},
-  maxedCard:{textAlign:"center",fontSize:13.5,fontWeight:600,color:"#2D6A4F",background:"linear-gradient(135deg,#EAF6EE,#F3FAF0)",border:"1px solid #D7EBDC",borderRadius:14,padding:"15px 14px",marginTop:14,lineHeight:1.5},
+  maxedCard:{textAlign:"center",fontSize:13.5,fontWeight:600,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"linear-gradient(135deg,#EAF6EE,#F3FAF0)",border:"1px solid #D7EBDC",borderRadius:14,padding:"15px 14px",marginTop:14,lineHeight:1.5},
   doneBtn:{display:"block",width:"100%",marginTop:12,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
 
@@ -6769,7 +6965,7 @@ function GardenShop({ coins, owned, removed = [], onBuy, onRestore,
 }
 const gs = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300},
-  modal:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4},
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
@@ -6777,14 +6973,14 @@ const gs = {
   coinBal:{fontSize:14,fontWeight:700,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:20,padding:"4px 12px"},
   toast:{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"8px 14px",fontSize:13,margin:"12px 0 0",textAlign:"center"},
   grid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:14},
-  card:{background:"#F9FBF8",borderRadius:16,padding:"14px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4"},
-  cardOwned:{border:"2px solid #2D6A4F",background:"#F0FBF6"},
+  card:{background:"var(--sg-theme-neutral,#F9FBF8)",borderRadius:16,padding:"14px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4"},
+  cardOwned:{border:"2px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#F0FBF6)"},
   preview:{height:56,display:"flex",alignItems:"center",justifyContent:"center"},
   dName:{fontSize:13,fontWeight:700,color:"#1a1a2e",marginTop:6,marginBottom:2},
   dDesc:{fontSize:10,color:"#aaa",marginBottom:8,textAlign:"center",lineHeight:1.3},
-  ownedBadge:{fontSize:11,color:"#2D6A4F",fontWeight:700,padding:"5px 12px",background:"#E8F5EE",borderRadius:20},
-  buyBtn:{fontSize:12,fontWeight:700,color:"#fff",background:"#2D6A4F",border:"none",borderRadius:20,padding:"6px 16px",cursor:"pointer"},
-  restoreBtn:{fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#F3F8F1",border:"1px solid #CFE0CF",borderRadius:20,padding:"6px 14px",cursor:"pointer"},
+  ownedBadge:{fontSize:11,color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,padding:"5px 12px",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20},
+  buyBtn:{fontSize:12,fontWeight:700,color:"#fff",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:20,padding:"6px 16px",cursor:"pointer"},
+  restoreBtn:{fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"#F3F8F1",border:"1px solid #CFE0CF",borderRadius:20,padding:"6px 14px",cursor:"pointer"},
   buyBtnDisabled:{background:"#ccc",cursor:"not-allowed"},
   closeBtn:{display:"block",width:"100%",marginTop:18,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
@@ -6828,22 +7024,22 @@ function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onClose
 }
 const bg = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300},
-  modal:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4},
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
   sub:{fontSize:12,color:"#aaa",margin:"4px 0 0"},
   milestonePath:{margin:"16px 0 20px"},
-  count:{fontSize:14,fontWeight:700,color:"#2D6A4F",background:"#E8F5EE",borderRadius:20,padding:"4px 12px"},
+  count:{fontSize:14,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20,padding:"4px 12px"},
   grid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:14},
   card:{borderRadius:16,padding:"16px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",border:"1.5px solid #E8EDE4"},
-  cardGot:{background:"#F0FBF6",border:"2px solid #2D6A4F"},
+  cardGot:{background:"var(--sg-theme-accent-wash,#F0FBF6)",border:"2px solid var(--sg-theme-accent,#2D6A4F)"},
   cardLocked:{background:"#F7F8F6"},
   emoji:{fontSize:32,marginBottom:6,transition:"filter 0.3s"},
   name:{fontSize:13,fontWeight:700,marginBottom:3},
   desc:{fontSize:10,color:"#aaa",lineHeight:1.35,marginBottom:8,minHeight:26},
   reward:{fontSize:11,fontWeight:700,color:"#B8860B",background:"#FFF8E7",borderRadius:14,padding:"4px 12px"},
-  rewardGot:{color:"#2D6A4F",background:"#E8F5EE"},
+  rewardGot:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)"},
   closeBtn:{display:"block",width:"100%",marginTop:18,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
 
@@ -7219,7 +7415,7 @@ function MySessionsPanel({ user, history, subjects, onEdit, onClose, onBack }) {
 }
 const ms = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:340},
-  sheet:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"20px 16px 28px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
+  sheet:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"20px 16px 28px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
   header:{marginBottom:6},
   back:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2},
   title:{fontSize:19,fontWeight:700,color:"#1a1a2e",margin:0,letterSpacing:-0.2},
@@ -7227,26 +7423,26 @@ const ms = {
   toast:{background:"#1a1a2e",color:"#fff",fontSize:12.5,fontWeight:600,borderRadius:10,padding:"8px 12px",margin:"8px 0",textAlign:"center"},
   empty:{textAlign:"center",color:"#aaa",fontSize:13.5,padding:"36px 12px"},
   list:{display:"flex",flexDirection:"column",gap:8,marginTop:12},
-  card:{background:"#F9FBF8",border:"1px solid #EEF2EC",borderRadius:14,overflow:"hidden"},
+  card:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,overflow:"hidden"},
   row:{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",padding:"11px 12px",cursor:"pointer",textAlign:"left"},
   icon:{width:34,height:34,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0},
   subjLabel:{display:"block",fontSize:13.5,fontWeight:700,color:"#1a1a2e"},
   editedTag:{fontSize:9.5,fontWeight:700,color:"#8B5CB8",background:"#F4EEFA",borderRadius:8,padding:"1px 6px",marginLeft:6},
   adminTag:{fontSize:9.5,fontWeight:700,color:"#999",background:"#F0F2EE",borderRadius:8,padding:"1px 6px",marginLeft:6},
   when:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
-  dur:{fontSize:13.5,fontWeight:700,color:"#2D6A4F",flexShrink:0},
+  dur:{fontSize:13.5,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",flexShrink:0},
   chev:{fontSize:15,color:"#ccc",fontWeight:700,flexShrink:0,width:14,textAlign:"center"},
   editor:{padding:"2px 14px 14px",borderTop:"1px solid #EEF2EC",marginTop:2},
   editorRow:{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginTop:10,marginBottom:6},
   editorNow:{fontSize:20,fontWeight:800,color:"#1a1a2e"},
   editorWas:{fontSize:11.5,color:"#aaa"},
-  slider:{width:"100%",accentColor:"#2D6A4F",cursor:"pointer"},
+  slider:{width:"100%",accentColor:"var(--sg-theme-accent,#2D6A4F)",cursor:"pointer"},
   editorPreview:{fontSize:12,fontWeight:600,color:"#C0392B",margin:"8px 0"},
-  saveBtn:{display:"block",width:"100%",padding:"11px 0",background:"#2D6A4F",border:"none",borderRadius:12,fontSize:13.5,fontWeight:700,color:"#fff",cursor:"pointer"},
+  saveBtn:{display:"block",width:"100%",padding:"11px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:12,fontSize:13.5,fontWeight:700,color:"#fff",cursor:"pointer"},
   saveBtnDisabled:{background:"#D5DBD3",cursor:"not-allowed"},
   removeBtn:{display:"block",width:"100%",padding:"9px 0",background:"transparent",border:"none",fontSize:12,fontWeight:600,color:"#C0392B",cursor:"pointer",marginTop:6},
   removeNote:{textAlign:"center",fontSize:10.5,color:"#bbb",marginTop:-2},
-  closeBtn:{display:"block",width:"100%",marginTop:16,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
+  closeBtn:{display:"block",width:"100%",marginTop:16,padding:"13px 0",background:"var(--sg-theme-primary-gradient,linear-gradient(135deg,#2D6A4F,#56B68B))",border:"none",borderRadius:14,fontSize:15,fontWeight:750,color:"#fff",cursor:"pointer",boxShadow:"0 5px 16px var(--sg-theme-shadow,rgba(45,106,79,.2))"},
 };
 
 // ── Admin Session Editor ──────────────────────────────────────────────────────
@@ -7554,13 +7750,13 @@ const ap = {
   x:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,color:"#888",cursor:"pointer",flexShrink:0},
   loading:{textAlign:"center",color:"#888",padding:"30px 0"},
   warn:{display:"flex",gap:9,alignItems:"flex-start",background:"#FFF6E5",border:"1.5px solid #F0D98C",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#8A6D2F",lineHeight:1.45,marginBottom:16,fontWeight:600},
-  section:{background:"#fff",borderRadius:16,padding:"16px 15px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
+  section:{background:"var(--sg-theme-neutral,#fff)",borderRadius:16,padding:"16px 15px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
   secTitle:{fontSize:14,fontWeight:800,color:"#1a1a2e",marginBottom:12},
   current:{fontSize:12,color:"#888",marginBottom:10,lineHeight:1.4},
   input:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:14,marginBottom:9,background:"#FAFCF9",outline:"none"},
   select:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:13.5,marginBottom:9,background:"#FAFCF9",outline:"none",cursor:"pointer"},
   msg:{fontSize:12.5,fontWeight:600,margin:"2px 2px 10px"},
-  saveBtn:{display:"block",width:"100%",padding:"12px 0",background:"#2D6A4F",border:"none",borderRadius:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",marginTop:3},
+  saveBtn:{display:"block",width:"100%",padding:"12px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",marginTop:3},
   doneBtn:{display:"block",width:"100%",marginTop:6,padding:"14px 0",background:"#F0F2EE",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#666",cursor:"pointer"},
 };
 
@@ -7988,7 +8184,7 @@ function Announcements({user,isAdmin,theme,lastReadAt,onRead}){
                   <section style={announceStyles.archiveSection}>
                     <button type="button" style={announceStyles.archiveToggle} onClick={toggleArchive} aria-expanded={archiveOpen}>
                       <span>Previous announcements</span>
-                      <span style={{transform:archiveOpen?"rotate(180deg)":"none",transition:"transform .2s ease"}}>⌄</span>
+                      <span className="sg-centered-chevron" style={{transform:archiveOpen?"rotate(180deg)":"none",transition:"transform .2s ease"}}>▾</span>
                     </button>
                     {archiveOpen&&(
                       <div style={announceStyles.archiveList}>
@@ -8027,16 +8223,16 @@ function Announcements({user,isAdmin,theme,lastReadAt,onRead}){
 }
 
 const announceStyles = {
-  panelHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"calc(17px + env(safe-area-inset-top)) 16px 13px",borderBottom:"1px solid #E3EAE0",background:"rgba(255,255,255,.86)",backdropFilter:"blur(10px)"},
+  panelHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"calc(17px + env(safe-area-inset-top)) 16px 13px",borderBottom:"1px solid #E3EAE0",background:"var(--sg-theme-neutral,rgba(255,255,255,.86))",backdropFilter:"blur(10px)"},
   panelKicker:{fontSize:9.5,fontWeight:800,letterSpacing:"1.3px",color:"#7AA56B"},
   panelTitle:{fontSize:20,fontWeight:800,letterSpacing:"-.4px",margin:"2px 0 0",color:"#213127"},
   closeBtn:{width:32,height:32,border:0,borderRadius:"50%",background:"#EDF2EB",color:"#6E7D71",fontSize:13,cursor:"pointer",flexShrink:0},
-  newBtn:{display:"block",width:"100%",padding:"10px 12px",margin:"14px 0 10px",border:"1px solid #D7E4D3",borderRadius:12,background:"#fff",color:"#376048",fontSize:12.5,fontWeight:750,cursor:"pointer"},
+  newBtn:{display:"block",width:"100%",padding:"10px 12px",margin:"14px 0 10px",border:"1px solid #D7E4D3",borderRadius:12,background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#376048)",fontSize:12.5,fontWeight:750,cursor:"pointer"},
   loading:{padding:"18px 0"},
   empty:{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5,color:"#718076",fontSize:12.5,lineHeight:1.45,padding:"46px 18px"},
   error:{background:"#FFF1ED",border:"1px solid #F0C7BB",borderRadius:11,padding:"9px 11px",fontSize:11.5,color:"#A65343",lineHeight:1.4,margin:"10px 0"},
   success:{background:"#EFF8ED",border:"1px solid #CFE4CA",borderRadius:11,padding:"9px 11px",fontSize:11.5,color:"#3C6A48",lineHeight:1.4,margin:"10px 0"},
-  post:{background:"#fff",border:"1px solid #E1E9DE",borderRadius:16,padding:"14px",margin:"14px 0 12px",boxShadow:"0 2px 8px rgba(31,52,37,.045)"},
+  post:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:16,padding:"14px",margin:"14px 0 12px",boxShadow:"0 2px 8px rgba(31,52,37,.045)"},
   postTop:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8},
   official:{fontSize:8.5,fontWeight:800,letterSpacing:".75px",color:"#63806B",lineHeight:1.25},
   category:{display:"inline-flex",alignItems:"center",borderRadius:20,padding:"3px 7px",background:"#EEF5EB",color:"#55715D",fontSize:9.5,fontWeight:750,whiteSpace:"nowrap"},
@@ -8045,7 +8241,7 @@ const announceStyles = {
   message:{fontSize:13.5,lineHeight:1.62,color:"#46544A"},
   readMore:{border:0,background:"transparent",padding:"7px 0 2px",color:"#4E7A5D",fontSize:11.5,fontWeight:750,cursor:"pointer"},
   reactions:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginTop:10},
-  reaction:{display:"inline-flex",alignItems:"center",gap:3,minHeight:27,padding:"3px 7px",border:"1px solid #E2E8DF",borderRadius:16,background:"#F9FBF8",fontSize:13,cursor:"pointer",color:"#637068"},
+  reaction:{display:"inline-flex",alignItems:"center",gap:3,minHeight:27,padding:"3px 7px",border:"1px solid #E2E8DF",borderRadius:16,background:"var(--sg-theme-neutral,#F9FBF8)",fontSize:13,cursor:"pointer",color:"#637068"},
   reactionActive:{borderColor:"#A8CEAD",background:"#EEF8ED",boxShadow:"0 0 0 2px rgba(93,157,104,.08)"},
   reactionCount:{fontSize:9.5,fontWeight:750},
   adminActions:{display:"flex",alignItems:"center",gap:5,marginTop:11,paddingTop:9,borderTop:"1px solid #EEF2EC"},
@@ -8055,7 +8251,7 @@ const announceStyles = {
   discussionHead:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8},
   discussionTitle:{fontSize:13,fontWeight:800,color:"#33473A",margin:0},
   replyTotal:{fontSize:10.5,color:"#909B92"},
-  replyComposer:{background:"#fff",border:"1px solid #E1E9DE",borderRadius:13,padding:9},
+  replyComposer:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:13,padding:9},
   replyInput:{display:"block",width:"100%",border:0,outline:0,resize:"vertical",minHeight:54,maxHeight:180,background:"transparent",fontFamily:"inherit",fontSize:12.5,lineHeight:1.45,color:"#36443A"},
   replyComposerFoot:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,borderTop:"1px solid #F0F3EF",paddingTop:7},
   charCount:{fontSize:9.5,color:"#A2AAA3"},
@@ -8064,7 +8260,7 @@ const announceStyles = {
   replyLoading:{padding:"10px 0"},
   emptyReplies:{textAlign:"center",fontSize:11.5,color:"#8C978E",padding:"22px 10px"},
   replyList:{display:"flex",flexDirection:"column",gap:7,marginTop:9},
-  reply:{display:"flex",alignItems:"flex-start",gap:8,background:"#fff",border:"1px solid #E5EBE3",borderRadius:12,padding:"9px 9px 8px"},
+  reply:{display:"flex",alignItems:"flex-start",gap:8,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E5EBE3",borderRadius:12,padding:"9px 9px 8px"},
   replyAvatar:{width:27,height:27,borderRadius:"50%",display:"grid",placeItems:"center",flex:"0 0 27px",background:"#DDEBDD",color:"#3E684B",fontSize:11,fontWeight:800},
   replyBody:{minWidth:0,flex:1},
   replyMeta:{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:7},
@@ -8077,14 +8273,14 @@ const announceStyles = {
   archiveSection:{borderTop:"1px solid #E1E8DF",paddingTop:4,marginTop:16},
   archiveToggle:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:0,background:"transparent",padding:"12px 1px",color:"#53685A",fontSize:12,fontWeight:750,cursor:"pointer"},
   archiveList:{display:"flex",flexDirection:"column",gap:6,paddingBottom:8},
-  archiveRow:{width:"100%",border:"1px solid #E3E9E1",borderRadius:11,background:"#fff",padding:"9px 10px",cursor:"pointer",color:"#405047"},
+  archiveRow:{width:"100%",border:"1px solid #E3E9E1",borderRadius:11,background:"var(--sg-theme-neutral,#fff)",padding:"9px 10px",cursor:"pointer",color:"#405047"},
   archiveRowActive:{borderColor:"#A9CDAE",background:"#F1F8F0"},
   archiveTitle:{display:"block",fontSize:11.5,fontWeight:750,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
   archiveMeta:{display:"block",fontSize:9.5,color:"#969F97",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
   archiveCount:{fontSize:9.5,color:"#7F8B82",whiteSpace:"nowrap"},
   archiveEmpty:{textAlign:"center",fontSize:11,color:"#98A099",padding:"14px 8px"},
-  loadMoreBtn:{display:"block",width:"100%",border:"1px solid #DFE7DD",borderRadius:9,background:"#F9FBF8",padding:"7px 10px",color:"#607265",fontSize:10.5,fontWeight:700,cursor:"pointer",margin:"7px 0"},
-  composer:{background:"#fff",border:"1px solid #DDE8DA",borderRadius:15,padding:12,margin:"14px 0 10px"},
+  loadMoreBtn:{display:"block",width:"100%",border:"1px solid #DFE7DD",borderRadius:9,background:"var(--sg-theme-neutral,#F9FBF8)",padding:"7px 10px",color:"#607265",fontSize:10.5,fontWeight:700,cursor:"pointer",margin:"7px 0"},
+  composer:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #DDE8DA",borderRadius:15,padding:12,margin:"14px 0 10px"},
   sectionTop:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:10},
   sectionTitle:{fontSize:13,color:"#33483A"},
   sectionTitleSmall:{fontSize:11.5,color:"#506158"},
@@ -8094,30 +8290,30 @@ const announceStyles = {
   input:{display:"block",width:"100%",marginTop:4,padding:"9px 10px",border:"1px solid #DCE5D9",borderRadius:10,outline:0,background:"#FBFCFA",fontFamily:"inherit",fontSize:12.5,color:"#334139"},
   textarea:{display:"block",width:"100%",marginTop:4,padding:"9px 10px",border:"1px solid #DCE5D9",borderRadius:10,outline:0,background:"#FBFCFA",fontFamily:"inherit",fontSize:12.5,lineHeight:1.45,color:"#334139"},
   composerActions:{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:7,marginTop:10},
-  secondaryBtn:{border:"1px solid #DDE5DA",borderRadius:9,background:"#F8FAF7",padding:"8px 10px",color:"#617066",fontSize:10.5,fontWeight:700,cursor:"pointer"},
-  primaryBtn:{border:0,borderRadius:9,background:"#3F6E50",padding:"8px 12px",color:"#fff",fontSize:10.5,fontWeight:750,cursor:"pointer"},
+  secondaryBtn:{border:"1px solid #DDE5DA",borderRadius:9,background:"var(--sg-theme-neutral,#F8FAF7)",padding:"8px 10px",color:"#617066",fontSize:10.5,fontWeight:700,cursor:"pointer"},
+  primaryBtn:{border:0,borderRadius:9,background:"var(--sg-theme-accent,#3F6E50)",padding:"8px 12px",color:"#fff",fontSize:10.5,fontWeight:750,cursor:"pointer"},
   preview:{border:"1px solid #E3E9E1",borderRadius:11,background:"#FAFCF9",padding:11},
 };
 
 function PrivacyDataPanel({onClose,onBack}){
   return <div style={pd.overlay} className="sg-overlay-anim" onClick={onClose}>
     <div style={pd.sheet} className="sg-sheet-anim" onClick={event=>event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="privacy-data-title">
-      <div style={pd.header}>
+      <div style={pd.header} className="sg-sheet-theme-header">
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <button style={ap.back} onClick={onBack||onClose} aria-label="Back">←</button>
           <div><div style={ap.kicker}>PRIVACY & DATA</div><h3 id="privacy-data-title" style={ap.title}>Privacy Policy</h3></div>
         </div>
         <button style={ap.x} onClick={onClose} aria-label="Close">✕</button>
       </div>
-      <iframe title="Lumora Privacy Policy" srcDoc={PRIVACY_POLICY_WITHOUT_BRANDING} style={pd.policyFrame}/>
+      <iframe title="Lumora Privacy Policy" srcDoc={PRIVACY_POLICY_WITHOUT_BRANDING} className="sg-privacy-policy-frame" style={pd.policyFrame}/>
     </div>
   </div>;
 }
 const pd={
   overlay:{...ap.overlay,zIndex:355},
-  sheet:{...ap.modal,maxWidth:720,height:"94vh",maxHeight:"94vh",padding:"0",overflow:"hidden",display:"flex",flexDirection:"column",background:"#fff"},
-  header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"#FCFDFB",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
-  policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"#fff"},
+  sheet:{...ap.modal,maxWidth:720,height:"94vh",maxHeight:"94vh",padding:"0",overflow:"hidden",display:"flex",flexDirection:"column",background:"var(--sg-theme-neutral,#fff)"},
+  header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
+  policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
 function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onToggleTheme, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
@@ -8133,7 +8329,7 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTes
   ];
   return (
     <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
-      <div style={hm.sheet} className="sg-sheet-anim" onClick={e=>e.stopPropagation()}>
+      <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
         <div style={hm.grabber}/>
         <button style={hm.profile} className="sg-tap-card" onClick={onAccount}>
           <span style={hm.avatar}>{user.slice(0,1).toUpperCase()}</span>
@@ -8201,15 +8397,15 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTes
 }
 const hm = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:350},
-  sheet:{background:"#fff",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
+  sheet:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
   grabber:{width:36,height:4,borderRadius:4,background:"#E0E0E0",margin:"0 auto 14px"},
-  profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"#F9FBF8",border:"1px solid #EEF2EC",borderRadius:14,cursor:"pointer",marginBottom:10},
+  profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,cursor:"pointer",marginBottom:10},
   testCoins:{display:"flex",alignItems:"center",justifyContent:"center",gap:7,width:"100%",minHeight:40,margin:"-2px 0 10px",border:"1px solid #E8D28A",borderRadius:13,background:"#FFF8E7",color:"#8B6815",fontSize:12,fontWeight:750,cursor:"pointer"},
-  avatar:{width:42,height:42,borderRadius:"50%",background:"#2D6A4F",color:"#fff",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
+  avatar:{width:42,height:42,borderRadius:"50%",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
   name:{fontSize:16,fontWeight:700,color:"#1a1a2e"},
   meta:{fontSize:12,color:"#999",marginTop:2},
   list:{display:"flex",flexDirection:"column",gap:4},
-  item:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"#F9FBF8",border:"1px solid #EEF2EC",borderRadius:14,padding:"12px 14px",cursor:"pointer",transition:"background 0.15s"},
+  item:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,padding:"12px 14px",cursor:"pointer",transition:"background 0.15s"},
   itemIcon:{fontSize:20,width:24,textAlign:"center",flexShrink:0},
   itemLabel:{display:"block",fontSize:14,fontWeight:700,color:"#1a1a2e"},
   itemSub:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
@@ -8220,7 +8416,7 @@ const hm = {
   motionSub:{fontSize:9.5,color:"#98A099",marginTop:2},
   motionOptions:{display:"flex",gap:3,padding:3,borderRadius:11,background:"#EEF2EC",flexShrink:0},
   motionOption:{border:0,borderRadius:8,background:"transparent",padding:"6px 8px",fontSize:9.5,fontWeight:750,color:"#7A867D",cursor:"pointer"},
-  motionOptionOn:{background:"#fff",color:"#2D6A4F",boxShadow:"0 1px 4px rgba(30,55,38,.12)"},
+  motionOptionOn:{background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",boxShadow:"0 1px 4px rgba(30,55,38,.12)"},
   row:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"transparent",border:"none",borderRadius:12,padding:"11px 14px",cursor:"pointer"},
   closeBtn:{display:"block",width:"100%",marginTop:10,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
@@ -8248,7 +8444,7 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
   const today = startOfStudyDay(new Date());
   const dayMap = {};
   hist.forEach(s=>{ const k=startOfStudyDay(s.ts).getTime(); dayMap[k]=(dayMap[k]||0)+s.secs; });
-  // Build complete Melbourne Sunday→Saturday columns. Future cells in the
+  // Build complete Melbourne Monday→Sunday columns. Future cells in the
   // current week stay transparent until that Melbourne calendar day arrives.
   const gridStart = shiftStudyWeek(today,-(WEEKS-1)).start;
   const heat = [];
@@ -8411,7 +8607,7 @@ function SmartDashboard({ history, subjects, streak, targets, coins, onClose, on
           </>
         )}
 
-        <button style={sd.doneBtn} onClick={onClose}>Keep growing 🌱</button>
+        <button style={sd.doneBtn} onClick={onClose}>Keep learning</button>
       </div>
     </div>
   );
@@ -8426,19 +8622,19 @@ const sd = {
   x:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,color:"#888",cursor:"pointer",flexShrink:0},
   empty:{fontSize:14,color:"#888",textAlign:"center",lineHeight:1.6,padding:"30px 12px"},
   heroRow:{display:"flex",gap:9,marginBottom:8},
-  hero:{flex:1,background:"#fff",borderRadius:14,padding:"13px 6px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
-  heroVal:{fontSize:20,fontWeight:900,color:"#2D6A4F",letterSpacing:"-0.5px"},
+  hero:{flex:1,background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"13px 6px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
+  heroVal:{fontSize:20,fontWeight:900,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.5px"},
   heroLbl:{fontSize:10,color:"#999",marginTop:2,fontWeight:600},
   section:{marginTop:20},
   secTitle:{fontSize:11,fontWeight:700,color:"#8A968A",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:10},
   insightList:{display:"flex",flexDirection:"column",gap:8},
   insight:{display:"flex",alignItems:"flex-start",gap:11,borderRadius:14,padding:"13px 14px",border:"1.5px solid"},
-  insightGood:{background:"#fff",borderColor:"#D8EBDF"},
+  insightGood:{background:"var(--sg-theme-neutral,#fff)",borderColor:"#D8EBDF"},
   insightSoft:{background:"#FFFBF4",borderColor:"#F0E2C8"},
   insightIcon:{fontSize:20,lineHeight:1.1,flexShrink:0},
   insightTitle:{fontSize:13.5,fontWeight:800,color:"#1a1a2e",marginBottom:2,lineHeight:1.25},
   insightBody:{fontSize:12,color:"#777",lineHeight:1.45},
-  heatWrap:{display:"flex",gap:5,background:"#fff",borderRadius:14,padding:"12px 12px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
+  heatWrap:{display:"flex",gap:5,background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"12px 12px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
   heatDays:{display:"flex",flexDirection:"column",gap:3,paddingTop:0},
   heatDayLbl:{fontSize:8,color:"#bbb",height:13,lineHeight:"13px",fontWeight:600},
   heatGrid:{display:"flex",gap:3,flex:1,justifyContent:"space-between"},
@@ -8447,18 +8643,18 @@ const sd = {
   heatLegend:{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end",marginTop:8},
   legendLbl:{fontSize:10,color:"#aaa",fontWeight:600},
   trendLbls:{display:"flex",justifyContent:"space-between",fontSize:10,color:"#aaa",fontWeight:600,marginTop:2,padding:"0 2px"},
-  rankList:{display:"flex",flexDirection:"column",gap:9,background:"#fff",borderRadius:14,padding:"14px 14px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
+  rankList:{display:"flex",flexDirection:"column",gap:9,background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"14px 14px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
   rankRow:{display:"flex",alignItems:"center",gap:9},
   rankNum:{fontSize:12,fontWeight:800,color:"#bbb",width:14,textAlign:"center"},
   rankName:{fontSize:12.5,fontWeight:600,color:"#444",marginBottom:4},
   rankTrack:{height:6,background:"#EEF2EC",borderRadius:6,overflow:"hidden"},
   rankFill:{height:"100%",borderRadius:6,transition:"width 0.6s ease"},
   rankVal:{fontSize:12,fontWeight:700,width:44,textAlign:"right"},
-  doneBtn:{display:"block",width:"100%",marginTop:20,padding:"14px 0",background:"#2D6A4F",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#fff",cursor:"pointer"},
+  doneBtn:{display:"block",width:"100%",marginTop:20,padding:"14px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#fff",cursor:"pointer"},
 };
 
 
-const ASSESSMENT_TYPES = ["SAC","Exam","Assignment","Test","Practical","Oral"];
+const ASSESSMENT_TYPES = ["Exam","Assignment","Test","Practical","Oral"];
 const ASSESSMENT_FAMILY_META = {
   math:{label:"Mathematics",emoji:"📐",color:"#5B8DEF"},
   english:{label:"English",emoji:"📖",color:"#E07B54"},
@@ -8537,11 +8733,10 @@ function ExamCountdownModal({ exams, subjects, editIndex=null, onSave, onClose }
     ? {id:newAssessmentId(),name:"",subject:"",date:"",type:"",time:"",location:"",notes:"",reminder:false}
     : {...exams[editIndex],id:exams[editIndex].id||newAssessmentId()};
   const [draft,setDraft]=useState(original);
-  const [more,setMore]=useState(Boolean(original.type||original.time||original.location||original.notes||original.reminder));
+  const [more,setMore]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
   const titleId=useId();
-  const subjectListId=useId();
   const update=(key,value)=>setDraft(d=>({...d,[key]:value,...(key==="reminder"&&value?{reminderDismissed:false}:{})}));
 
   useEffect(()=>{
@@ -8585,40 +8780,40 @@ function ExamCountdownModal({ exams, subjects, editIndex=null, onSave, onClose }
 
         <label style={ec.label}>
           Assessment name
-          <input autoFocus style={ec.input} placeholder="e.g. Chemistry SAC" value={draft.name||""}
+          <input autoFocus style={ec.input} placeholder="e.g. Chemistry Test" value={draft.name||""}
             onChange={e=>update("name",e.target.value)} maxLength={80}/>
         </label>
         <div style={ec.essentialGrid} className="sg-assessment-essential">
-          <label style={ec.label}>
-            Subject
-            <input style={ec.input} list={subjectListId} placeholder="e.g. Chemistry" value={draft.subject||""}
-              onChange={e=>update("subject",e.target.value)} maxLength={40}/>
-            <datalist id={subjectListId}>{subjects.map(s=><option key={s.id} value={s.label}/>)}</datalist>
-          </label>
-          <label style={ec.label}>
-            Date
-            <input style={ec.input} type="date" value={draft.date||""} onChange={e=>update("date",e.target.value)}/>
-          </label>
+          <div style={ec.label}>
+            <span>Subject</span>
+            <TaskDropdown value={subjects.find(subject=>[subject.id,subject.label].some(value=>String(value).toLowerCase()===String(draft.subject||"").toLowerCase()))?.label||draft.subject||""}
+              label="Assessment subject" placeholder="Select subject" placeholderIcon="◇"
+              options={subjects.map(subject=>({value:subject.label,label:subject.label,icon:subject.emoji||"📘"}))}
+              onChange={subject=>update("subject",subject)}/>
+          </div>
+          <div style={ec.label}>
+            <span>Date</span>
+            <TaskDatePicker value={draft.date||""} label="Assessment date" emptyLabel="Date" onChange={date=>update("date",date)}/>
+          </div>
         </div>
 
         <button type="button" style={ec.moreBtn} onClick={()=>setMore(v=>!v)} aria-expanded={more}>
-          <span>{more?"Hide details":"More details"}</span>
-          <span style={{...ec.moreChevron,transform:more?"rotate(180deg)":"none"}}>⌄</span>
+          <span>{more?"Hide details (optional)":"Show details (optional)"}</span>
+          <span className="sg-centered-chevron" style={{...ec.moreChevron,transform:more?"rotate(180deg)":"none"}}>▾</span>
         </button>
         {more&&(
           <div style={ec.details} className="sg-view-anim">
             <div style={ec.essentialGrid} className="sg-assessment-essential">
-              <label style={ec.label}>
-                Type
-                <select style={ec.input} value={draft.type||""} onChange={e=>update("type",e.target.value)}>
-                  <option value="">Not set</option>
-                  {ASSESSMENT_TYPES.map(type=><option key={type} value={type}>{type}</option>)}
-                </select>
-              </label>
-              <label style={ec.label}>
-                Start time
-                <input style={ec.input} type="time" value={draft.time||""} onChange={e=>update("time",e.target.value)}/>
-              </label>
+              <div style={ec.label}>
+                <span>Type</span>
+                <TaskDropdown value={draft.type||""} label="Assessment type" placeholder="Not set" placeholderIcon="◇"
+                  options={ASSESSMENT_TYPES.map((type,index)=>({value:type,label:type,icon:["📚","📄","✓","🔬","🎙️"][index]}))}
+                  onChange={type=>update("type",type)}/>
+              </div>
+              <div style={ec.label}>
+                <span>Start time</span>
+                <AssessmentTimePicker value={draft.time||""} onChange={time=>update("time",time)}/>
+              </div>
             </div>
             <label style={ec.label}>
               Location
@@ -8632,7 +8827,7 @@ function ExamCountdownModal({ exams, subjects, editIndex=null, onSave, onClose }
             </label>
             <label style={ec.reminderRow}>
               <input type="checkbox" checked={Boolean(draft.reminder)} onChange={e=>update("reminder",e.target.checked)}/>
-              <span><b>Approaching reminder</b><small>Show once when this assessment is three days away.</small></span>
+              <span><b>Approaching reminder</b><small style={{display:"block",marginTop:3}}>Show once when this assessment is three days away.</small></span>
             </label>
           </div>
         )}
@@ -8650,14 +8845,14 @@ function ExamCountdownModal({ exams, subjects, editIndex=null, onSave, onClose }
 }
 
 const ec = {
-  overlay:{position:"fixed",inset:0,background:"rgba(18,32,23,.44)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16},
-  modal:{background:"#fff",borderRadius:20,padding:"20px 18px",width:"100%",maxWidth:390,boxShadow:"0 12px 36px rgba(25,45,32,.2)",maxHeight:"min(86vh,720px)",overflowY:"auto"},
+  overlay:{position:"fixed",inset:0,background:"rgba(18,32,23,.44)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:10},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:20,padding:"22px 20px",width:"100%",maxWidth:430,height:"min(92dvh,760px)",maxHeight:"calc(100dvh - 20px)",display:"flex",flexDirection:"column",boxShadow:"0 12px 36px rgba(25,45,32,.2)",overflowY:"auto"},
   header:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16},
   kicker:{fontSize:9,fontWeight:800,color:"#7AA56B",letterSpacing:"1.1px",marginBottom:2},
   title:{fontSize:19,fontWeight:800,color:"#1A2E22",margin:0,letterSpacing:"-.35px"},
   closeBtn:{width:30,height:30,border:"none",borderRadius:"50%",background:"#EEF2EC",color:"#718077",fontSize:20,cursor:"pointer",lineHeight:1},
   label:{display:"flex",flexDirection:"column",gap:5,fontSize:11,fontWeight:700,color:"#69756D",marginBottom:11,minWidth:0},
-  input:{display:"block",width:"100%",minWidth:0,padding:"10px 11px",border:"1.5px solid #DDE6DA",borderRadius:11,fontSize:13,color:"#26362C",background:"#fff",outline:"none",fontFamily:"inherit"},
+  input:{display:"block",width:"100%",minWidth:0,padding:"10px 11px",border:"1.5px solid #DDE6DA",borderRadius:11,fontSize:13,color:"#26362C",background:"var(--sg-theme-neutral,#fff)",outline:"none",fontFamily:"inherit"},
   essentialGrid:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9},
   moreBtn:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:"none",background:"#F5F8F3",borderRadius:11,padding:"9px 11px",fontSize:11.5,fontWeight:700,color:"#627269",cursor:"pointer",marginTop:1},
   moreChevron:{fontSize:14,color:"#89968E",transition:"transform .2s ease"},
@@ -8665,24 +8860,168 @@ const ec = {
   textarea:{resize:"vertical",minHeight:66,lineHeight:1.4},
   reminderRow:{display:"flex",alignItems:"flex-start",gap:9,padding:"10px 11px",background:"#F4F8F2",borderRadius:11,fontSize:11.5,color:"#506057",cursor:"pointer"},
   error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",border:"1px solid #F0D7D1",borderRadius:10,padding:"8px 10px",marginTop:10},
-  actions:{display:"flex",alignItems:"center",gap:7,marginTop:17},
+  actions:{display:"flex",alignItems:"center",gap:7,marginTop:"auto",paddingTop:17},
   deleteBtn:{padding:"9px 10px",background:"#FAECE9",border:"none",borderRadius:10,fontSize:11.5,fontWeight:700,color:"#A4574C",cursor:"pointer"},
   cancelBtn:{padding:"10px 12px",background:"#F1F4F0",border:"none",borderRadius:11,fontSize:12.5,fontWeight:700,color:"#657168",cursor:"pointer"},
-  saveBtn:{padding:"10px 17px",background:"#2D6A4F",border:"none",borderRadius:11,fontSize:12.5,fontWeight:750,color:"#fff",cursor:"pointer"},
+  saveBtn:{padding:"10px 17px",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:11,fontSize:12.5,fontWeight:750,color:"#fff",cursor:"pointer"},
 };
+
+function TaskDatePicker({value,onChange,label="Task due date",emptyLabel="Due Date"}){
+  const selected=value?new Date(`${value}T00:00:00`):null;
+  const [open,setOpen]=useState(false);
+  const rootRef=useRef(null);
+  const [month,setMonth]=useState(()=>selected||new Date());
+  useEffect(()=>{if(selected)setMonth(selected);},[value]);
+  useEffect(()=>{
+    if(!open)return;
+    const close=event=>{if(!rootRef.current?.contains(event.target))setOpen(false);};
+    const escape=event=>{if(event.key==="Escape")setOpen(false);};
+    document.addEventListener("pointerdown",close);
+    document.addEventListener("keydown",escape);
+    return()=>{document.removeEventListener("pointerdown",close);document.removeEventListener("keydown",escape);};
+  },[open]);
+  const days=useMemo(()=>{
+    const first=new Date(month.getFullYear(),month.getMonth(),1);
+    const start=new Date(first);
+    start.setDate(first.getDate()-first.getDay());
+    return Array.from({length:42},(_,index)=>{
+      const date=new Date(start);date.setDate(start.getDate()+index);return date;
+    });
+  },[month]);
+  const todayKey=taskDateKey(new Date());
+  const choose=date=>{onChange(taskDateKey(date));setOpen(false);};
+  return <div ref={rootRef} className="sg-task-date-picker">
+    <button type="button" className="sg-task-date-button" onClick={()=>setOpen(show=>!show)} aria-expanded={open} aria-haspopup="dialog" aria-label={label}>
+      <span aria-hidden="true">▦</span>
+      <span>{value?formatAssessmentDate(value,true):emptyLabel}</span>
+      <span aria-hidden="true" className="sg-centered-chevron">▾</span>
+    </button>
+    {open&&<div className="sg-task-calendar sg-pop-anim" role="dialog" aria-label={label}>
+      <div className="sg-task-calendar-header">
+        <button type="button" aria-label="Previous month" onClick={()=>setMonth(date=>new Date(date.getFullYear(),date.getMonth()-1,1))}>‹</button>
+        <strong>{month.toLocaleDateString("en-AU",{month:"long",year:"numeric"})}</strong>
+        <button type="button" aria-label="Next month" onClick={()=>setMonth(date=>new Date(date.getFullYear(),date.getMonth()+1,1))}>›</button>
+      </div>
+      <div className="sg-task-calendar-weekdays" aria-hidden="true">
+        {["S","M","T","W","T","F","S"].map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}
+      </div>
+      <div className="sg-task-calendar-grid">
+        {days.map(date=>{
+          const key=taskDateKey(date);
+          return <button type="button" key={key} className="sg-task-calendar-day"
+            data-outside={date.getMonth()!==month.getMonth()} data-today={key===todayKey} data-selected={key===value}
+            aria-label={date.toLocaleDateString("en-AU",{day:"numeric",month:"long",year:"numeric"})}
+            onClick={()=>choose(date)}>{date.getDate()}</button>;
+        })}
+      </div>
+      <div className="sg-task-calendar-footer">
+        <button type="button" onClick={()=>{onChange("");setOpen(false);}}>Clear</button>
+        <button type="button" onClick={()=>choose(new Date())}>Today</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+function AssessmentTimePicker({value,onChange}){
+  const rootRef=useRef(null);
+  const [open,setOpen]=useState(false);
+  const toParts=current=>{
+    const match=/^(\d{1,2}):(\d{2})$/.exec(String(current||""));
+    const hour24=match?Math.min(23,Number(match[1])):9;
+    return {hour:String(hour24%12||12),minute:match?match[2]:"00",period:hour24>=12?"PM":"AM"};
+  };
+  const [parts,setParts]=useState(()=>toParts(value));
+  useEffect(()=>{if(!open)setParts(toParts(value));},[value,open]);
+  useEffect(()=>{
+    if(!open)return;
+    const close=event=>{if(!rootRef.current?.contains(event.target))setOpen(false);};
+    document.addEventListener("pointerdown",close);
+    return()=>document.removeEventListener("pointerdown",close);
+  },[open]);
+  const display=()=>{
+    const match=/^(\d{1,2}):(\d{2})$/.exec(String(value||""));
+    if(!match)return "Set time";
+    const hour=Number(match[1]);
+    return `${String(hour%12||12).padStart(2,"0")}:${match[2]} ${hour>=12?"PM":"AM"}`;
+  };
+  const apply=()=>{
+    const hour=Math.max(1,Math.min(12,Number(parts.hour)||12));
+    const minute=Math.max(0,Math.min(59,Number(parts.minute)||0));
+    const hour24=(hour%12)+(parts.period==="PM"?12:0);
+    onChange(`${String(hour24).padStart(2,"0")}:${String(minute).padStart(2,"0")}`);
+    setOpen(false);
+  };
+  return <div ref={rootRef} className="sg-time-picker">
+    <button type="button" className="sg-time-picker-trigger" aria-label="Assessment start time" aria-expanded={open} aria-haspopup="dialog" onClick={()=>{setParts(toParts(value));setOpen(current=>!current);}}>
+      <span className="sg-time-picker-icon" aria-hidden="true">◷</span><span>{display()}</span><span aria-hidden="true">▾</span>
+    </button>
+    {open&&<div className="sg-time-picker-panel sg-pop-anim" role="dialog" aria-label="Choose assessment start time">
+      <div className="sg-time-picker-fields">
+        <input type="number" min="1" max="12" value={parts.hour} aria-label="Hour" onChange={event=>setParts({...parts,hour:event.target.value})}/>
+        <b aria-hidden="true">:</b>
+        <input type="number" min="0" max="59" value={parts.minute} aria-label="Minute" onChange={event=>setParts({...parts,minute:event.target.value})}/>
+      </div>
+      <div className="sg-time-picker-period" role="group" aria-label="Time period">
+        {["AM","PM"].map(period=><button type="button" key={period} aria-pressed={parts.period===period} onClick={()=>setParts({...parts,period})}>{period}</button>)}
+      </div>
+      <div className="sg-time-picker-actions">
+        <button type="button" onClick={()=>{onChange("");setOpen(false);}}>Clear</button>
+        <button type="button" onClick={apply}>Apply</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+function TaskDropdown({value,onChange,options,placeholder,placeholderIcon="◇",emptyLabel=placeholder,emptyIcon=placeholderIcon,label,className=""}){
+  const [open,setOpen]=useState(false);
+  const rootRef=useRef(null);
+  const selected=options.find(option=>option.value===value);
+  useEffect(()=>{
+    if(!open)return;
+    const close=event=>{if(!rootRef.current?.contains(event.target))setOpen(false);};
+    const escape=event=>{if(event.key==="Escape")setOpen(false);};
+    document.addEventListener("pointerdown",close);
+    document.addEventListener("keydown",escape);
+    return()=>{document.removeEventListener("pointerdown",close);document.removeEventListener("keydown",escape);};
+  },[open]);
+  return <div ref={rootRef} className={`sg-task-dropdown ${className}`.trim()}>
+    <button type="button" className="sg-task-dropdown-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(current=>!current)}>
+      <span className="sg-task-dropdown-leading" aria-hidden="true">{selected?.icon||placeholderIcon}</span>
+      <span>{selected?.label||placeholder}</span>
+      <span className="sg-task-dropdown-chevron" aria-hidden="true">▾</span>
+    </button>
+    {open&&<div className="sg-task-dropdown-menu sg-pop-anim" role="listbox" aria-label={label}>
+      {[{value:"",label:emptyLabel,icon:emptyIcon},...options].map(option=><button type="button" key={option.value||"empty"}
+        className="sg-task-dropdown-option" role="option" aria-selected={value===option.value}
+        onClick={()=>{onChange(option.value);setOpen(false);}}>
+        <span className="sg-task-dropdown-option-icon" aria-hidden="true">{option.icon}</span>
+        <span>{option.label}</span>
+        <span className="sg-task-dropdown-check" aria-hidden="true">{value===option.value?"✓":""}</span>
+      </button>)}
+    </div>}
+  </div>;
+}
 
 function ChecklistCard({tasks,loading,error,subjects,selectedTaskId,onSelect,onCreate,onUpdate,onDelete}){
   const [expanded,setExpanded]=useState(true);
-  const [showCompleted,setShowCompleted]=useState(false);
   const [adding,setAdding]=useState(false);
-  const [draft,setDraft]=useState({title:"",subject:"",dueDate:"",recurring:false,schedule:""});
+  const [draft,setDraft]=useState({title:"",subject:"",dueDate:"",recurrence:"",schedule:""});
   const [editing,setEditing]=useState(null);
-  const [editDraft,setEditDraft]=useState({title:"",subject:"",dueDate:"",recurring:false,schedule:""});
+  const [editDraft,setEditDraft]=useState({title:"",subject:"",dueDate:"",recurrence:"",schedule:""});
   const [busy,setBusy]=useState("");
+  const [completingIds,setCompletingIds]=useState([]);
   const [localError,setLocalError]=useState("");
-  const [showHelp,setShowHelp]=useState(false);
+  const [subjectFilter,setSubjectFilter]=useState("");
+  const [filterOpen,setFilterOpen]=useState(false);
+  const [taskView,setTaskView]=useState("upcoming");
   const activeTasks=tasks.filter(task=>!task.completed);
-  const visible=showCompleted?tasks:activeTasks;
+  const todayTaskKey=taskDateKey(new Date());
+  const tasksForView=taskView==="today"?activeTasks.filter(task=>task.dueDate&&task.dueDate<=todayTaskKey):activeTasks;
+  const visible=subjectFilter?tasksForView.filter(task=>task.subject===subjectFilter):tasksForView;
+  const filteredSubject=subjects.find(subject=>subject.id===subjectFilter);
+  useEffect(()=>{
+    if(subjectFilter&&!filteredSubject)setSubjectFilter("");
+  },[subjectFilter,filteredSubject]);
   const selected=tasks.find(task=>task.id===selectedTaskId&&!task.completed);
   const run=async(key,action)=>{
     if(busy)return null;
@@ -8698,52 +9037,77 @@ function ChecklistCard({tasks,loading,error,subjects,selectedTaskId,onSelect,onC
   };
   const add=async event=>{
     event.preventDefault();
-    const result=await run("add",()=>onCreate(draft));
-    if(result?.ok){setDraft({title:"",subject:"",dueDate:"",recurring:false,schedule:""});setAdding(false);setExpanded(true);}
+    const submitted={...draft};
+    setDraft({title:"",subject:"",dueDate:"",recurrence:"",schedule:""});
+    setAdding(false);
+    setExpanded(true);
+    const result=await run("add",()=>onCreate(submitted));
+    if(!result?.ok){setDraft(submitted);setAdding(true);}
   };
   const beginEdit=task=>{
     setEditing(task.id);
-    setEditDraft({title:task.title,subject:task.subject||"",dueDate:task.dueDate||"",recurring:task.recurring===true,schedule:""});
+    setEditDraft({title:task.title,subject:task.subject||"",dueDate:task.dueDate||"",recurrence:task.recurrence||"",schedule:""});
   };
   const saveEdit=async task=>{
     const result=await run(task.id,()=>onUpdate(task.id,editDraft));
     if(result?.ok)setEditing(null);
   };
-  return <section className="sg-task-card" style={taskStyles.card} aria-labelledby="study-task-heading">
+  const completeTask=async task=>{
+    if(completingIds.includes(task.id)||busy)return;
+    setCompletingIds(ids=>[...ids,task.id]);
+    await new Promise(resolve=>setTimeout(resolve,520));
+    try{await run(task.id,()=>onUpdate(task.id,{completed:true}));}
+    finally{setCompletingIds(ids=>ids.filter(id=>id!==task.id));}
+  };
+  return <section className="sg-task-card" style={{...taskStyles.card,...(filterOpen?taskStyles.cardFilterOpen:{})}} aria-labelledby="study-task-heading"
+    onClickCapture={event=>{if(filterOpen&&!event.target.closest("[data-task-filter]"))setFilterOpen(false);}}>
     <button type="button" style={taskStyles.header} onClick={()=>setExpanded(value=>!value)}
       aria-expanded={expanded} aria-controls="study-task-list">
       <span style={taskStyles.headerTitle}>
         <span aria-hidden="true">✓</span>
         <span id="study-task-heading">To do list</span>
       </span>
-      <span style={taskStyles.summary}>{loading?"Loading…":`${activeTasks.length} task${activeTasks.length===1?"":"s"}`}</span>
-      <span aria-hidden="true" style={{...taskStyles.chevron,transform:expanded?"rotate(180deg)":"none"}}>⌄</span>
+      <span style={taskStyles.summary}>{loading?"Loading…":`${visible.length} task${visible.length===1?"":"s"}`}</span>
+      <span aria-hidden="true" className="sg-centered-chevron" style={{...taskStyles.chevron,transform:expanded?"rotate(180deg)":"none"}}>▾</span>
     </button>
     {!expanded&&selected&&<div style={taskStyles.selectedSummary} title={selected.title}>Next · {selected.title}</div>}
     {expanded&&<div id="study-task-list" style={taskStyles.body}>
       {(error||localError)&&<div role="status" style={taskStyles.error}>{localError||error}</div>}
       <div style={taskStyles.toolbar}>
         <button type="button" style={taskStyles.addButton} onClick={()=>setAdding(value=>!value)} aria-expanded={adding}>＋ Add task</button>
-        {!!tasks.some(task=>task.completed)&&<button type="button" style={taskStyles.showButton}
-          onClick={()=>setShowCompleted(value=>!value)}>{showCompleted?"Hide completed":"Show completed"}</button>}
+        <div style={taskStyles.filterWrap} data-task-filter>
+          <button type="button" style={taskStyles.filterButton} onClick={()=>setFilterOpen(open=>!open)}
+            aria-expanded={filterOpen} aria-haspopup="listbox">
+            {filteredSubject?.label||"Filter"} <span aria-hidden="true" className="sg-centered-chevron">▾</span>
+          </button>
+          {filterOpen&&<div role="listbox" aria-label="Filter tasks by subject" style={taskStyles.filterMenu} className="sg-pop-anim">
+            <button type="button" role="option" aria-selected={!subjectFilter} style={{...taskStyles.filterOption,...(!subjectFilter?taskStyles.filterOptionActive:{})}}
+              onClick={()=>{setSubjectFilter("");setFilterOpen(false);}}>All subjects</button>
+            {subjects.map(subject=><button type="button" role="option" aria-selected={subjectFilter===subject.id} key={subject.id}
+              style={{...taskStyles.filterOption,...(subjectFilter===subject.id?taskStyles.filterOptionActive:{})}}
+              onClick={()=>{setSubjectFilter(subject.id);setFilterOpen(false);}}>{subject.emoji||"📘"} {subject.label}</button>)}
+          </div>}
+        </div>
       </div>
+      {!adding&&<div style={taskStyles.viewTabs} role="group" aria-label="Task date view">
+        <button type="button" aria-pressed={taskView==="today"} style={{...taskStyles.viewTab,...(taskView==="today"?taskStyles.viewTabActive:{})}}
+          onClick={()=>setTaskView("today")}>Today</button>
+        <button type="button" aria-pressed={taskView==="upcoming"} style={{...taskStyles.viewTab,...(taskView==="upcoming"?taskStyles.viewTabActive:{})}}
+          onClick={()=>setTaskView("upcoming")}>Upcoming</button>
+      </div>}
       {adding&&<form onSubmit={add} style={taskStyles.form}>
-        <button type="button" aria-label="About To do list scheduling" title="How scheduling works" style={taskStyles.help} onClick={()=>setShowHelp(value=>!value)}>?</button>
-        {showHelp&&<div style={taskStyles.helpPanel}>
-          Type <b>today</b>, <b>tmr</b>, or a weekday such as <b>Mon</b> in Schedule. A recurring task is added again for tomorrow when you complete it.
-        </div>}
         <div className="sg-task-edit">
           <input value={draft.title} maxLength={180} autoFocus placeholder="What do you need to study?"
             aria-label="Task title" onChange={event=>setDraft({...draft,title:event.target.value})}/>
-          <select value={draft.subject} aria-label="Task subject" onChange={event=>setDraft({...draft,subject:event.target.value})}>
-            <option value="">No subject</option>
-            {subjects.map(item=><option key={item.id} value={item.id}>{item.emoji||"📘"} {item.label}</option>)}
-          </select>
-          <input className="sg-task-due" type="date" value={draft.dueDate} aria-label="Task due date"
-            onChange={event=>setDraft({...draft,dueDate:event.target.value})}/>
-          <input className="sg-task-schedule" value={draft.schedule} placeholder="Schedule: tmr, Mon…" aria-label="Schedule shortcut"
+          <TaskDropdown value={draft.subject} label="Task subject" placeholder="No subject" placeholderIcon="◇"
+            options={subjects.map(item=>({value:item.id,label:item.label,icon:item.emoji||"📘"}))}
+            onChange={subject=>setDraft({...draft,subject})}/>
+          <TaskDatePicker value={draft.dueDate} onChange={dueDate=>setDraft({...draft,dueDate})}/>
+          <input className="sg-task-schedule" value={draft.schedule} placeholder="Schedule: tod, tmr, Mon…" aria-label="Schedule shortcut"
             onChange={event=>{const schedule=event.target.value;const date=taskDateFromShortcut(schedule);setDraft({...draft,schedule,...(date?{dueDate:date}:{})});}}/>
-          <label style={taskStyles.recurringToggle}><input type="checkbox" checked={draft.recurring} onChange={event=>setDraft({...draft,recurring:event.target.checked})}/> Recurring daily</label>
+          <TaskDropdown className="sg-task-recurrence" value={draft.recurrence} label="Task recurrence" placeholder="Recurring" placeholderIcon="↻" emptyLabel="Not recurring" emptyIcon="⊘"
+            options={TASK_RECURRENCE_OPTIONS.map((option,index)=>({...option,icon:["☀","▦","◷"][index]}))}
+            onChange={recurrence=>setDraft({...draft,recurrence})}/>
         </div>
         <div className="sg-task-actions">
           <button type="button" style={taskStyles.secondary} onClick={()=>setAdding(false)}>Cancel</button>
@@ -8752,33 +9116,41 @@ function ChecklistCard({tasks,loading,error,subjects,selectedTaskId,onSelect,onC
           </button>
         </div>
       </form>}
+      {adding&&<div style={taskStyles.viewTabs} role="group" aria-label="Task date view">
+        <button type="button" aria-pressed={taskView==="today"} style={{...taskStyles.viewTab,...(taskView==="today"?taskStyles.viewTabActive:{})}}
+          onClick={()=>setTaskView("today")}>Today</button>
+        <button type="button" aria-pressed={taskView==="upcoming"} style={{...taskStyles.viewTab,...(taskView==="upcoming"?taskStyles.viewTabActive:{})}}
+          onClick={()=>setTaskView("upcoming")}>Upcoming</button>
+      </div>}
       {!loading&&!visible.length&&!adding&&<div style={taskStyles.empty}>
-        {tasks.length?"Completed tasks are hidden.":"Add one small task for your next study block."}
+        {taskView==="today"
+          ? `No${subjectFilter?` ${filteredSubject?.label||"subject"}`:""} tasks due today or overdue.`
+          : subjectFilter?`No active ${filteredSubject?.label||"subject"} tasks.`:tasks.length?"Completed tasks are hidden.":"Add one small task for your next study block."}
       </div>}
       <div>
         {visible.map(task=>{
           const subject=subjects.find(item=>item.id===task.subject);
           const isSelected=task.id===selectedTaskId&&!task.completed;
-          return <div key={task.id} className="sg-task-row">
-            <button type="button" className="sg-task-check" data-checked={task.completed} aria-label={task.completed?`Mark ${task.title} incomplete`:`Mark ${task.title} complete`}
-              disabled={busy===task.id} onClick={()=>run(task.id,()=>onUpdate(task.id,{completed:!task.completed}))}>
-              {task.completed?"✓":""}
+          const completing=completingIds.includes(task.id);
+          const overdue=!!task.dueDate&&task.dueDate<todayTaskKey;
+          return <div key={task.id} className="sg-task-row" data-completing={completing}>
+            <button type="button" className="sg-task-check" data-checked={completing} data-overdue={overdue} aria-label={`Mark ${task.title} complete${overdue?" — overdue":""}`}
+              disabled={completing||busy===task.id} onClick={()=>completeTask(task)}>
             </button>
             <div style={{minWidth:0}}>
               {editing===task.id?<div>
                 <div className="sg-task-edit">
                   <input value={editDraft.title} maxLength={180} aria-label="Edit task title"
                     onChange={event=>setEditDraft({...editDraft,title:event.target.value})}/>
-                  <select value={editDraft.subject} aria-label="Edit task subject"
-                    onChange={event=>setEditDraft({...editDraft,subject:event.target.value})}>
-                    <option value="">No subject</option>
-                    {subjects.map(item=><option key={item.id} value={item.id}>{item.emoji||"📘"} {item.label}</option>)}
-                  </select>
-                  <input className="sg-task-due" type="date" value={editDraft.dueDate} aria-label="Edit task due date"
-                    onChange={event=>setEditDraft({...editDraft,dueDate:event.target.value})}/>
-                  <input className="sg-task-schedule" value={editDraft.schedule} placeholder="Schedule: tmr, Mon…" aria-label="Edit schedule shortcut"
+                  <TaskDropdown value={editDraft.subject} label="Edit task subject" placeholder="No subject" placeholderIcon="◇"
+                    options={subjects.map(item=>({value:item.id,label:item.label,icon:item.emoji||"📘"}))}
+                    onChange={subject=>setEditDraft({...editDraft,subject})}/>
+                  <TaskDatePicker value={editDraft.dueDate} label="Edit task due date" onChange={dueDate=>setEditDraft({...editDraft,dueDate})}/>
+                  <input className="sg-task-schedule" value={editDraft.schedule} placeholder="Schedule: tod, tmr, Mon…" aria-label="Edit schedule shortcut"
                     onChange={event=>{const schedule=event.target.value;const date=taskDateFromShortcut(schedule);setEditDraft({...editDraft,schedule,...(date?{dueDate:date}:{})});}}/>
-                  <label style={taskStyles.recurringToggle}><input type="checkbox" checked={editDraft.recurring} onChange={event=>setEditDraft({...editDraft,recurring:event.target.checked})}/> Recurring daily</label>
+                  <TaskDropdown className="sg-task-recurrence" value={editDraft.recurrence} label="Edit task recurrence" placeholder="Recurring" placeholderIcon="↻" emptyLabel="Not recurring" emptyIcon="⊘"
+                    options={TASK_RECURRENCE_OPTIONS.map((option,index)=>({...option,icon:["☀","▦","◷"][index]}))}
+                    onChange={recurrence=>setEditDraft({...editDraft,recurrence})}/>
                 </div>
                 <div className="sg-task-actions">
                   <button type="button" style={taskStyles.secondary} onClick={()=>setEditing(null)}>Cancel</button>
@@ -8786,11 +9158,11 @@ function ChecklistCard({tasks,loading,error,subjects,selectedTaskId,onSelect,onC
                     onClick={()=>saveEdit(task)}>{busy===task.id?"Saving…":"Save"}</button>
                 </div>
               </div>:<>
-                <div className="sg-task-title" data-complete={task.completed}>{task.title}</div>
-                {(subject||task.dueDate||task.recurring)&&<div style={taskStyles.meta}>
-                  {subject&&<span style={{...taskStyles.subjectLabel,color:subject.color,background:`${subject.color}14`}}>{subject.emoji||"📘"} {subject.label}</span>}
+                <div className="sg-task-title" data-complete={completing}>{task.title}</div>
+                {(subject||task.dueDate||task.recurrence)&&<div style={taskStyles.meta}>
+                  {subject&&<span style={{...taskStyles.subjectLabel,color:subject.color,background:`${subject.color}14`}}>{subject.label}</span>}
                   {task.dueDate&&<span style={taskStyles.dueLabel}>▣ Due {formatAssessmentDate(task.dueDate,true)}</span>}
-                  {task.recurring&&<span style={taskStyles.recurringLabel}>↻ Daily</span>}
+                  {task.recurrence&&<span style={taskStyles.recurringLabel}>↻ {taskRecurrenceLabel(task.recurrence)}</span>}
                 </div>}
               </>}
             </div>
@@ -8810,7 +9182,8 @@ function ChecklistCard({tasks,loading,error,subjects,selectedTaskId,onSelect,onC
 }
 
 const taskStyles={
-  card:{background:"rgba(255,255,255,.9)",border:"1px solid #E2E9DF",borderRadius:15,marginBottom:11,boxShadow:"0 2px 8px rgba(38,69,45,.04)",overflow:"hidden"},
+  card:{background:"var(--sg-theme-neutral,rgba(255,255,255,.9))",border:"1px solid #E2E9DF",borderRadius:15,marginBottom:11,boxShadow:"0 2px 8px rgba(38,69,45,.04)",overflow:"hidden"},
+  cardFilterOpen:{position:"relative",zIndex:30,overflow:"visible"},
   header:{width:"100%",minHeight:48,display:"grid",gridTemplateColumns:"minmax(0,1fr) auto 18px",alignItems:"center",gap:8,border:0,background:"transparent",padding:"9px 12px",cursor:"pointer",textAlign:"left"},
   headerTitle:{display:"flex",alignItems:"center",gap:8,color:"#24332A",fontSize:15,fontWeight:800,minWidth:0},
   summary:{fontSize:11,color:"#7D8780",fontWeight:650,whiteSpace:"nowrap"},
@@ -8819,17 +9192,23 @@ const taskStyles={
   body:{padding:"0 12px 11px"},
   toolbar:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"3px 0 7px"},
   help:{float:"right",width:22,height:22,border:"1px solid #C8D7C7",borderRadius:"50%",background:"#F5F9F4",color:"#537256",fontSize:12,fontWeight:800,cursor:"pointer",marginTop:-35},
-  helpPanel:{clear:"both",margin:"0 0 9px",padding:"8px 10px",borderRadius:10,background:"#F2F8F1",color:"#536254",fontSize:11.5,lineHeight:1.5},
-  addButton:{minHeight:36,border:"1px solid #CFE0CF",borderRadius:11,background:"#F2F8F2",color:"#2D6A4F",padding:"7px 11px",fontSize:11.5,fontWeight:750,cursor:"pointer"},
-  showButton:{minHeight:36,border:0,borderRadius:10,background:"transparent",color:"#7F8980",padding:"7px 8px",fontSize:10.5,fontWeight:650,cursor:"pointer"},
+  helpPanel:{clear:"both",margin:"0 0 9px",padding:"8px 10px",borderRadius:10,background:"var(--sg-theme-neutral,#F2F8F1)",color:"#536254",fontSize:11.5,lineHeight:1.5},
+  addButton:{minHeight:36,border:"1px solid #CFE0CF",borderRadius:11,background:"var(--sg-theme-neutral,#F2F8F2)",color:"var(--sg-theme-accent-strong,#2D6A4F)",padding:"7px 11px",fontSize:11.5,fontWeight:750,cursor:"pointer"},
+  filterWrap:{position:"relative",minWidth:0},
+  filterButton:{minHeight:36,maxWidth:170,display:"flex",alignItems:"center",justifyContent:"space-between",gap:7,border:"1px solid var(--sg-theme-border,#CFE0CF)",borderRadius:11,background:"var(--sg-theme-neutral,#F2F8F2)",color:"var(--sg-theme-accent-strong,#2D6A4F)",padding:"7px 10px",fontSize:11,fontWeight:750,cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  filterMenu:{position:"absolute",zIndex:12,top:"calc(100% + 5px)",right:0,width:170,maxHeight:210,overflowY:"auto",padding:5,border:"1px solid var(--sg-theme-border,#DDE5DA)",borderRadius:12,background:"var(--sg-theme-panel-solid,#fff)",boxShadow:"0 8px 22px var(--sg-theme-shadow,rgba(25,45,31,.14))"},
+  filterOption:{display:"block",width:"100%",border:0,borderRadius:8,background:"transparent",color:"var(--sg-theme-text,#34453B)",padding:"8px 9px",fontSize:11.5,fontWeight:650,textAlign:"left",cursor:"pointer"},
+  filterOptionActive:{background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
+  viewTabs:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,overflow:"hidden",border:"1px solid var(--sg-theme-border,#DDE5DA)",borderRadius:10,margin:"0 0 8px",background:"transparent"},
+  viewTab:{minHeight:32,border:0,borderRadius:9,background:"transparent",color:"var(--sg-theme-muted,#788177)",fontSize:11,fontWeight:700,cursor:"pointer"},
+  viewTabActive:{background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
   form:{padding:"2px 0 9px",borderBottom:"1px solid #EDF1EB"},
-  primary:{background:"#2D6A4F",color:"#fff"},
+  primary:{background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff"},
   secondary:{background:"#EEF2ED",color:"#69756C"},
   meta:{display:"flex",flexWrap:"wrap",gap:"5px 7px",marginTop:5,fontSize:10.5,color:"#657168"},
-  subjectLabel:{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 7px",borderRadius:999,fontWeight:750},
+  subjectLabel:{display:"inline-flex",alignItems:"center",padding:"3px 7px",borderRadius:999,fontWeight:750},
   dueLabel:{display:"inline-flex",alignItems:"center",padding:"3px 1px",fontWeight:650},
   recurringLabel:{display:"inline-flex",alignItems:"center",padding:"3px 6px",borderRadius:999,background:"#F1ECFA",color:"#765A9E",fontWeight:750},
-  recurringToggle:{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:7,color:"#59675E",fontSize:11.5,fontWeight:700,cursor:"pointer",padding:"3px 1px"},
   dot:{display:"inline-block",width:6,height:6,borderRadius:"50%",marginRight:4},
   empty:{padding:"13px 4px 8px",textAlign:"center",fontSize:11.5,color:"#9AA29A",lineHeight:1.4},
   error:{fontSize:11,color:"#A34C42",background:"#FFF2EF",border:"1px solid #F3D4CE",borderRadius:9,padding:"7px 9px",marginBottom:7},
@@ -8837,7 +9216,7 @@ const taskStyles={
 
 // ── Accepted-friend presence strip ────────────────────────────────────────────
 function StudyingNow({ presence, currentUser, compact=false }) {
-  const [chipRowRef, chipEdge] = useHScroll();
+  const [chipRowRef] = useHScroll();
   const others = presence.filter(p=>p.username!==currentUser);
   if(!others.length) return null;
   const studyingCount=others.filter(p=>p.status==="studying").length;
@@ -8863,8 +9242,6 @@ function StudyingNow({ presence, currentUser, compact=false }) {
               </span>
             ))}
           </div>
-          {!chipEdge.atStart && <div style={sn.compactFadeL}/>}
-          {!chipEdge.atEnd && <div style={sn.compactFadeR}/>}
         </div>
       </div>
     );
@@ -8887,7 +9264,7 @@ function StudyingNow({ presence, currentUser, compact=false }) {
   );
 }
 const sn = {
-  wrap:{display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:14,padding:"10px 12px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",flexWrap:"wrap"},
+  wrap:{display:"flex",alignItems:"center",gap:8,background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"10px 12px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",flexWrap:"wrap"},
   pulse:{width:8,height:8,borderRadius:"50%",background:"#34C759",boxShadow:"0 0 0 0 rgba(52,199,89,0.5)",animation:"sgpulse 1.8s infinite",flexShrink:0},
   label:{fontSize:12,fontWeight:700,color:"#34A853"},
   avatars:{display:"flex",gap:5,flexWrap:"wrap",flex:1},
@@ -8903,7 +9280,7 @@ const sn = {
   compactLabel:{fontSize:12.5,fontWeight:700,color:"#34A853"},
   compactRowWrap:{position:"relative"},
   compactRow:{display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none",cursor:"grab"},
-  compactChip:{display:"inline-flex",alignItems:"center",gap:6,flexShrink:0,border:"1.5px solid",borderRadius:16,padding:"6px 11px",fontSize:12.5,background:"#fff",whiteSpace:"nowrap"},
+  compactChip:{display:"inline-flex",alignItems:"center",gap:6,flexShrink:0,border:"1.5px solid",borderRadius:16,padding:"6px 11px",fontSize:12.5,background:"var(--sg-theme-neutral,#fff)",whiteSpace:"nowrap"},
   compactChipName:{fontWeight:600,color:"#3A3A3A"},
   compactFadeL:{position:"absolute",left:0,top:0,bottom:0,width:20,background:"linear-gradient(to right,rgba(255,255,255,0.88),rgba(255,255,255,0))",pointerEvents:"none"},
   compactFadeR:{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(to left,rgba(255,255,255,0.88),rgba(255,255,255,0))",pointerEvents:"none"},
@@ -8947,7 +9324,7 @@ function WeeklyTargetsModal({ subjects, targets, onSave, onClose }) {
 }
 const wt = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20},
-  modal:{background:"#fff",borderRadius:20,padding:"24px 20px",width:"100%",maxWidth:360,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",maxHeight:"82vh",overflowY:"auto"},
+  modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:20,padding:"24px 20px",width:"100%",maxWidth:360,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",maxHeight:"82vh",overflowY:"auto"},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:"0 0 4px"},
   sub:{fontSize:12,color:"#aaa",margin:"0 0 16px",lineHeight:1.5},
   row:{display:"flex",alignItems:"center",gap:8,marginBottom:10},
@@ -8958,7 +9335,7 @@ const wt = {
   unit:{fontSize:11,color:"#aaa",width:34},
   totalRow:{fontSize:13,color:"#666",marginTop:8,textAlign:"right"},
   cancelBtn:{flex:1,padding:"11px 0",background:"#f5f5f5",border:"none",borderRadius:12,fontSize:14,fontWeight:600,color:"#666",cursor:"pointer"},
-  saveBtn:{flex:2,padding:"11px 0",background:"#2D6A4F",border:"none",borderRadius:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"},
+  saveBtn:{flex:2,padding:"11px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"},
 };
 
 // ── Expandable upcoming assessments ──────────────────────────────────────────
@@ -9081,9 +9458,9 @@ function ExamBanner({ exams, subjects, loading=false, error="", onEdit, onAdd, o
   return (
     <div ref={rootRef} className="sg-assessment-card" style={{...eb.card,borderColor:nearest?`${urgency}55`:"#DDE6DA"}}>
       <div style={eb.summaryWrap}>
-        <button type="button" style={{...eb.summary,background:nearest?`${urgency}0C`:"#F9FBF8"}}
+        <button type="button" className="sg-assessment-summary" style={{...eb.summary,padding:"10px 12px",background:nearest?`${urgency}0C`:"#F9FBF8","--sg-assessment-fill":nearest?`${urgency}0C`:"#F9FBF8"}}
           onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-controls={panelId}>
-          <span style={{...eb.calendarIcon,color:urgency}} aria-hidden="true">▦</span>
+          <span className="sg-assessment-grid-icon" style={eb.calendarIcon} aria-hidden="true">▦</span>
           <span style={eb.summaryText}>
             <span className="sg-assessment-name" style={eb.summaryName}>{nearest?nearest.name:"Upcoming assessments"}</span>
             <span style={eb.summaryMeta}>
@@ -9094,13 +9471,9 @@ function ExamBanner({ exams, subjects, loading=false, error="", onEdit, onAdd, o
           </span>
           {nearest&&<span style={{...eb.summaryDays,color:urgency}}>{assessmentDaysLabel(nearest.days)}</span>}
           {upcoming.length>1&&<span style={eb.more}>+{upcoming.length-1} more</span>}
-          <span className={`sg-assessment-chevron${open?" sg-assessment-chevron--open":""}`}
-            style={eb.chevron} aria-hidden="true">⌄</span>
+          <span className={`sg-centered-chevron sg-assessment-chevron${open?" sg-assessment-chevron--open":""}`}
+            style={eb.chevron} aria-hidden="true">▾</span>
         </button>
-        {nearest&&(
-          <button type="button" style={eb.summaryEdit} onClick={()=>onEdit(nearest.sourceIndex)}
-            aria-label={`Edit ${nearest.name}`} title="Edit assessment">✎</button>
-        )}
       </div>
 
       <div id={panelId} className={`sg-assessment-panel${open?" sg-assessment-panel--open":""}`}
@@ -9162,7 +9535,7 @@ function ExamBanner({ exams, subjects, loading=false, error="", onEdit, onAdd, o
                 <button type="button" style={eb.archiveButton} onClick={()=>setArchiveOpen(v=>!v)}
                   aria-expanded={archiveOpen}>
                   <span>Completed <small>({completed.length})</small></span>
-                  <span style={{...eb.archiveChevron,transform:archiveOpen?"rotate(180deg)":"none"}}>⌄</span>
+                  <span className="sg-centered-chevron" style={{...eb.archiveChevron,transform:archiveOpen?"rotate(180deg)":"none"}}>▾</span>
                 </button>
                 {archiveOpen&&<div style={eb.archiveList} className="sg-view-anim">
                   {completed.map(item=><AssessmentRow key={item.key} item={item}
@@ -9186,26 +9559,25 @@ function ExamBanner({ exams, subjects, loading=false, error="", onEdit, onAdd, o
 }
 
 const eb = {
-  card:{background:"#fff",border:"1px solid",borderRadius:15,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(30,55,37,.045)",minWidth:0},
+  card:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid",borderRadius:15,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(30,55,37,.045)",minWidth:0},
   summaryWrap:{position:"relative",minWidth:0},
-  summary:{display:"grid",gridTemplateColumns:"30px minmax(0,1fr) auto auto 18px",alignItems:"center",gap:8,width:"100%",minWidth:0,padding:"10px 43px 10px 12px",border:"none",background:"#fff",cursor:"pointer",textAlign:"left",color:"#26362C"},
-  calendarIcon:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"rgba(255,255,255,.72)",fontSize:17,fontWeight:800},
+  summary:{display:"grid",gridTemplateColumns:"30px minmax(0,1fr) auto auto 18px",alignItems:"center",gap:8,width:"100%",minWidth:0,padding:"10px 43px 10px 12px",border:"none",background:"var(--sg-theme-neutral,#fff)",cursor:"pointer",textAlign:"left",color:"#26362C"},
+  calendarIcon:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"transparent",fontSize:22,fontWeight:800,lineHeight:1},
   summaryText:{display:"flex",flexDirection:"column",gap:2,minWidth:0},
   summaryName:{fontSize:12.8,fontWeight:750,color:"#1C3023",lineHeight:1.25},
   summaryMeta:{fontSize:9.8,fontWeight:600,color:"#8B968E",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
   summaryDays:{fontSize:10.8,fontWeight:800,whiteSpace:"nowrap"},
   more:{fontSize:9.5,fontWeight:700,color:"#89948C",background:"rgba(255,255,255,.7)",borderRadius:10,padding:"3px 6px",whiteSpace:"nowrap"},
-  chevron:{fontSize:17,color:"#8C978F",lineHeight:1,display:"inline-block"},
-  summaryEdit:{position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",width:28,height:28,display:"grid",placeItems:"center",border:"1px solid #E1E8DF",borderRadius:9,background:"#fff",color:"#718078",fontSize:12,cursor:"pointer",zIndex:2},
-  panel:{borderTop:"1px solid #EDF1EA",padding:"12px 11px 10px",background:"#FCFDFC",minWidth:0},
+  chevron:{gridColumn:5,justifySelf:"center",fontSize:17,color:"#8C978F",lineHeight:1,display:"inline-block"},
+  panel:{borderTop:"1px solid var(--sg-theme-border,#EDF1EA)",padding:"12px 11px 10px",background:"color-mix(in srgb,var(--sg-theme-panel,#F4F8F3) 76%,var(--sg-theme-panel-solid,#FCFDFC))",minWidth:0},
   weekHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:7},
   weekTitle:{fontSize:9.5,fontWeight:800,color:"#7D8981",textTransform:"uppercase",letterSpacing:".65px"},
   clearDay:{border:"none",background:"none",padding:2,fontSize:9.5,fontWeight:700,color:"#4F8669",cursor:"pointer"},
-  week:{background:"#F3F7F1",border:"1px solid #E5ECE2",borderRadius:11,padding:4,overflow:"hidden"},
-  day:{minWidth:0,height:48,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,border:"1px solid transparent",borderRadius:8,background:"transparent",color:"#748078",cursor:"pointer",padding:"3px 1px"},
-  dayActive:{background:"#fff",borderColor:"#BFDAC8",color:"#2D6A4F",boxShadow:"0 1px 3px rgba(35,65,43,.08)"},
-  dayName:{fontSize:7.5,fontWeight:800,letterSpacing:".2px",maxWidth:"100%",overflow:"hidden"},
-  dayNumber:{fontSize:11.5,fontWeight:750,lineHeight:1},
+  week:{background:"color-mix(in srgb,var(--sg-theme-accent-wash,#F3F7F1) 58%,var(--sg-theme-panel-solid,#F3F7F1))",border:"1px solid var(--sg-theme-border,#E5ECE2)",borderRadius:11,padding:6,overflow:"hidden"},
+  day:{position:"relative",minWidth:0,height:62,display:"grid",gridTemplateRows:"9px 16px 5px",alignContent:"center",justifyItems:"center",rowGap:7,border:"1px solid transparent",borderRadius:8,background:"transparent",color:"#748078",cursor:"pointer",padding:"5px 1px"},
+  dayActive:{background:"var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff))",borderColor:"var(--sg-theme-accent,#BFDAC8)",color:"var(--sg-theme-accent-strong,#2D6A4F)",boxShadow:"0 1px 3px var(--sg-theme-shadow,rgba(35,65,43,.08))"},
+  dayName:{height:9,fontSize:8,fontWeight:800,letterSpacing:".3px",lineHeight:"9px",maxWidth:"100%",overflow:"hidden"},
+  dayNumber:{height:16,fontSize:13,fontWeight:750,lineHeight:"16px"},
   dayDots:{height:5,display:"flex",alignItems:"center",justifyContent:"center",gap:2},
   dayDot:{width:4,height:4,borderRadius:"50%"},
   reminder:{display:"grid",gridTemplateColumns:"18px minmax(0,1fr) 24px",alignItems:"center",gap:6,background:"#EEF7F0",border:"1px solid #D4E8D9",borderRadius:10,padding:"7px 7px 7px 9px",marginTop:9,fontSize:10.5,color:"#4C6654"},
@@ -9217,7 +9589,7 @@ const eb = {
   section:{marginTop:11},
   sectionTitle:{fontSize:9,fontWeight:800,color:"#95A098",textTransform:"uppercase",letterSpacing:".65px",margin:"0 2px 5px"},
   list:{display:"flex",flexDirection:"column",gap:5},
-  row:{display:"grid",gridTemplateColumns:"4px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,background:"#fff",border:"1px solid #E8EDE6",borderRadius:11,padding:"8px 7px 8px 6px",minWidth:0},
+  row:{display:"grid",gridTemplateColumns:"4px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E8EDE6",borderRadius:11,padding:"8px 7px 8px 6px",minWidth:0},
   subjectMarker:{width:4,height:31,borderRadius:4},
   rowMain:{minWidth:0},
   rowName:{fontSize:11.5,fontWeight:750,color:"#293C30",lineHeight:1.22},
@@ -9236,8 +9608,8 @@ const eb = {
   archiveList:{display:"flex",flexDirection:"column",gap:5,paddingTop:5},
   footer:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,borderTop:"1px solid #E8EDE6",marginTop:10,paddingTop:9},
   footerBtn:{border:"none",background:"transparent",padding:"6px 5px",fontSize:10.5,fontWeight:750,color:"#6F7D74",cursor:"pointer"},
-  addBtn:{border:"1px solid #D4E2D1",background:"#F2F8F1",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:750,color:"#3F7658",cursor:"pointer"},
-  loadingCard:{display:"flex",alignItems:"center",gap:10,background:"#fff",border:"1px solid #E1E8DF",borderRadius:15,padding:"11px 12px",marginBottom:10},
+  addBtn:{border:"1px solid #D4E2D1",background:"var(--sg-theme-neutral,#F2F8F1)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:750,color:"var(--sg-theme-accent-strong,#3F7658)",cursor:"pointer"},
+  loadingCard:{display:"flex",alignItems:"center",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E8DF",borderRadius:15,padding:"11px 12px",marginBottom:10},
   loadingIcon:{display:"block",width:30,height:30,borderRadius:9,flexShrink:0},
   loadingLine:{display:"block",height:8,width:"72%",borderRadius:6},
 };
@@ -9452,7 +9824,7 @@ function LoginScreen({ onLogin }) {
           <span>or continue with</span>
           <span style={{height:1,background:"#DFE7DF",flex:1}} />
         </div>
-        <button style={{...S.primaryBtn,background:"#fff",color:"#27332A",border:"1px solid #D6E0D6",boxShadow:"none",opacity:loading?0.6:1}}
+        <button style={{...S.primaryBtn,background:"var(--sg-theme-neutral,#fff)",color:"#27332A",border:"1px solid #D6E0D6",boxShadow:"none",opacity:loading?0.6:1}}
           onClick={()=>socialSignIn("google")} disabled={loading}>G&nbsp;&nbsp;Continue with Google</button>
         <button style={{...S.primaryBtn,background:"#1F2421",marginTop:8,opacity:loading?0.6:1}}
           onClick={()=>socialSignIn("apple")} disabled={loading}>&nbsp;&nbsp;Continue with Apple</button>
@@ -9515,7 +9887,7 @@ function BarChart({ bars, maxVal, color }) {
 }
 
 const bc = {
-  wrap:{background:"#fff",borderRadius:14,padding:"16px 12px 10px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",marginBottom:14,position:"relative"},
+  wrap:{background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"16px 12px 10px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",marginBottom:14,position:"relative"},
   bars:{display:"flex",alignItems:"flex-end",gap:4,height:120},
   barCol:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",cursor:"pointer",userSelect:"none"},
   barTrack:{flex:1,width:"100%",maxWidth:26,display:"flex",alignItems:"flex-end",justifyContent:"center"},
@@ -9807,12 +10179,15 @@ const GARDEN_BIRD_SPECS = [
 
 function ForestGarden({ sessions, subjects, range, decorations = [], enhancements = {}, layout = {} }) {
   const [hovered, setHovered] = useState(null);
-  const [zoom,setZoom] = useState(1.25);
+  const zoom=1.25;
   const svgRef=useRef(null);
   const classroomRef=useRef(null);
-  const panRef=useRef(null);
-  const touchPointersRef=useRef(new Map());
-  const pinchRef=useRef(null);
+  const gesturesRef=useRef(null);
+  useEffect(()=>{
+    const controller=attachClassroomGestures(classroomRef.current,svgRef.current);
+    gesturesRef.current=controller;
+    return()=>{controller.destroy();gesturesRef.current=null;};
+  },[]);
   // Several groves can exist in the DOM at once (for example, the Stats grove
   // behind a leaderboard visit sheet). SVG paint-server ids are document-wide,
   // and duplicate ids can make Safari resolve a modal's gradients/filters to
@@ -9831,9 +10206,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const subjectById=useMemo(()=>new Map(subjects.map(s=>[s.id,s])),[subjects]);
   const skinById=useMemo(()=>new Map(TREE_SKINS.map(s=>[s.id,s])),[]);
 
-  // Keep the tile platform—not the wall/blackboard—centred whenever the range
-  // or zoom changes. At higher zoom levels the cursor can still pan across the
-  // full classroom.
+  // Centre on layout changes only; gestures preserve their own anchor.
   useEffect(()=>{
     const classroom=classroomRef.current;
     if(!classroom)return;
@@ -9845,7 +10218,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
       classroom.scrollTop=Math.max(0,platformCentreY-classroom.clientHeight*0.5);
     });
     return ()=>cancelAnimationFrame(frame);
-  },[gridSize,zoom]);
+  },[gridSize]);
 
   // Stop SMIL timelines when the garden is off-screen or the tab is hidden.
   // This matters on the long Stats page, where the SVG can otherwise keep
@@ -9902,55 +10275,6 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   const sweepEventStart=compactAmbientCycle?0.5:0.66;
   const flockSeconds=compactAmbientCycle?26:22;
 
-  const clampZoom=value=>Math.max(1,Math.min(2.5,value));
-  const beginPan=e=>{
-    const classroom=classroomRef.current;
-    if(!classroom)return;
-    if(e.pointerType==="touch"){
-      touchPointersRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
-      classroom.setPointerCapture?.(e.pointerId);
-      const pointers=[...touchPointersRef.current.values()];
-      if(pointers.length===2){
-        const [first,second]=pointers;
-        pinchRef.current={
-          distance:Math.hypot(second.x-first.x,second.y-first.y),
-          zoom,
-        };
-        panRef.current=null;
-        e.preventDefault();
-        return;
-      }
-    }else if(e.button!==0)return;
-    panRef.current={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,left:classroom.scrollLeft,top:classroom.scrollTop};
-    classroom.setPointerCapture?.(e.pointerId);
-  };
-  const pan=e=>{
-    if(e.pointerType==="touch"&&touchPointersRef.current.has(e.pointerId)){
-      touchPointersRef.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
-      const pinch=pinchRef.current;
-      const pointers=[...touchPointersRef.current.values()];
-      if(pinch&&pointers.length===2){
-        const [first,second]=pointers;
-        const distance=Math.hypot(second.x-first.x,second.y-first.y);
-        if(pinch.distance>0)setZoom(clampZoom(pinch.zoom*(distance/pinch.distance)));
-        e.preventDefault();
-        return;
-      }
-    }
-    const active=panRef.current;
-    const classroom=classroomRef.current;
-    if(!active||active.pointerId!==e.pointerId||!classroom)return;
-    classroom.scrollLeft=active.left-(e.clientX-active.startX);
-    classroom.scrollTop=active.top-(e.clientY-active.startY);
-  };
-  const endPan=e=>{
-    if(e.pointerType==="touch"){
-      touchPointersRef.current.delete(e.pointerId);
-      if(touchPointersRef.current.size<2)pinchRef.current=null;
-    }
-    if(panRef.current?.pointerId===e.pointerId)panRef.current=null;
-  };
-
   // One tiny highlight per crown makes every tree participate in the scene,
   // but the highlights fade as one or two shared groups. This avoids creating
   // an independent animation timeline for every session in a large grove.
@@ -9975,10 +10299,10 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
   }):[]; */
 
   return (
-    <div ref={classroomRef} className="sg-classroom-scroll" style={fg.wrap} onPointerDown={beginPan} onPointerMove={pan} onPointerUp={endPan} onPointerCancel={endPan}>
+    <div ref={classroomRef} className="sg-classroom-scroll" style={fg.wrap}>
       <div style={fg.zoomControls} aria-label="Classroom zoom controls" onPointerDown={e=>e.stopPropagation()}>
-        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>clampZoom(value-0.25))} aria-label="Zoom out">−</button>
-        <button type="button" style={fg.zoomButton} onClick={()=>setZoom(value=>clampZoom(value+0.25))} aria-label="Zoom in">+</button>
+        <button type="button" style={fg.zoomButton} onClick={()=>gesturesRef.current?.zoomBy(-0.25)} aria-label="Zoom out">−</button>
+        <button type="button" style={fg.zoomButton} onClick={()=>gesturesRef.current?.zoomBy(0.25)} aria-label="Zoom in">+</button>
       </div>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H+60}`} width={`${zoom*100}%`} style={{display:"block",minWidth:`${W*zoom}px`,overflow:"visible"}}>
         <defs>
@@ -10721,7 +11045,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
 const fg = {
   wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"none",userSelect:"none"},
   zoomControls:{position:"sticky",top:8,left:"calc(100% - 80px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px 8px -38px auto",pointerEvents:"auto"},
-  zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"rgba(255,255,255,.92)",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
+  zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"var(--sg-theme-neutral,rgba(255,255,255,.92))",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
   footer:{display:"flex",justifyContent:"center",gap:20,padding:"8px 0 12px",background:"rgba(0,0,0,0.18)",backdropFilter:"blur(4px)"},
   stat:{fontSize:12,color:"rgba(255,255,255,0.82)",fontWeight:600},
 };
@@ -10811,7 +11135,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
   }));
   const [selected,setSelected]=useState(null);
   const [activePreset,setActivePreset]=useState("");
-  const [presetRowRef,presetEdge]=useHScroll(String(GARDEN_LAYOUT_PRESETS.length));
+  const [presetRowRef]=useHScroll(String(GARDEN_LAYOUT_PRESETS.length));
   const placement=buildGardenPlacement({sessions,decorations,layout:draft,range,enhancements});
 
   const moveItem=(item,targetSlot)=>{
@@ -10926,8 +11250,6 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
               <span>{preset.label}</span>
             </button>)}
           </div>
-          {!presetEdge.atStart&&<span style={ge.presetFadeLeft}/>}
-          {!presetEdge.atEnd&&<span style={ge.presetFadeRight}/>}
         </div>
       </div>
 
@@ -10975,7 +11297,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
 const ge={
   header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12},
   title:{fontSize:19,fontWeight:750,color:"#1a1a2e",margin:"3px 0 0",letterSpacing:"-0.3px"},
-  iconBtn:{width:32,height:32,borderRadius:10,border:"1px solid #E7ECE5",background:"#F8FAF7",color:"#738078",fontSize:20,cursor:"pointer",lineHeight:1},
+  iconBtn:{width:32,height:32,borderRadius:10,border:"1px solid #E7ECE5",background:"var(--sg-theme-neutral,#F8FAF7)",color:"#738078",fontSize:20,cursor:"pointer",lineHeight:1},
   help:{fontSize:12.5,color:"#758078",lineHeight:1.55,margin:"12px 0 10px"},
   legend:{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",fontSize:10.5,color:"#8A958C",marginBottom:12},
   presetSection:{margin:"0 0 12px"},
@@ -10985,21 +11307,21 @@ const ge={
   presets:{display:"flex",width:"100%",gap:7,overflowX:"auto",overflowY:"hidden",scrollbarWidth:"none",overscrollBehaviorInline:"contain",padding:"1px 1px 6px",cursor:"grab",scrollSnapType:"x proximity",WebkitOverflowScrolling:"touch"},
   presetFadeLeft:{position:"absolute",left:0,top:0,bottom:6,width:28,background:"linear-gradient(90deg,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
   presetFadeRight:{position:"absolute",right:0,top:0,bottom:6,width:28,background:"linear-gradient(270deg,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
-  presetBtn:{flex:"0 0 auto",minHeight:40,display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE7DA",borderRadius:18,background:"#fff",color:"#657169",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",scrollSnapAlign:"start"},
-  presetBtnActive:{borderColor:"#77AA88",background:"#EAF5ED",color:"#2D6A4F",boxShadow:"0 0 0 2px rgba(45,106,79,.08)"},
+  presetBtn:{flex:"0 0 auto",minHeight:40,display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE7DA",borderRadius:18,background:"var(--sg-theme-neutral,#fff)",color:"#657169",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",scrollSnapAlign:"start"},
+  presetBtnActive:{borderColor:"var(--sg-theme-border,#77AA88)",background:"var(--sg-theme-accent-wash,#EAF5ED)",color:"var(--sg-theme-accent-strong,#2D6A4F)",boxShadow:"0 0 0 2px rgba(45,106,79,.08)"},
   presetIcon:{fontSize:13,lineHeight:1},
   grid:{display:"grid",gap:5,padding:10,background:"linear-gradient(155deg,#F1DEC1,#DAB98E)",border:"1px solid #D4B78E",borderRadius:16,overflow:"hidden",width:"100%",maxWidth:404,margin:"0 auto",boxShadow:"inset 0 0 0 1px rgba(255,255,255,.42)"},
   tile:{aspectRatio:"1 / 1",minWidth:0,border:"1px solid rgba(132,89,50,.18)",borderRadius:8,background:"linear-gradient(145deg,#EACB98,#C99863)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"transform .12s,border-color .12s,box-shadow .12s",cursor:"pointer"},
-  tileSelected:{border:"2px solid #2D6A4F",boxShadow:"0 0 0 2px rgba(45,106,79,.14)",transform:"scale(.96)"},
+  tileSelected:{border:"2px solid var(--sg-theme-accent,#2D6A4F)",boxShadow:"0 0 0 2px rgba(45,106,79,.14)",transform:"scale(.96)"},
   item:{width:"88%",height:"88%",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",cursor:"grab",userSelect:"none"},
   treeThumb:{width:"88%",height:"88%",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",boxShadow:"inset 0 0 0 1px rgba(255,255,255,.5),0 2px 5px rgba(0,0,0,.12)",pointerEvents:"none"},
-  itemSub:{position:"absolute",right:0,bottom:-1,fontSize:10,background:"rgba(255,255,255,.88)",borderRadius:8,padding:"1px 3px"},
+  itemSub:{position:"absolute",right:0,bottom:-1,fontSize:10,background:"var(--sg-theme-neutral,rgba(255,255,255,.88))",borderRadius:8,padding:"1px 3px"},
   decorEmoji:{fontSize:20,filter:"drop-shadow(0 2px 2px rgba(0,0,0,.14))"},
-  removeBtn:{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",border:"1px solid #E3E7E1",background:"#fff",color:"#8B5E58",fontSize:13,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0},
+  removeBtn:{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",border:"1px solid #E3E7E1",background:"var(--sg-theme-neutral,#fff)",color:"#8B5E58",fontSize:13,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0},
   removeNote:{fontSize:10.5,color:"#7C887F",lineHeight:1.45,margin:"10px 2px 0"},
   actions:{display:"flex",gap:8,marginTop:16},
-  cancelBtn:{flex:1,padding:"12px 0",border:"1px solid #E3E8E1",background:"#F8FAF7",borderRadius:12,fontSize:13,fontWeight:650,color:"#6E7971",cursor:"pointer"},
-  saveBtn:{flex:1,padding:"12px 0",border:"none",background:"#2D6A4F",borderRadius:12,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",boxShadow:"0 3px 10px rgba(45,106,79,.18)"},
+  cancelBtn:{flex:1,padding:"12px 0",border:"1px solid #E3E8E1",background:"var(--sg-theme-neutral,#F8FAF7)",borderRadius:12,fontSize:13,fontWeight:650,color:"#6E7971",cursor:"pointer"},
+  saveBtn:{flex:1,padding:"12px 0",border:"none",background:"var(--sg-theme-accent,#2D6A4F)",borderRadius:12,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",boxShadow:"0 3px 10px rgba(45,106,79,.18)"},
 };
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -11126,12 +11448,11 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
         <div style={an.statCard}><div style={an.statVal}>{activeDays}</div><div style={an.statLbl}>Active days</div></div>
         <div style={an.statCard}><div style={an.statVal}>{fmtMins(avg)}</div><div style={an.statLbl}>Avg session</div></div>
       </div>
-      <h3 style={an.subTitle}>{range==="week"?"This week by day":range==="month"?"This month by day":"This year by month"} <span style={{fontSize:10,fontWeight:400,color:"#aaa"}}>· coloured by subject</span></h3>
+      <h3 style={an.subTitle}>{range==="week"?"This week by day":range==="month"?"This month by day":"This year by month"}</h3>
       <BarChart bars={bars} maxVal={Math.max(...bars.map(b=>b.value),1)} color="#56B68B"/>
       <h3 style={an.subTitle}>By subject</h3>
       {balanceNudge && (
         <div style={{...an.nudge,borderColor:balanceNudge.worst.color+"55",background:balanceNudge.worst.color+"0D"}}>
-          <span style={an.nudgeIcon}>🌱</span>
           <div style={{flex:1}}>
             <div style={an.nudgeTitle}>
               {balanceNudge.worst.emoji} {balanceNudge.worst.label} could use some love
@@ -11177,11 +11498,11 @@ const MemoAnalyticsPanel=memo(AnalyticsPanel,(prev,next)=>
 
 const an = {
   statRow:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18},
-  statCard:{background:"#fff",borderRadius:14,padding:"13px 6px 11px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",border:"1px solid #F0F3EE"},
+  statCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"13px 6px 11px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",border:"1px solid #F0F3EE"},
   statVal:{fontSize:18,fontWeight:800,color:"#1a1a2e",letterSpacing:"-0.5px"},
   statLbl:{fontSize:9.5,color:"#9AA79A",marginTop:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"},
   subTitle:{fontSize:14,fontWeight:700,color:"#1a1a2e",margin:"4px 0 10px"},
-  subjRow:{display:"flex",alignItems:"center",background:"#fff",borderRadius:12,padding:"11px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
+  subjRow:{display:"flex",alignItems:"center",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,padding:"11px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
   nudge:{display:"flex",alignItems:"flex-start",gap:10,border:"1.5px solid",borderRadius:14,padding:"12px 14px",marginBottom:10},
   nudgeIcon:{fontSize:18,lineHeight:1.2,flexShrink:0},
   nudgeTitle:{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:3},
@@ -11281,7 +11602,7 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
           <>
             <ForestGarden sessions={inMonth} subjects={data.subjects} range="month" decorations={data.decorations} enhancements={data.enhancements} layout={data.gardenLayout}/>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#2D6A4F",background:"#EAF3EC",borderRadius:16,padding:"7px 13px"}}>✨ {inMonth.length} growth moments this month</span>
+              <span style={{fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF3EC)",borderRadius:16,padding:"7px 13px"}}>✨ {inMonth.length} growth moments this month</span>
               <span style={{fontSize:12,fontWeight:700,color:"#666",background:"#F0F2EE",borderRadius:16,padding:"7px 13px"}}>⏳ {fmtHrs(lifeSecs)} all time</span>
             </div>
           </>
@@ -11336,6 +11657,7 @@ function LeaderboardWeekNavigator({weekOffset,onChange}){
 }
 
 function WeeklyGroupRewardCard({group,weeklyEntries,rewardDate=new Date(),historical=false}){
+  if(!groupCanReachRewards(group))return null;
   const eligibility=groupRewardEligibility(group,weeklyEntries);
   const rewardMode=getWeeklyRewardMode(rewardDate);
   const rewardPlan=getWeeklyRewardPlan(rewardDate);
@@ -11349,8 +11671,8 @@ function WeeklyGroupRewardCard({group,weeklyEntries,rewardDate=new Date(),histor
     <div style={{...gl.rewardEligibility,...(eligibility.eligible?gl.rewardEligible:{})}}>
       {eligibility.eligible?(historical?"✓ Eligibility reached":"✓ Reward eligible"):`${eligibility.participantCount}/${eligibility.minimum} participating members`}
       <span>{eligibility.eligible
-        ? historical?" This group's podium qualified for that week's prizes.":" Prizes settle after the Sunday reset."
-        : historical?" This group did not reach the five-participant minimum.":" Five members must study this week to unlock prizes."}</span>
+        ? historical?" This group's podium qualified for that week's prizes.":" Prizes settle Monday at 4:00 am."
+        : historical?" This group did not reach the three-participant minimum.":" Three members must study this week to unlock prizes."}</span>
     </div>
   </div>;
 }
@@ -11441,9 +11763,9 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
 }
 
 const fr={
-  hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"linear-gradient(135deg,#EAF6EE,#F7F4FD)",border:"1px solid #D9E8DD",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"#6E9D7E"},title:{fontSize:18,fontWeight:850,color:"#20372A",marginTop:1},subtitle:{fontSize:10.5,color:"#7C8A81",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.82)",color:"#2D6A4F",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px rgba(45,106,79,.08)"},
-  addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"#2D6A4F",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"#fff",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",gap:7,alignItems:"center",padding:"4px 0"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"#EAF4EC",color:"#2D6A4F",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
-  outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px",scrollbarWidth:"thin"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"#fff",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"#4E6255",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
+  hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"linear-gradient(135deg,#EAF6EE,#F7F4FD)",border:"1px solid #D9E8DD",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"#6E9D7E"},title:{fontSize:18,fontWeight:850,color:"#20372A",marginTop:1},subtitle:{fontSize:10.5,color:"#7C8A81",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--sg-theme-neutral,rgba(255,255,255,.82))",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px rgba(45,106,79,.08)"},
+  addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",gap:7,alignItems:"center",padding:"4px 0"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
+  outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"var(--sg-theme-accent-strong,#4E6255)",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
   notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
 };
 
@@ -11593,34 +11915,6 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     </div>}
 
     {active&&<>
-      <div style={S.toggleRow}>
-        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
-          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
-      </div>
-      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
-      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
-        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
-      }
-      <div style={gl.boardBar}>
-        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
-        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
-      </div>
-      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
-      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
-        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
-        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
-      }
-      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view!=="allTime"
-          ? displayedEligibility.eligible
-            ? view==="past"
-              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
-              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Sunday reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Five participating members are required for rewards.`
-          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
-      </div>}
-
-      <div style={gl.detailsDivider}/>
       <div style={gl.headCard}>
         <div style={{minWidth:0}}>
           <div style={gl.kicker}>GROUP DETAILS</div>
@@ -11665,12 +11959,37 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
             : <button style={gl.dangerBtn} onClick={leave} disabled={busy}>Leave group</button>}
         </div>
       </div>}
-    </>}
 
-    <div style={gl.intro}>
-      <div style={gl.introTitle}>Private Group Leaderboards</div>
-      <div style={gl.introBody}>Create a named group and share its permanent code. Group standings reset every Sunday and never expose your friends list.</div>
-    </div>
+
+      <div style={S.toggleRow}>
+        {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,label])=><button key={id}
+          style={{...S.toggleBtn,...(view===id?S.toggleBtnActive:{})}} onClick={()=>setView(id)}>{label}</button>)}
+      </div>
+      {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
+      {view!=="allTime"&&(view!=="past"||!pastLoading)&&<WeeklyGroupRewardCard group={active} weeklyEntries={view==="past"?pastBoard:boards.weekly}
+        rewardDate={displayedWeek.weekStart} historical={view==="past"}/>
+      }
+      <div style={gl.boardBar}>
+        <span>{view==="allTime"?"All-time standings":view==="past"?"Past standings":"Weekly standings"}</span>
+        <span>{view==="allTime"?"Since joining Lumora":displayedWeek.rangeLabel}</span>
+      </div>
+      {!showBoardLoading&&showBoardError&&<div style={gl.errorState} role="alert"><strong>Couldn't load standings</strong><span>{showBoardError}</span><button style={gl.retryBtn} onClick={()=>view==="past"?setPastAttempt(attempt=>attempt+1):reload(active.id)}>Try again</button></div>}
+      {!showBoardError&&<LeaderboardRows entries={board} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showBoardLoading}
+        emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
+        emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
+      }
+      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
+        {view!=="allTime"
+          ? displayedEligibility.eligible
+            ? view==="past"
+              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Monday's 4:00 am reset. Each user can receive one group prize, from their biggest eligible group."
+            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Three participating members are required for rewards.`
+          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      </div>}
+
+
+    </>}
 
     {invitesLoading&&<div style={gl.inviteInbox}><div className="sg-skeleton" style={{height:54}}/></div>}
     {!invitesLoading&&incomingInvites.length>0&&<div style={gl.inviteInbox}>
@@ -11725,21 +12044,18 @@ function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKe
 const MemoLeaderboardHub=memo(LeaderboardHub);
 
 const gl={
-  detailsDivider:{height:1,background:"#E3EAE2",margin:"18px 2px 12px"},
-  intro:{background:"linear-gradient(135deg,#EDF7F0,#F8FBF6)",border:"1px solid #DCEBDD",borderRadius:14,padding:"11px 13px",marginBottom:10},
-  introTitle:{fontSize:13.5,fontWeight:800,color:"#2D6A4F"},introBody:{fontSize:10.75,color:"#718076",lineHeight:1.45,marginTop:2},
   sectionLabel:{fontSize:9,fontWeight:800,letterSpacing:1,color:"#849188",marginBottom:6},
-  inviteInbox:{background:"#fff",border:"1px solid #E1E9DE",borderRadius:13,padding:"10px",marginBottom:10},
-  incomingRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,padding:"5px 2px"},incomingIcon:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"#EAF4EC",fontSize:15},incomingText:{minWidth:0},incomingName:{fontSize:12.5,fontWeight:750,color:"#263D2D",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},incomingMeta:{fontSize:9.5,color:"#8A958D",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},acceptBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:10,padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},declineBtn:{width:28,height:28,border:"none",background:"#F2F4F1",color:"#849087",borderRadius:9,fontSize:17,cursor:"pointer",lineHeight:1},
-  groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px",scrollbarWidth:"thin"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"#fff",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"#E8F5EE",borderColor:"#BFE3CE",color:"#2D6A4F"},
-  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#fff",border:"1px solid #E7ECE4",borderRadius:14,padding:"11px 13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{fontSize:17,fontWeight:800,color:"#1A2E22",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"#486351",cursor:"pointer",flexShrink:0},
-  inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"#fff",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
-  rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"#2D6A4F",background:"#EAF6EE",borderColor:"#BFE2CC"},
-  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"#2D6A4F",background:"#EAF6EE",border:"1px solid #CDE7D5"},manageCard:{background:"#F9FBF8",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"#fff",fontSize:11},smallBtn:{border:"none",background:"#E8F5EE",color:"#2D6A4F",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
+  inviteInbox:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:13,padding:"10px",marginBottom:10},
+  incomingRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,padding:"5px 2px"},incomingIcon:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",fontSize:15},incomingText:{minWidth:0},incomingName:{fontSize:12.5,fontWeight:750,color:"#263D2D",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},incomingMeta:{fontSize:9.5,color:"#8A958D",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},acceptBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:10,padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},declineBtn:{width:28,height:28,border:"none",background:"#F2F4F1",color:"#849087",borderRadius:9,fontSize:17,cursor:"pointer",lineHeight:1},
+  groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"var(--sg-theme-accent-wash,#E8F5EE)",borderColor:"#BFE3CE",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
+  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"11px 13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{fontSize:17,fontWeight:800,color:"#1A2E22",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},
+  inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"var(--sg-theme-neutral,#fff)",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
+  rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",borderColor:"#BFE2CC"},
+  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",fontSize:11},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
-  boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"#fff",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"#F0F8F3",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"#2D6A4F",background:"#DCEFE3",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
-  loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
-  emptyCard:{textAlign:"center",background:"#fff",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"#fff",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},formHint:{fontSize:10.5,color:"#849087",lineHeight:1.45,margin:"-2px 0 9px"},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"#fff"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"#2D6A4F",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"#fff",color:"#4F6757",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
+  boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"var(--sg-theme-neutral,#F0F8F3)",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#DCEFE3)",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
+  loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
+  emptyCard:{textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},formHint:{fontSize:10.5,color:"#849087",lineHeight:1.45,margin:"-2px 0 9px"},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"var(--sg-theme-neutral,#fff)"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#4F6757)",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
 };
 
 // ── Progress level (lifetime-hours stages) ────────────────────────────────────
@@ -11800,18 +12116,18 @@ const mp = {
     railConnector:{ height:3, flex:"1 1 12px", minWidth:7, maxWidth:22, borderRadius:2, background:"#D5DDD4", transition:"background .2s ease, box-shadow .2s ease" },
     railConnectorComplete:{ background:MILESTONE_GREEN, boxShadow:"0 0 6px rgba(55,165,91,.35)" },
     railArrows:{ display:"flex", justifyContent:"center", gap:7, marginTop:13 },
-    navBtn:{ border:"1px solid #D4E7D9", background:"#fff", color:"#2D6A4F", width:29, height:29, borderRadius:"50%", fontSize:16, fontWeight:800, cursor:"pointer", display:"grid", placeItems:"center", transition:"all .2s ease", boxShadow:"0 3px 8px rgba(45,106,79,.1)" },
+    navBtn:{ border:"1px solid #D4E7D9", background:"var(--sg-theme-neutral,#fff)", color:"var(--sg-theme-accent-strong,#2D6A4F)", width:29, height:29, borderRadius:"50%", fontSize:16, fontWeight:800, cursor:"pointer", display:"grid", placeItems:"center", transition:"all .2s ease", boxShadow:"0 3px 8px rgba(45,106,79,.1)" },
     artColumn:{ display:"grid", gridTemplateRows:"198px auto", gap:8, width:"100%", minWidth:0, alignSelf:"center" },
-    artPanel:{ position:"relative", display:"grid", justifyItems:"center", alignItems:"start", minWidth:0, borderRadius:18, background:"#fff", border:"1px solid #DDE7DE", overflow:"hidden", padding:"7px 5px 0", boxShadow:"0 8px 20px rgba(38,72,48,.09)" },
+    artPanel:{ position:"relative", display:"grid", justifyItems:"center", alignItems:"start", minWidth:0, borderRadius:18, background:"var(--sg-theme-neutral,#fff)", border:"1px solid #DDE7DE", overflow:"hidden", padding:"7px 5px 0", boxShadow:"0 8px 20px rgba(38,72,48,.09)" },
     // Preserve the entire source image. Anchoring the square artwork at the top
     // gives every stage identical 7px headroom without cropping any character.
     stageImage:{ display:"block", width:"100%", height:"auto", maxHeight:184, objectFit:"contain", objectPosition:"center top", transformOrigin:"center top", borderRadius:14, transition:"filter .25s ease, opacity .25s ease, transform .3s cubic-bezier(.22,1,.36,1)" },
     stageImageLocked:{ opacity:.68 },
-    currentBadge:{ position:"absolute", left:9, top:9, background:"#2D6A4F", color:"#fff", fontSize:8, fontWeight:850, letterSpacing:".45px", textTransform:"uppercase", borderRadius:8, padding:"4px 7px" },
-    detailPanel:{ display:"flex", flexDirection:"column", alignSelf:"center", width:"100%", minWidth:0, minHeight:170, borderRadius:16, background:"rgba(255,255,255,.86)", border:"1px solid #DEE8DF", padding:"14px 12px", boxShadow:"0 5px 14px rgba(38,72,48,.055)" },
+    currentBadge:{ position:"absolute", left:9, top:9, background:"var(--sg-theme-accent,#2D6A4F)", color:"#fff", fontSize:8, fontWeight:850, letterSpacing:".45px", textTransform:"uppercase", borderRadius:8, padding:"4px 7px" },
+    detailPanel:{ display:"flex", flexDirection:"column", alignSelf:"center", width:"100%", minWidth:0, minHeight:170, borderRadius:16, background:"var(--sg-theme-neutral,rgba(255,255,255,.86))", border:"1px solid #DEE8DF", padding:"14px 12px", boxShadow:"0 5px 14px rgba(38,72,48,.055)" },
     detailName:{ fontSize:16, fontWeight:850, lineHeight:1.16, color:"#213A29", marginTop:0 },
     detailRange:{ fontSize:10.5, fontWeight:650, color:"#7B887F", lineHeight:1.35, marginTop:5 },
-    detailStatus:{ marginTop:"auto", fontSize:10.5, fontWeight:800, lineHeight:1.4, color:"#2D6A4F", background:"linear-gradient(135deg,#EAF6ED,#F4FAF5)", border:"1px solid #D9EBDE", borderRadius:11, padding:"8px 9px" },
+    detailStatus:{ marginTop:"auto", fontSize:10.5, fontWeight:800, lineHeight:1.4, color:"var(--sg-theme-accent-strong,#2D6A4F)", background:"linear-gradient(135deg,#EAF6ED,#F4FAF5)", border:"1px solid #D9EBDE", borderRadius:11, padding:"8px 9px" },
     detailStatusLocked:{ color:"#895F35", background:"#F8F1E8" },
     rewardPanel:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:7, minWidth:0, border:"1px solid #E9DDAE", background:"linear-gradient(135deg,#FFFDF5,#FFF8DF)", borderRadius:12, padding:"7px 8px", color:"#6F5D25", boxShadow:"0 3px 9px rgba(145,105,15,.07)" },
     rewardCopy:{ minWidth:0, fontSize:9, fontWeight:800, lineHeight:1.25 },
@@ -11821,7 +12137,7 @@ const mp = {
     rewardLockedLabel:{ width:8, height:8, borderRadius:"50%", background:"#A9ADA8", display:"block" },
     allStageDots:{ display:"flex", gap:6, justifyContent:"center", alignItems:"center", marginTop:9, padding:"2px 4px" },
     allStageDot:{ width:7, height:7, borderRadius:"50%", border:"none", background:"#D0D8D1", cursor:"pointer", padding:0, transition:"all .2s ease" },
-    allStageDotActive:{ width:20, borderRadius:4, background:"#2D6A4F" },
+    allStageDotActive:{ width:20, borderRadius:4, background:"var(--sg-theme-accent,#2D6A4F)" },
     allStageDotLocked:{ filter:"grayscale(1)", opacity:.5 },
   };
 
@@ -11962,7 +12278,7 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
 export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [user,setUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
-  const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS));
+  const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS).map(item=>({...item,label:capitalizeSubjectLabel(item.label)})));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
   const [mode,setMode]=useState(()=>lsRaw(LS_MODE,"stopwatch"));
   const [duration,setDuration]=useState(25*60);
@@ -11982,6 +12298,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [modePickerOpen,setModePickerOpen]=useState(false); // timer/stopwatch chooser popover
   const [subjScrollRef, subjScrollEdge, scrollSubjects] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|")); // wheel, drag and arrow access on desktop
   const [coins,setCoins]=useState(()=>lsGet(LS_COINS,0));
+  const walletCoins=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins;
   const [claimedMilestoneRewards,setClaimedMilestoneRewards]=useState([]);
   const [showShop,setShowShop]=useState(false);
   const [showExamModal,setShowExamModal]=useState(false);
@@ -12057,7 +12374,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   useEffect(()=>{pomodoroRef.current=pomodoro;},[pomodoro]);
   useEffect(()=>{
     // Let the new Melbourne week independently run its recap and podium-claim
-    // checks even when this tab stayed open across Sunday midnight.
+    // checks even when this tab stayed open across Monday's 04:00 reset.
     recapCheckedRef.current=false;
     rewardCheckedWeekRef.current="";
   },[studyWeekKey]);
@@ -12406,12 +12723,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     try{
       const result=await fbUpdateTask(user,"",id,patch);
       if(!result.ok){cacheTasks(before);if(selectedTaskId===id&&!current.completed)chooseTask(id);}
-      // Completing a recurring item preserves the completed record and adds a
-      // fresh copy for tomorrow, so it is ready again without manual setup.
-      if(result.ok&&current.recurring&&patch.completed===true){
-        const next=await createTask({title:current.title,subject:current.subject,dueDate:nextRecurringTaskDate(),recurring:true});
-        if(!next.ok)showToast("Task completed, but the next recurring task couldn't be added");
-      }
       return result;
     }catch(e){cacheTasks(before);if(selectedTaskId===id&&!current.completed)chooseTask(id);return {ok:false,error:e.message};}
   };
@@ -13023,9 +13334,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
-    const u=[...subjects,s];setSubjects(u);lsSet(LS_SUBJECTS,u);
+    const normalized={...s,label:capitalizeSubjectLabel(s.label)};
+    const u=[...subjects,normalized];setSubjects(u);lsSet(LS_SUBJECTS,u);
     fbSavePrefs(user,{subjects:u});
-    setShowAddModal(false);showToast(`✅ ${s.emoji} ${s.label} added`);
+    setShowAddModal(false);showToast(`✅ ${normalized.emoji} ${normalized.label} added`);
   };
   const removeSubject=id=>{
     if(subjects.length<=1){showToast("Need at least one subject");return;}
@@ -13183,9 +13495,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       const prefs = await fbLoadPrefs(user);
       if(prefs){
         if(Array.isArray(prefs.subjects) && prefs.subjects.length){
-          setSubjects(prefs.subjects); lsSet(LS_SUBJECTS, prefs.subjects);
-          if(!prefs.subjects.find(s=>s.id===subject)){
-            setSubject(prefs.subjects[0].id); lsSetR(LS_SUBJECT, prefs.subjects[0].id);
+          const normalizedSubjects=prefs.subjects.map(item=>({...item,label:capitalizeSubjectLabel(item.label)}));
+          setSubjects(normalizedSubjects); lsSet(LS_SUBJECTS,normalizedSubjects);
+          if(normalizedSubjects.some((item,index)=>item.label!==prefs.subjects[index]?.label))fbSavePrefs(user,{subjects:normalizedSubjects});
+          if(!normalizedSubjects.find(s=>s.id===subject)){
+            setSubject(normalizedSubjects[0].id); lsSetR(LS_SUBJECT,normalizedSubjects[0].id);
           }
         }
         if(Array.isArray(prefs.exams)){
@@ -13374,7 +13688,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[history, streak, decorations, subjects, user, prefsReady]);
 
-  // Auto-show the weekly recap once per week (first visit from Sunday on), but
+  // Auto-show the weekly recap once per week (first visit after Monday 04:00), but
   // only if there's something to show — i.e. the user studied at least once.
   useEffect(()=>{
     if(!user || history===null || recapCheckedRef.current) return;
@@ -13397,7 +13711,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
-        <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F"}}>🧑‍🎓 Lumora</div>
+        <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>🧑‍🎓 Lumora</div>
       </div>
     </div>
   );
@@ -13419,7 +13733,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
-          <div style={{fontSize:18,fontWeight:800,color:"#2D6A4F",marginBottom:18}}>🧑‍🎓 Lumora</div>
+          <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",marginBottom:18}}>🧑‍🎓 Lumora</div>
           <div className="sg-skeleton" style={{height:14,width:"42%",margin:"0 auto 10px"}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%",marginBottom:8}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%"}}/>
@@ -13434,18 +13748,18 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
-      {showShop&&<CoinShop coins={coins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements}
+      {showShop&&<CoinShop coins={walletCoins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements}
         onBuy={handleBuySkin} onEquip={handleEquipSkin} onEnhance={handleEnhanceSkin} onClose={()=>setShowShop(false)}
         onOpenDecorations={()=>{setShowShop(false);setShowGardenShop(true);}}
         onOpenBackgrounds={()=>{setShowShop(false);setShowBackgroundShop(true);}}
         onBack={cameFromMenu?()=>{setShowShop(false);setShowMenu(true);}:null}/>}
-      {showGardenShop&&<GardenShop coins={coins} owned={decorations} removed={[...new Set([...(gardenLayout.removedDecor||[]),...(gardenLayout.hiddenDecor||[])])]}
+      {showGardenShop&&<GardenShop coins={walletCoins} owned={decorations} removed={[...new Set([...(gardenLayout.removedDecor||[]),...(gardenLayout.hiddenDecor||[])])]}
         onBuy={handleBuyDecoration} onRestore={handleRestoreDecoration} onClose={()=>setShowGardenShop(false)}
         onOpenTrees={()=>{setShowGardenShop(false);setShowShop(true);}}
         onOpenBackgrounds={()=>{setShowGardenShop(false);setShowBackgroundShop(true);}}
         onBack={()=>{setShowGardenShop(false);setShowMenu(true);}}/>}
       {showBackgroundShop&&<BackgroundShop
-        coins={coins}
+        coins={walletCoins}
         theme={theme}
         ownedBackgrounds={ownedBackgrounds}
         activeBackground={activeBackground}
@@ -13459,7 +13773,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       />}
       {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onClose={()=>setShowBadges(false)}
         onBack={()=>{setShowBadges(false);setShowMenu(true);}}/>}
-      {showRecap&&<SmartDashboard history={history} subjects={subjects} streak={streak} targets={targets} coins={coins}
+      {showRecap&&<SmartDashboard history={history} subjects={subjects} streak={streak} targets={targets} coins={walletCoins}
         onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
         onBack={recapFromMenu?()=>{setShowRecap(false);setRecapFromMenu(false);setShowMenu(true);}:null}/>}
       {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)}/>}
@@ -13485,7 +13799,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {running||paused ? (
         <FocusScreen subject={subjectObj} mode={mode} elapsed={elapsed} duration={duration}
           sessionId={sessionIdRef.current} animationMode={animationMode} animationsDisabled={animationsDisabled}
-          paused={paused} onPause={pauseSession} onEnd={endSession} coins={coins} skin={activeSkin} enhance={enhancements[activeSkin]||0}
+          paused={paused} onPause={pauseSession} onEnd={endSession} coins={walletCoins} skin={activeSkin} enhance={enhancements[activeSkin]||0}
           subjects={subjects} onChangeSubject={changeFocusSubject}
           presence={pomodoro.phase==="break"&&timerStyle==="pomodoro"?null:presence} currentUser={user}
           timerStyle={timerStyle} pomodoro={pomodoro} task={activeTaskRef.current}
@@ -13509,7 +13823,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           <header className="sg-main-header" style={S.header}>
             <span className="sg-keepcolor" style={S.logo}>🧑‍🎓 Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={coins} prefix="🪙 "/></button>
+              <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
               <button className="sg-main-menu-button" onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
                 <span className="sg-main-menu-avatar" style={S.menuAvatar}>{user.slice(0,1).toUpperCase()}</span>
                 <span style={S.menuBars}>☰</span>
@@ -13519,7 +13833,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
-              user={user} coins={coins} theme={theme} streak={streak}
+              user={user} coins={walletCoins} theme={theme} streak={streak}
               badgeCount={badges.length}
               animationMode={animationMode}
               onAnimationModeChange={changeAnimationMode}
@@ -13572,7 +13886,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               {timerStyle==="standard"&&<div style={{position:"relative",marginBottom:12}}>
                 <button style={S.modePickBtn} onClick={()=>{ if(!running) setModePickerOpen(o=>!o); }}>
                   <span>{mode==="timer"?"⏳ Timer":"⏱ Stopwatch"}</span>
-                  <span style={{...S.modeChev,transform:modePickerOpen?"rotate(180deg)":"none"}}>⌄</span>
+                  <span className="sg-centered-chevron" style={{...S.modeChev,transform:modePickerOpen?"rotate(180deg)":"none"}}>▾</span>
                 </button>
                 {modePickerOpen && (
                   <>
@@ -13596,7 +13910,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 )}
               </div>}
 
-              {timerStyle==="pomodoro"&&<section style={{...S.pomodoroSetup,"--sg-accent":subjectObj.color}} aria-label="Pomodoro settings">
+              {timerStyle==="pomodoro"&&<section style={S.pomodoroSetup} aria-label="Pomodoro settings">
                 <div className="sg-pomodoro-presets" role="group" aria-label="Pomodoro preset">
                   {POMODORO_PRESETS.map(preset=><button type="button" key={preset.id}
                     aria-pressed={pomodoro.preset===preset.id}
@@ -13647,7 +13961,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
               {/* Subject pills — label moved into the row, actions shrunk to icons */}
               <div style={S.subjScrollWrap}>
-                <div style={S.subjScroll} ref={subjScrollRef}>
+                <div className="sg-subject-scroll" style={S.subjScroll} ref={subjScrollRef}>
                   {subjects.map(s=>{
                     const sel = subject===s.id;
                     return (
@@ -13670,16 +13984,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                       onClick={()=>setEditMode(e=>!e)} title={editMode?"Done editing":"Edit subjects"}>{editMode?"✓":"✎"}</button>
                   )}
                 </div>
-                {!subjScrollEdge.atStart && <div style={S.subjFadeL}/>}
-                {!subjScrollEdge.atEnd && <div style={S.subjFadeR}/>}
-                {!subjScrollEdge.atStart && (
-                  <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,left:-12}}
-                    onClick={()=>scrollSubjects(-260)} aria-label="Show earlier subjects" title="Earlier subjects">‹</button>
-                )}
-                {!subjScrollEdge.atEnd && (
-                  <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,right:-12}}
-                    onClick={()=>scrollSubjects(260)} aria-label="Show more subjects" title="More subjects">›</button>
-                )}
+                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,left:0,...(subjScrollEdge.atStart?S.subjScrollArrowDisabled:{})}}
+                  onClick={()=>scrollSubjects(-260)} disabled={subjScrollEdge.atStart} aria-label="Show earlier subjects" title="Earlier subjects">◀</button>
+                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,right:0,...(subjScrollEdge.atEnd?S.subjScrollArrowDisabled:{})}}
+                  onClick={()=>scrollSubjects(260)} disabled={subjScrollEdge.atEnd} aria-label="Show more subjects" title="More subjects">▶</button>
               </div>
 
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
@@ -13736,7 +14044,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 )}
                 <button className="sg-plant-btn" style={{...S.plantBtn,background:otherTabActive?"#B7BDB4":`linear-gradient(135deg,${subjectObj.color},var(--sg-theme-accent-strong,#2D6A4F))`,...(otherTabActive?{cursor:"not-allowed"}:{})}}
                   onClick={startSession} disabled={otherTabActive}>
-                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"🍅 Start Pomodoro":"Start Learning"}
+                  {otherTabActive?"⏳ Running elsewhere":timerStyle==="pomodoro"?"Start Pomodoro":"Start Learning"}
                 </button>
 
                 {/* Weekly target progress (only if set) */}
@@ -13781,41 +14089,42 @@ const S = {
   app:{minHeight:"100vh",background:"var(--sg-shell-surface,#F5F7F2)",fontFamily:"'Noto Color Emoji','Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderLeft:"1px solid rgba(255,255,255,.32)",borderRight:"1px solid rgba(255,255,255,.32)",boxShadow:"0 0 34px rgba(24,45,31,.08)"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 16px 0"},
   logo:{fontSize:17,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.3px"},
-  userChip:{fontSize:11,color:"#555",background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
+  userChip:{fontSize:11,color:"#555",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
   coinChip:{fontSize:11.5,color:"#B8860B",background:"linear-gradient(180deg,#FFFBEF,#FFF4D6)",border:"1px solid #F0D875",borderRadius:20,padding:"5px 11px",fontWeight:700,boxShadow:"0 1px 2px rgba(184,134,11,0.12)"},
   menuBtn:{display:"flex",alignItems:"center",gap:6,background:"var(--sg-theme-panel-solid,#fff)",border:"1px solid var(--sg-theme-border,#E6EAE4)",borderRadius:20,padding:"3px 9px 3px 3px",cursor:"pointer",boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.06))"},
   menuAvatar:{width:22,height:22,borderRadius:"50%",background:"var(--sg-theme-accent-strong,#2D6A4F)",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
   menuBars:{fontSize:13,color:"var(--sg-theme-muted,#888)",lineHeight:1},
-  logoutBtn:{background:"#fff",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
+  logoutBtn:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
   nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},
   navBtnActive:{background:"var(--sg-theme-panel-solid,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.08))"},
   timerView:{padding:"10px 16px 40px"},
   modeRow:{display:"flex",gap:8,marginBottom:12},
-  modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
+  modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
   modeBtnActive:{fontWeight:700},
   subjectGrid:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10},
   subjLabelRow:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   subjLabelTitle:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.5px"},
-  subjActionBtn:{fontSize:11,fontWeight:600,color:"#888",background:"#fff",border:"1px solid #E0E8DC",borderRadius:16,padding:"4px 10px",cursor:"pointer"},
-  subjScrollWrap:{position:"relative"},
-  subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 8px",marginBottom:12,WebkitOverflowScrolling:"touch",scrollbarWidth:"thin",scrollBehavior:"smooth",cursor:"grab"},
+  subjActionBtn:{fontSize:11,fontWeight:600,color:"#888",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DC",borderRadius:16,padding:"4px 10px",cursor:"pointer"},
+  subjScrollWrap:{position:"relative",marginBottom:12},
+  subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 8px",WebkitOverflowScrolling:"touch",scrollBehavior:"smooth",cursor:"grab"},
   subjFadeL:{position:"absolute",left:0,top:0,bottom:6,width:24,background:"linear-gradient(to right,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
   subjFadeR:{position:"absolute",right:0,top:0,bottom:6,width:24,background:"linear-gradient(to left,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
-  subjScrollArrow:{position:"absolute",top:18,zIndex:8,width:30,height:30,borderRadius:"50%",border:"1px solid #DCE5D9",background:"rgba(255,255,255,.96)",boxShadow:"0 3px 10px rgba(35,55,40,.14)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,lineHeight:1,color:"#4E6656",cursor:"pointer",padding:0},
-  subjPill:{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:22,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
+  subjScrollArrow:{position:"absolute",bottom:-6,zIndex:12,width:20,height:20,border:0,background:"transparent",boxShadow:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,lineHeight:1,color:"var(--sg-theme-accent,#2D6A4F)",cursor:"pointer",padding:0},
+  subjScrollArrowDisabled:{opacity:.35,cursor:"default"},
+  subjPill:{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
   subjDot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
   subjAddPill:{display:"flex",alignItems:"center",padding:"9px 14px",border:"1.5px dashed #C8D8C4",background:"transparent",borderRadius:22,cursor:"pointer",color:"#7AA56B",fontWeight:600,whiteSpace:"nowrap",flexShrink:0},
-  targetCard:{background:"#fff",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
+  targetCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
   targetTop:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   targetLabel:{fontSize:12,fontWeight:600,color:"#888"},
   targetVal:{fontSize:13,fontWeight:700},
   targetTrack:{height:7,background:"#EEF2EC",borderRadius:8,overflow:"hidden"},
   targetFill:{height:"100%",borderRadius:8,transition:"width 0.5s ease"},
-  subjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",padding:"9px 4px",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:12,cursor:"pointer"},
+  subjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",padding:"9px 4px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,cursor:"pointer"},
   subjectBtnActive:{fontWeight:600},
   removeBadge:{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",background:"#E07B54",color:"#fff",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0},
-  addSubjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 4px",border:"1.5px dashed #C8D8C4",background:"#f9fbf8",borderRadius:12,cursor:"pointer",fontSize:20,color:"#888",minHeight:56},
+  addSubjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 4px",border:"1.5px dashed #C8D8C4",background:"var(--sg-theme-neutral,#f9fbf8)",borderRadius:12,cursor:"pointer",fontSize:20,color:"#888",minHeight:56},
   plantStage:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",margin:"46px 0 2px",minHeight:216},
   plantHalo:{position:"absolute",top:-4,left:"50%",transform:"translateX(-50%)",width:232,height:232,borderRadius:"50%",pointerEvents:"none"},
   plantMound:{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:150,height:40,borderRadius:"50%",pointerEvents:"none"},
@@ -13833,26 +14142,26 @@ const S = {
   plantBtn:{display:"block",width:"100%",padding:"16px 0",border:"none",borderRadius:16,fontSize:17,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.15)",letterSpacing:"-0.3px"},
   otherTabBanner:{textAlign:"center",fontSize:12.5,fontWeight:600,color:"#8A6D2F",background:"#FFF6E0",border:"1px solid #F0DFA0",borderRadius:12,padding:"9px 12px",marginBottom:10},
   // ── Calm Focus layout ──
-  segWrap:{display:"flex",gap:3,background:"#EAF0E8",borderRadius:22,padding:3,marginBottom:12},
+  segWrap:{display:"flex",gap:3,background:"var(--sg-theme-control-track,#EAF0E8)",borderRadius:22,padding:3,marginBottom:12},
   segBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:20,fontSize:13,fontWeight:700,color:"#8A968A",cursor:"pointer",transition:"all 0.2s"},
   modePickBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"11px 0",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",background:"var(--sg-theme-panel-solid,#fff)",borderRadius:22,fontSize:14,fontWeight:700,color:"var(--sg-theme-text,#444)",cursor:"pointer"},
-  modeChev:{fontSize:14,color:"#aaa",transition:"transform 0.2s",lineHeight:1,marginTop:-3},
+  modeChev:{fontSize:14,color:"#aaa",transition:"transform 0.2s",lineHeight:1},
   modeBackdrop:{position:"fixed",inset:0,zIndex:40},
-  modePop:{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:"#fff",borderRadius:16,padding:6,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",border:"1px solid #EEF2EC",zIndex:50},
+  modePop:{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:"var(--sg-theme-neutral,#fff)",borderRadius:16,padding:6,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",border:"1px solid #EEF2EC",zIndex:50},
   modeOpt:{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"11px 12px",border:"none",background:"transparent",borderRadius:12,cursor:"pointer",textAlign:"left"},
   modeOptLbl:{display:"block",fontSize:14,fontWeight:700},
   modeOptDesc:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
   pomodoroSetup:{background:"rgba(255,255,255,.72)",border:"1px solid #E1E9DE",borderRadius:14,padding:"9px 10px 10px",marginBottom:12},
   pomodoroOptions:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginTop:9},
   pomodoroOption:{display:"inline-flex",alignItems:"center",gap:6,minHeight:32,fontSize:10.5,fontWeight:650,color:"#68736A",cursor:"pointer"},
-  subjIconBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:38,padding:"9px 0",border:"1.5px solid #E0E8DC",background:"#fff",borderRadius:22,cursor:"pointer",color:"#888",fontSize:15,flexShrink:0},
+  subjIconBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:38,padding:"9px 0",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#888",fontSize:15,flexShrink:0},
   focusCore:{marginTop:8},
   focusMeta:{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginTop:14,flexWrap:"wrap"},
   focusMetaItem:{display:"flex",alignItems:"center",gap:7,fontSize:12.5,color:"#999",fontWeight:600},
   metaTrack:{width:54,height:5,background:"#EEF2EC",borderRadius:6,overflow:"hidden"},
   metaFill:{height:"100%",borderRadius:6,transition:"width 0.5s ease"},
   boardView:{padding:"16px 16px 40px"},
-  arrangeGardenBtn:{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE6DA",background:"#fff",borderRadius:10,fontSize:12,fontWeight:650,color:"#56645A",cursor:"pointer",boxShadow:"0 1px 2px rgba(0,0,0,.035)"},
+  arrangeGardenBtn:{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",border:"1px solid #DDE6DA",background:"var(--sg-theme-neutral,#fff)",borderRadius:10,fontSize:12,fontWeight:650,color:"#56645A",cursor:"pointer",boxShadow:"0 1px 2px rgba(0,0,0,.035)"},
   rewardCard:{background:"linear-gradient(180deg,#FFFDF7,#FFF9E9)",border:"1px solid #F0E1B8",borderRadius:15,padding:"12px 12px 10px",margin:"10px 0 12px"},
   rewardCardTop:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:9},
   rewardCardTitle:{fontSize:11,fontWeight:750,color:"#786434",textTransform:"uppercase",letterSpacing:".6px"},
@@ -13866,31 +14175,31 @@ const S = {
   rewardSkin:{fontSize:10.5,fontWeight:800,color:"#7356A8",marginTop:3,textAlign:"center",lineHeight:1.15},
   rewardHint:{fontSize:10,color:"#A2946F",textAlign:"center",marginTop:8},
   weekNav:{display:"grid",gridTemplateColumns:"64px minmax(0,1fr) 64px",alignItems:"center",gap:5,background:"#EEF4EC",border:"1px solid #DDE7D9",borderRadius:14,padding:5,margin:"0 0 10px"},
-  weekNavBtn:{minWidth:0,height:38,display:"flex",alignItems:"center",justifyContent:"center",gap:3,padding:"0 6px",border:"1px solid #D8E3D5",borderRadius:10,background:"#fff",color:"#456451",fontSize:10.5,fontWeight:750,lineHeight:1,cursor:"pointer",boxShadow:"0 1px 2px rgba(31,57,39,.05)"},
+  weekNavBtn:{minWidth:0,height:38,display:"flex",alignItems:"center",justifyContent:"center",gap:3,padding:"0 6px",border:"1px solid #D8E3D5",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#456451)",fontSize:10.5,fontWeight:750,lineHeight:1,cursor:"pointer",boxShadow:"0 1px 2px rgba(31,57,39,.05)"},
   weekNavArrow:{fontSize:18,fontWeight:500,lineHeight:.8,marginTop:-1},
   weekNavBtnDisabled:{opacity:.3,cursor:"default",boxShadow:"none",background:"rgba(255,255,255,.55)"},
   weekNavCenter:{minWidth:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",lineHeight:1.1},
   weekNavLabel:{fontSize:13.5,fontWeight:750,color:"#263C2E",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"},
   weekNavRange:{fontSize:9.5,fontWeight:600,color:"#879289",marginTop:3},
-  toggleRow:{display:"flex",gap:3,marginBottom:14,background:"#EAF0E8",borderRadius:12,padding:3},
-  toggleBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:9,fontSize:13,fontWeight:600,color:"#8A968A",cursor:"pointer",transition:"all 0.2s"},
-  toggleBtnActive:{background:"#fff",color:"#2D6A4F",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.10)"},
-  boardRow:{display:"flex",alignItems:"center",background:"#fff",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
-  boardRowMe:{border:"2px solid #56B68B",background:"#F0FBF6"},
+  toggleRow:{display:"flex",gap:3,marginBottom:14,background:"var(--sg-theme-control-track,#EAF0E8)",borderRadius:12,padding:3},
+  toggleBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:9,fontSize:13,fontWeight:600,color:"var(--sg-theme-muted,#8A968A)",cursor:"pointer",transition:"all 0.2s"},
+  toggleBtnActive:{background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.10)"},
+  boardRow:{display:"flex",alignItems:"center",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
+  boardRowMe:{border:"2px solid #56B68B",background:"var(--sg-theme-accent-wash,#F0FBF6)"},
   boardRank:{width:32,fontSize:18,textAlign:"center"},
   empty:{textAlign:"center",color:"#aaa",fontSize:14,marginTop:40},
   loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(160deg,#D8F0E0 0%,#F5F7F2 60%)",padding:20},
-  loginCard:{background:"#fff",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(45,106,79,0.12)",textAlign:"center"},
-  loginTitle:{fontSize:28,fontWeight:800,color:"#2D6A4F",margin:"0 0 6px",letterSpacing:"-0.5px"},
+  loginCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(45,106,79,0.12)",textAlign:"center"},
+  loginTitle:{fontSize:28,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",margin:"0 0 6px",letterSpacing:"-0.5px"},
   loginSub:{fontSize:14,color:"#888",margin:"0 0 24px"},
   loginHint:{fontSize:11,color:"#bbb",margin:"6px 0 16px",lineHeight:1.6,textAlign:"center"},
   input:{display:"block",width:"100%",padding:"12px 14px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:8},
   inputErr:{borderColor:"#E07B54"},
   errText:{color:"#E07B54",fontSize:12,margin:"0 0 8px",textAlign:"left"},
-  primaryBtn:{display:"block",width:"100%",padding:"14px 0",background:"#2D6A4F",color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8},
+  primaryBtn:{display:"block",width:"100%",padding:"14px 0",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8},
   linkBtn:{display:"block",width:"100%",background:"none",border:"none",color:"#56B68B",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12,padding:"4px 0"},
   recBox:{background:"#F6FAF5",border:"1px solid #E0E8DC",borderRadius:12,padding:"12px",margin:"4px 0 8px",textAlign:"left"},
   recHint:{fontSize:11,color:"#888",margin:"0 0 8px",lineHeight:1.5},
-  recSelect:{width:"100%",padding:"10px",border:"1.5px solid #E0E8DC",borderRadius:10,fontSize:13,marginBottom:8,outline:"none",background:"#fff",color:"#333"},
+  recSelect:{width:"100%",padding:"10px",border:"1.5px solid #E0E8DC",borderRadius:10,fontSize:13,marginBottom:8,outline:"none",background:"var(--sg-theme-neutral,#fff)",color:"#333"},
   toast:{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#1a1a2e",color:"#fff",padding:"10px 20px",borderRadius:24,fontSize:13,fontWeight:500,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",zIndex:400,whiteSpace:"nowrap"},
 };

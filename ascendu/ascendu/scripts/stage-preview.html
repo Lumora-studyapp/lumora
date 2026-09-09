@@ -5,7 +5,7 @@ import {FocusScreen,APP_CSS} from '/src/App.jsx';
 const style=document.createElement('style');style.textContent=APP_CSS;document.head.append(style);
 document.getElementById('root').className='sg-shell';
 const root=createRoot(document.getElementById('root'));
-let props={subject:{id:'math',label:'Mathematics',emoji:'',color:'#2D6A4F'},mode:'stopwatch',elapsed:59,duration:1500,paused:false,coins:0,skin:'einstein',sessionId:'preview',animationMode:'full',onPause:()=>window.update({paused:!props.paused}),onEnd:()=>root.render(null)};
+let props={subject:{id:'english',label:'English',emoji:'📖',color:'#E07B54'},mode:'stopwatch',elapsed:59,duration:1500,paused:false,coins:0,skin:'einstein',sessionId:'preview',animationMode:'full',onPause:()=>window.update({paused:!props.paused}),onEnd:()=>root.render(null)};
 window.update=patch=>{props={...props,...patch};root.render(React.createElement(React.StrictMode,null,React.createElement(FocusScreen,props)));};
 window.unmount=()=>root.render(null);
 window.update({});

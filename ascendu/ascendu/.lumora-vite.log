@@ -1,0 +1,177 @@
+
+> lumora@1.0.0 dev
+> vite --host 127.0.0.1 --port 5174
+
+Port 5174 is in use, trying another one...
+Port 5175 is in use, trying another one...
+
+  VITE v5.4.21  ready in 921 ms
+
+  ➜  Local:   http://127.0.0.1:5176/
+  ➜  press h + enter to show help
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:19:50 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:22:04 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:23:41 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:24:15 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:24:19 pm [vite] hmr invalidate /src/App.jsx Could not Fast Refresh ("APP_CSS" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+7:24:19 pm [vite] hmr update /src/main.jsx
+7:24:19 pm [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+7:24:19 pm [vite] page reload src/main.jsx
+7:26:35 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:28:44 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:29:30 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:30:25 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:32:08 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:33:52 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:35:47 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:37:08 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:41:04 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+7:45:22 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+8:24:31 pm [vite] hmr update /src/App.jsx
+[BABEL] Note: The code generator has deoptimised the styling of C:\Users\VSAN7\Desktop\lumora\ascendu\ascendu\src\App.jsx as it exceeds the max of 500KB.
+8:24:34 pm [vite] hmr invalidate /src/App.jsx Could not Fast Refresh ("APP_CSS" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+8:24:34 pm [vite] hmr update /src/main.jsx
+8:24:34 pm [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+8:24:34 pm [vite] page reload src/main.jsx
+7:52:45 am [vite] hmr update /src/App.jsx
+9:17:18 am [vite] hmr update /src/App.jsx
+9:19:20 am [vite] hmr update /src/App.jsx
+9:20:59 am [vite] hmr update /src/App.jsx
+9:24:29 am [vite] hmr update /src/App.jsx
+9:39:16 am [vite] hmr update /src/App.jsx
+9:44:24 am [vite] hmr update /src/App.jsx
+9:44:24 am [vite] hmr update /src/backgrounds.jsx
+9:44:29 am [vite] hmr update /src/App.jsx
+9:45:08 am [vite] hmr update /src/App.jsx
+9:46:52 am [vite] hmr update /src/App.jsx
+9:49:08 am [vite] hmr update /src/App.jsx
+9:49:49 am [vite] hmr update /src/App.jsx
+9:55:18 am [vite] hmr update /src/App.jsx
+9:56:06 am [vite] hmr update /src/App.jsx
+10:04:28 am [vite] hmr update /src/App.jsx
+10:05:26 am [vite] hmr update /src/App.jsx
+10:05:47 am [vite] hmr update /src/App.jsx
+10:06:26 am [vite] hmr update /src/App.jsx
+1:31:08 pm [vite] hmr update /src/App.jsx
+1:33:05 pm [vite] hmr update /src/App.jsx
+1:35:05 pm [vite] hmr update /src/App.jsx
+1:40:27 pm [vite] hmr update /src/App.jsx
+1:41:48 pm [vite] hmr update /src/App.jsx
+1:43:13 pm [vite] hmr update /src/App.jsx
+1:43:28 pm [vite] hmr update /src/App.jsx
+1:45:18 pm [vite] hmr update /src/backgrounds.jsx
+1:45:22 pm [vite] hmr update /src/App.jsx
+1:45:37 pm [vite] hmr update /src/App.jsx
+1:46:52 pm [vite] hmr update /src/App.jsx
+1:58:30 pm [vite] hmr update /src/App.jsx
+2:09:24 pm [vite] hmr update /src/App.jsx
+2:23:25 pm [vite] hmr update /src/App.jsx
+2:36:27 pm [vite] hmr update /src/App.jsx
+2:38:23 pm [vite] hmr update /src/App.jsx
+2:39:31 pm [vite] hmr update /src/App.jsx
+2:41:09 pm [vite] hmr update /src/App.jsx
+2:41:56 pm [vite] hmr update /src/App.jsx
+2:43:46 pm [vite] hmr update /src/App.jsx
+2:46:03 pm [vite] hmr update /src/App.jsx
+2:47:07 pm [vite] hmr update /src/App.jsx
+2:50:24 pm [vite] hmr update /src/App.jsx
+2:50:36 pm [vite] hmr update /src/App.jsx
+2:52:10 pm [vite] hmr update /src/App.jsx
+2:54:56 pm [vite] hmr update /src/App.jsx
+2:56:49 pm [vite] hmr update /src/App.jsx
+2:57:28 pm [vite] hmr update /src/App.jsx
+2:59:07 pm [vite] hmr update /src/App.jsx
+2:59:49 pm [vite] hmr update /src/App.jsx
+3:00:39 pm [vite] hmr update /src/App.jsx
+6:34:33 pm [vite] hmr update /src/App.jsx
+8:21:43 pm [vite] hmr update /src/App.jsx
+8:21:51 pm [vite] hmr update /src/App.jsx
+8:37:46 pm [vite] hmr update /src/App.jsx
+8:44:20 pm [vite] hmr update /src/App.jsx
+8:45:58 pm [vite] hmr update /src/App.jsx
+8:53:04 pm [vite] hmr update /src/App.jsx
+8:55:21 pm [vite] hmr update /src/App.jsx
+11:46:17 pm [vite] hmr update /src/App.jsx
+11:49:18 pm [vite] hmr update /src/App.jsx
+11:49:56 pm [vite] hmr update /src/App.jsx
+11:50:54 pm [vite] hmr update /src/App.jsx
+11:51:51 pm [vite] hmr update /src/App.jsx
+11:53:50 pm [vite] hmr update /src/App.jsx
+11:57:01 pm [vite] hmr update /src/App.jsx
+11:57:09 pm [vite] hmr update /src/App.jsx
+12:00:42 am [vite] hmr update /src/App.jsx
+12:02:16 am [vite] hmr update /src/App.jsx
+12:03:09 am [vite] hmr update /src/App.jsx
+12:04:15 am [vite] hmr update /src/App.jsx
+12:09:38 am [vite] hmr update /src/main.jsx, /src/App.jsx
+12:10:37 am [vite] hmr update /src/main.jsx, /src/App.jsx
+12:11:00 am [vite] hmr update /src/App.jsx
+12:11:39 am [vite] hmr update /src/App.jsx
+12:14:55 am [vite] hmr update /src/App.jsx
+12:14:57 am [vite] hmr update /src/App.jsx
+12:17:50 am [vite] hmr update /src/App.jsx
+12:19:59 am [vite] hmr update /src/App.jsx
+12:21:42 am [vite] hmr update /src/App.jsx
+12:22:43 am [vite] hmr update /src/App.jsx
+12:24:37 am [vite] hmr update /src/App.jsx
+9:10:19 am [vite] hmr update /src/App.jsx
+9:11:32 am [vite] hmr update /src/App.jsx
+9:14:00 am [vite] hmr update /src/App.jsx
+2:35:03 pm [vite] hmr update /src/App.jsx
+2:35:30 pm [vite] hmr update /src/App.jsx
+3:10:13 pm [vite] hmr update /src/App.jsx
+3:18:27 pm [vite] hmr update /src/App.jsx
+3:40:00 pm [vite] hmr update /src/App.jsx
+3:48:25 pm [vite] hmr update /src/App.jsx
+3:51:26 pm [vite] hmr update /src/App.jsx
+3:52:55 pm [vite] hmr update /src/App.jsx
+7:54:12 pm [vite] hmr update /src/App.jsx
+7:55:14 pm [vite] hmr update /src/App.jsx
+7:58:23 pm [vite] hmr update /src/App.jsx
+7:58:59 pm [vite] hmr update /src/App.jsx
+8:01:03 pm [vite] hmr update /src/App.jsx
+8:02:11 pm [vite] hmr update /src/App.jsx
+8:03:27 pm [vite] hmr update /src/App.jsx
+8:05:38 pm [vite] hmr update /src/App.jsx
+8:07:39 pm [vite] hmr update /src/App.jsx
+8:09:31 pm [vite] hmr update /src/App.jsx
+8:11:59 pm [vite] hmr update /src/App.jsx
+8:14:44 pm [vite] hmr update /src/App.jsx
+8:15:42 pm [vite] hmr update /src/App.jsx
+8:16:19 pm [vite] hmr update /src/App.jsx
+8:18:31 pm [vite] hmr update /src/App.jsx
+8:19:59 pm [vite] hmr update /src/App.jsx
+8:26:19 pm [vite] hmr update /src/App.jsx
+8:31:26 pm [vite] hmr update /src/App.jsx
+8:33:03 pm [vite] hmr update /src/App.jsx
+8:35:20 pm [vite] hmr update /src/App.jsx
+8:38:16 pm [vite] hmr update /src/App.jsx
+8:40:44 pm [vite] hmr update /src/App.jsx
+8:42:27 pm [vite] hmr update /src/App.jsx
+8:43:00 pm [vite] hmr update /src/App.jsx
+8:45:54 pm [vite] hmr update /src/App.jsx
+8:47:53 pm [vite] hmr update /src/App.jsx
+8:50:37 pm [vite] hmr update /src/App.jsx
+8:53:21 pm [vite] hmr update /src/App.jsx
+8:56:04 pm [vite] hmr update /src/App.jsx
+8:58:16 pm [vite] hmr update /src/App.jsx
+9:01:37 pm [vite] hmr update /src/App.jsx
+9:04:05 pm [vite] hmr update /src/App.jsx
+9:06:36 pm [vite] hmr update /src/App.jsx
+9:09:34 pm [vite] hmr update /src/App.jsx
+9:49:36 pm [vite] hmr update /src/App.jsx

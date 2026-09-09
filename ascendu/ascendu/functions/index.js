@@ -16,7 +16,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 const crypto = require("node:crypto");
-const { getStudyWeekKey } = require("./studyWeek.js");
+const { getStudyWeekKey, splitStudySessionByWeek } = require("./studyWeek.js");
 
 initializeApp();
 const db = getFirestore();
@@ -248,32 +248,32 @@ exports.recordSession = onCall(async (request) => {
   if (unameSnap.empty) throw new HttpsError("failed-precondition", "No username for this account.");
   const username = unameSnap.docs[0].data().displayName || unameSnap.docs[0].id;
 
-  // Match the client: a cross-midnight session belongs to the Melbourne week
-  // in which it began, while endTs records the real completion instant.
+  // Keep one history record while dividing weekly focus time at Monday 04:00.
   const endTs = Date.now();
   const sessionTs = typeof startedAt === "number" && Number.isFinite(startedAt) && startedAt > 0
     ? startedAt
     : Math.max(0,endTs-dur*1000);
-  const weekKey = getStudyWeekKey(sessionTs);
+  const weeklyChunks = splitStudySessionByWeek(sessionTs,endTs,dur);
+  const weekKey = weeklyChunks[0]?.weekKey || getStudyWeekKey(sessionTs);
 
   // ── Atomic-ish updates via a batch + transactions on the aggregate docs ──
-  const bumpBoard = async (ref) => {
+  const bumpBoard = async (ref,addedSecs=dur,addedSessions=1) => {
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       const data = snap.exists ? snap.data() : {};
       const u = data[username] || { totalSecs: 0, sessions: 0, subjects: {} };
-      u.totalSecs += dur;
-      u.sessions += 1;
+      u.totalSecs += addedSecs;
+      u.sessions += addedSessions;
       u.subjects = u.subjects || {};
-      u.subjects[subjectId] = (u.subjects[subjectId] || 0) + dur;
+      u.subjects[subjectId] = (u.subjects[subjectId] || 0) + addedSecs;
       tx.set(ref, { [username]: u }, { merge: true });
     });
   };
 
-  await bumpBoard(db.collection("leaderboard_weekly").doc(weekKey));
+  for(const chunk of weeklyChunks)await bumpBoard(db.collection("leaderboard_weekly").doc(chunk.weekKey),chunk.secs,chunk.sessions);
   await bumpBoard(db.collection("leaderboard_alltime").doc("data"));
   if (classCode && typeof classCode === "string") {
-    await bumpBoard(db.collection("class_boards").doc(`${classCode}_${weekKey}`));
+    for(const chunk of weeklyChunks)await bumpBoard(db.collection("class_boards").doc(`${classCode}_${chunk.weekKey}`),chunk.secs,chunk.sessions);
   }
 
   // ── Append to personal history ──

@@ -1,4 +1,4 @@
-export const GROUP_REWARD_MIN_PARTICIPANTS = 5;
+export const GROUP_REWARD_MIN_PARTICIPANTS = 3;
 
 const canonical = value => String(value || "").trim().normalize("NFC").toLowerCase();
 
@@ -20,6 +20,10 @@ export function groupRewardEligibility(group, weeklyEntries, minimum = GROUP_REW
     participants,
     minimum,
   };
+}
+
+export function groupCanReachRewards(group, minimum = GROUP_REWARD_MIN_PARTICIPANTS) {
+  return new Set((Array.isArray(group?.members) ? group.members : []).map(canonical).filter(Boolean)).size >= minimum;
 }
 
 export function selectLargestEligibleRewardGroup(groups, weeklyEntries, username, minimum = GROUP_REWARD_MIN_PARTICIPANTS) {

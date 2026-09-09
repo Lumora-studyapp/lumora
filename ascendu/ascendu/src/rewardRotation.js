@@ -1,6 +1,7 @@
 import { getStudyWeekDistance } from "./studyWeek.js";
 
-// Sunday 19 July 2026, 00:00 Australia/Melbourne. Keeping this launch anchor
+// The rotation launch instant is stable; study-week distance now follows the
+// Monday 04:00 Australia/Melbourne reset used across the app.
 // stable preserves every completed reward week while extending the cycle from
 // two modes to three: coins -> character -> classroom -> repeat.
 export const REWARD_ROTATION_START = new Date("2026-07-18T14:00:00.000Z");

@@ -7,7 +7,7 @@ import {
   stableRewardHash,
 } from "./rewardRotation.js";
 
-test("weekly rewards rotate coins, character, classroom from Sunday midnight Melbourne", () => {
+test("weekly rewards rotate coins, character, classroom on the shared weekly boundary", () => {
   assert.equal(getWeeklyRewardMode(new Date("2026-07-18T14:00:00.000Z")), "coins");
   assert.equal(getWeeklyRewardMode(new Date("2026-07-25T14:00:00.000Z")), "skin");
   assert.equal(getWeeklyRewardMode(new Date("2026-08-01T14:00:00.000Z")), "classroom");
