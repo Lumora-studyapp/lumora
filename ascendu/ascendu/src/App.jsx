@@ -145,10 +145,10 @@ export const APP_CSS = `
 .sg-shell ::-webkit-scrollbar-corner { background:transparent; }
 .sg-shell ::-webkit-scrollbar-thumb {
   min-height:34px;
-  border:1px solid transparent;
+  border:0;
   border-radius:999px;
   background:var(--sg-scrollbar-thumb,var(--sg-theme-accent,#2D6A4F));
-  background-clip:padding-box;
+  background-clip:border-box;
 }
 .sg-shell ::-webkit-scrollbar:horizontal { height:8px; }
 .sg-shell ::-webkit-scrollbar-track:horizontal {
@@ -176,13 +176,11 @@ export const APP_CSS = `
 .sg-shell .sg-sheet-anim {
   box-sizing:border-box;
   overflow-x:hidden;
-  scrollbar-gutter:stable;
 }
 .sg-shell .sg-sheet-anim::-webkit-scrollbar-track { margin-block:26px 16px; }
 .sg-shell .sg-assessment-editor,
 .sg-shell .sg-pop-anim[role="dialog"] {
   box-sizing:border-box;
-  scrollbar-gutter:stable;
 }
 .sg-shell .sg-assessment-editor::-webkit-scrollbar-track,
 .sg-shell .sg-pop-anim[role="dialog"]::-webkit-scrollbar-track { margin-block:18px; }
@@ -292,7 +290,6 @@ export const APP_CSS = `
 .sg-shell[data-background] .sg-task-check,
 .sg-shell[data-background] .sg-task-edit input,
 .sg-shell[data-background] .sg-task-edit select,
-.sg-shell[data-background] .sg-subj-scroll-arrow,
 .sg-shell[data-background] .sg-shop-sheet,
 .sg-shell[data-background] .sg-pop-anim,
 .sg-shell[data-background] .sg-assessment-editor,
