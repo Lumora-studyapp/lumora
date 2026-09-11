@@ -11794,6 +11794,7 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [error,setError]=useState("");
   const [copied,setCopied]=useState(false);
   const [managing,setManaging]=useState(false);
+  const [editingGroup,setEditingGroup]=useState(false);
   const [transferTarget,setTransferTarget]=useState("");
 
   const reload=useCallback(async preferredId=>{
@@ -11911,20 +11912,25 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     {groupsError&&<div style={gl.errorState} role="alert"><strong>Couldn't load groups</strong><span>{groupsError}</span><button style={gl.retryBtn} onClick={()=>reload()}>Try again</button></div>}
 
     {!groupsError&&groups.length>1&&<div style={gl.groupTabs}>
-      {groups.map(g=><button key={g.id} style={{...gl.groupTab,...(g.id===activeId?gl.groupTabOn:{})}} onClick={()=>{setActiveId(g.id);setManaging(false);setError("");}}>{g.name}</button>)}
+      {groups.map(g=><button key={g.id} style={{...gl.groupTab,...(g.id===activeId?gl.groupTabOn:{})}} onClick={()=>{setActiveId(g.id);setManaging(false);setEditingGroup(false);setError("");}}>{g.name}</button>)}
     </div>}
 
     {active&&<>
       <div style={gl.headCard}>
-        <div style={{minWidth:0}}>
-          <div style={gl.kicker}>GROUP DETAILS</div>
-          <div style={gl.name}>{active.name}</div>
-          <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · {weeklyEligibility.participantCount} participating this week</div>
-        </div>
-        <button style={gl.manageBtn} onClick={()=>setManaging(v=>!v)}>{managing?"Done":"Group settings"}</button>
+        <div style={gl.name}>{active.name}</div>
+        <button style={gl.detailsBtn} onClick={()=>{setManaging(v=>!v);setEditingGroup(false);}} aria-expanded={managing}>
+          {managing?"Hide details":"Group details"} <span aria-hidden="true">{managing?"⌃":"⌄"}</span>
+        </button>
       </div>
 
       {managing&&<div style={gl.manageCard}>
+        <div style={gl.groupSummary}>
+          <div style={gl.summaryLabel}>GROUP OVERVIEW</div>
+          <div style={gl.summaryStats}>
+            <span><b>{active.members?.length||0}</b> members</span>
+            <span><b>{weeklyEligibility.participantCount}</b> participating this week</span>
+          </div>
+        </div>
         <div style={gl.inviteCard}>
           <div>
             <div style={gl.inviteLabel}>PERMANENT GROUP CODE</div>
@@ -11942,22 +11948,30 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
           </div>)}
         </div>}
         <div style={gl.manageTitle}>Members</div>
-        {(active.members||[]).map(member=><div key={member} style={gl.memberRow}>
-          <span>{member}{canonUsername(member)===canonUsername(active.owner)&&<span style={gl.ownerTag}>owner</span>}</span>
-          {owner&&canonUsername(member)!==canonUsername(currentUser)&&<button style={gl.removeBtn} onClick={()=>removeMember(member)} disabled={busy}>Remove</button>}
-        </div>)}
-        {owner&&active.members?.length>1&&<div style={gl.transferRow}>
-          <select style={gl.select} value={transferTarget} onChange={e=>setTransferTarget(e.target.value)}>
-            <option value="">Transfer ownership…</option>
-            {active.members.filter(m=>canonUsername(m)!==canonUsername(currentUser)).map(m=><option key={m} value={m}>{m}</option>)}
-          </select>
-          <button style={gl.smallBtn} disabled={!transferTarget||busy} onClick={transfer}>Transfer</button>
-        </div>}
-        <div style={gl.dangerRow}>
-          {owner
-            ? <><button style={gl.mutedBtn} onClick={refreshInvite} disabled={busy}>Replace invite</button><button style={gl.dangerBtn} onClick={removeGroup} disabled={busy}>Delete group</button></>
-            : <button style={gl.dangerBtn} onClick={leave} disabled={busy}>Leave group</button>}
+        <div style={gl.memberList}>
+          {(active.members||[]).map(member=><div key={member} style={gl.memberRow}>
+            <span>{member}{canonUsername(member)===canonUsername(active.owner)&&<span style={gl.ownerTag}>owner</span>}</span>
+            {owner&&editingGroup&&canonUsername(member)!==canonUsername(currentUser)&&<button style={gl.removeBtn} onClick={()=>removeMember(member)} disabled={busy}>Remove</button>}
+          </div>)}
         </div>
+        {owner ? <>
+          <button style={gl.editGroupBtn} onClick={()=>setEditingGroup(v=>!v)} aria-expanded={editingGroup}>
+            {editingGroup?"Finish editing":"Edit group"} <span aria-hidden="true">{editingGroup?"⌃":"⌄"}</span>
+          </button>
+          {editingGroup&&<div style={gl.ownerEditArea}>
+            {active.members?.length>1&&<div style={gl.transferRow}>
+              <select style={gl.select} value={transferTarget} onChange={e=>setTransferTarget(e.target.value)}>
+                <option value="">Transfer ownership…</option>
+                {active.members.filter(m=>canonUsername(m)!==canonUsername(currentUser)).map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+              <button style={gl.smallBtn} disabled={!transferTarget||busy} onClick={transfer}>Transfer</button>
+            </div>}
+            <div style={gl.dangerRow}>
+              <button style={gl.mutedBtn} onClick={refreshInvite} disabled={busy}>Replace invite</button>
+              <button style={gl.dangerBtn} onClick={removeGroup} disabled={busy}>Delete group</button>
+            </div>
+          </div>}
+        </> : <div style={gl.dangerRow}><button style={gl.leaveBtn} onClick={leave} disabled={busy}>Leave group</button></div>}
       </div>}
 
 
@@ -12048,10 +12062,10 @@ const gl={
   inviteInbox:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:13,padding:"10px",marginBottom:10},
   incomingRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,padding:"5px 2px"},incomingIcon:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",fontSize:15},incomingText:{minWidth:0},incomingName:{fontSize:12.5,fontWeight:750,color:"#263D2D",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},incomingMeta:{fontSize:9.5,color:"#8A958D",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},acceptBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:10,padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},declineBtn:{width:28,height:28,border:"none",background:"#F2F4F1",color:"#849087",borderRadius:9,fontSize:17,cursor:"pointer",lineHeight:1},
   groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"var(--sg-theme-accent-wash,#E8F5EE)",borderColor:"#BFE3CE",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
-  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"11px 13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{fontSize:17,fontWeight:800,color:"#1A2E22",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},
+  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{minWidth:0,fontSize:18,fontWeight:800,color:"#1A2E22",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},detailsBtn:{border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"7px 9px",fontSize:10.5,fontWeight:750,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},
   inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"var(--sg-theme-neutral,#fff)",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
   rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",borderColor:"#BFE2CC"},
-  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",fontSize:11},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
+  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},groupSummary:{background:"#F4F8F2",border:"1px solid #E1E9DE",borderRadius:11,padding:"9px 10px",marginBottom:8},summaryLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#7B8A7F",marginBottom:5},summaryStats:{display:"flex",flexWrap:"wrap",gap:"4px 12px",fontSize:10.5,color:"#65746A"},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberList:{borderTop:"1px solid #EDF1EA"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"7px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},editGroupBtn:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",marginTop:9,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",color:"#5F6F64",borderRadius:10,padding:"8px 10px",fontSize:10.5,fontWeight:750,cursor:"pointer"},ownerEditArea:{background:"#FAFCF9",border:"1px solid #E4EBE1",borderRadius:11,padding:"9px",marginTop:7},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",fontSize:11},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},leaveBtn:{border:"none",background:"transparent",color:"#8E776F",padding:"5px 2px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
   boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"var(--sg-theme-neutral,#F0F8F3)",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#DCEFE3)",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
