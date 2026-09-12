@@ -13797,7 +13797,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           </nav>
 
           {tab==="timer"&&(
-            <div style={S.timerView} className="sg-view-anim" key="view-timer">
+            <div style={S.timerView} className="sg-view-anim lumora-focus-view" key="view-timer">
+              <details className="lumora-planner">
+                <summary>Study planner · Assessments & tasks</summary>
               <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
                 onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
                 onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
@@ -13806,6 +13808,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               <ChecklistCard tasks={tasks} loading={tasksLoading} error={tasksError}
                 subjects={subjects} selectedTaskId={selectedTaskId}
                 onSelect={chooseTask} onCreate={createTask} onUpdate={updateTask} onDelete={deleteTask}/>
+              </details>
 
               {/* Studying now — passive accountability */}
               <StudyingNow presence={presence} currentUser={user}/>
@@ -13922,7 +13925,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               </div>
 
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
-              <div style={S.focusCore}>
+              <div style={S.focusCore} className="lumora-focus-core">
                 {/* Today total + streak flame — the two numbers that matter daily */}
                 <div style={S.todayWrap}>
                   <div style={S.todayLabel}>TODAY</div>
@@ -13939,9 +13942,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 </div>
 
                 {/* A calm, static learner stage keeps the focus tab distinct from StudyGrove. */}
-                <div style={S.plantStage}>
+                <div style={S.plantStage} className="lumora-learner-stage">
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
-                  <div style={S.treeWrap}>
+                  <div style={S.treeWrap} className="lumora-learner-art">
                     {loginStageImage
                       ? <img src={loginStageImage} alt={`${loginSkin.name} stage 1`} style={S.loginStageImage}/>
                       : <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
@@ -13950,7 +13953,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                 </div>
 
-                <div style={{...S.timerDisplay,color:subjectObj.color}}>
+                <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
                   {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
                 </div>
                 <div style={S.timerLabel}>
@@ -13959,7 +13962,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                     : mode==="timer"?"Set a duration and grow your learner":"Tap start — stopwatch counts up"}
                 </div>
                 {timerStyle==="standard"&&mode==="timer"&&(
-                  <div style={S.durationSliderWrap}>
+                  <div style={S.durationSliderWrap} className="lumora-duration-control">
                     <div style={S.durationScale}><span>5 min</span><strong style={{color:subjectObj.color}}>{Math.round(duration/60)} minutes</strong><span>3 hr</span></div>
                     <input className="sg-duration-slider" type="range" min="5" max="180" step="5"
                       value={Math.round(duration/60)} aria-label="Study duration in minutes"
