@@ -12337,11 +12337,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(upcomingAssessments.length)parts.push(`${upcomingAssessments.length} assessment${upcomingAssessments.length===1?"":"s"}`);
     if(dueTasks.length)parts.push(`${dueTasks.length} task${dueTasks.length===1?"":"s"} due`);
     const nearestAssessment=upcomingAssessments[0];
+    const nearestTask=dueTasks[0];
+    const taskLeads=nearestTask&&(!nearestAssessment||nearestTask.days<nearestAssessment.days);
     const detail=overdueCount
       ? `${overdueCount} overdue`
-      : nearestAssessment
+      : taskLeads
+        ? `${nearestTask.title} · ${nearestTask.days===0?"Today":assessmentDaysLabel(nearestTask.days)}`
+        : nearestAssessment
         ? `${nearestAssessment.name} · ${assessmentDaysLabel(nearestAssessment.days)}`
-        : dueTasks[0]?.days===0 ? "Task due today" : `Next task · ${assessmentDaysLabel(dueTasks[0]?.days||0)}`;
+        : "Due soon";
     return {summary:parts.join(" · "),detail,urgent:overdueCount>0||upcomingAssessments.some(exam=>exam.days<=3)||dueTasks.some(task=>task.days<=1)};
   },[exams,tasks]);
   const [badges,setBadges]=useState(()=>lsGet(LS_BADGES,[]));            // unlocked badge ids
