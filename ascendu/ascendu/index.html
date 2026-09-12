@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#2D6A4F" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -18,7 +18,7 @@
       try {
         const owner = (localStorage.getItem("studygrove_username") || "").trim().normalize("NFC").toLowerCase();
         const id = localStorage.getItem(owner ? `studygrove_background:${owner}` : "studygrove_background:guest") || "classic-grove";
-        const theme = localStorage.getItem("studygrove_theme") === "dark" ? "dark" : "light";
+        const theme = "light";
         const colours = {
           light: {
             "classic-grove":"#F5F7F2","midnight-minimal":"#0B1112","forest-dawn":"#DDEDD7",

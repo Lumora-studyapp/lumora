@@ -76,7 +76,6 @@ const ANNOUNCEMENT_ADMIN = ADMIN_USERS[0] || "";
 const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
 const LS_EXAMS    = "studygrove_exams";
 const LS_SKIN     = "studygrove_skin";
-const LS_THEME    = "studygrove_theme";
 const LS_ANIMATION_MODE = "lumora_animation_mode";
 const LS_TARGETS  = "studygrove_targets";
 const LS_DECOR    = "studygrove_decorations"; // owned garden decorations (account-level)
@@ -88,32 +87,6 @@ const LS_SELECTED_TASK = "studygrove_selected_task";
 const LS_RECAP    = "studygrove_recap_shown";
   // last week-key the recap auto-showed
 
-// Dark theme — a hue-preserving invert applied to the app shell. We invert +
-// rotate hue (so colours stay roughly themselves rather than flipping), then
-// COUNTER-invert the colourful/media bits (garden SVG, the focus screen, the
-// tree) so they render normally. This is reliable across browsers and doesn't
-// depend on how React serialises inline styles.
-const DARK_CSS = `
-[data-theme] .sg-shell { --sg-counter-filter: ; }
-[data-theme="dark"] .sg-shell {
-  filter: invert(0.93) hue-rotate(180deg);
-  --sg-counter-filter: invert(1) hue-rotate(180deg);
-  background: #ECF1ED;
-  transition: filter 0.25s ease;
-}
-/* Counter-filter media and marked brand elements so they keep their real colours. */
-[data-theme="dark"] .sg-shell .sg-keepcolor {
-  filter: invert(1) hue-rotate(180deg);
-}
-[data-theme="dark"] .sg-shell img,
-[data-theme="dark"] .sg-shell svg {
-  filter: invert(1) hue-rotate(180deg);
-}
-/* Emoji are wrapped at runtime only while dark mode is active. */
-[data-theme="dark"] .sg-shell [data-sg-emoji] {
-  filter: invert(1) hue-rotate(180deg);
-}
-`;
 export const APP_CSS = `
 @keyframes sgpulse {
   0%   { box-shadow: 0 0 0 0 rgba(52,199,89,0.5); }
@@ -2083,7 +2056,6 @@ const migrateLumoraCache = () => {
     ascendu_subjects:LS_SUBJECTS,
     ascendu_mode:LS_MODE,
     ascendu_coins:LS_COINS,
-    ascendu_theme:LS_THEME,
     ascendu_targets:LS_TARGETS,
     ascendu_badges:LS_BADGES,
   };
@@ -8312,7 +8284,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onToggleTheme, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const items = [
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
@@ -8377,12 +8349,6 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTes
               onClick={()=>onAnimationModeChange(id)}>{label}</button>)}
           </div>
         </div>
-        <button style={hm.row} onClick={onToggleTheme}>
-          <span style={hm.itemIcon}>{theme==="dark"?"☀️":"🌙"}</span>
-          <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#444"}}>
-            {theme==="dark"?"Light mode":"Dark mode"}
-          </span>
-        </button>
         <button style={hm.row} onClick={onLogout}>
           <span style={hm.itemIcon}>↩</span>
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#E07B54"}}>Log out</span>
@@ -11791,7 +11757,8 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [error,setError]=useState("");
   const [copied,setCopied]=useState(false);
   const [managing,setManaging]=useState(false);
-  const [transferTarget,setTransferTarget]=useState("");
+  const [editingGroup,setEditingGroup]=useState(false);
+  const [transferPickerOpen,setTransferPickerOpen]=useState(false);
 
   const reload=useCallback(async preferredId=>{
     const [groupResult,inbox]=await Promise.all([fbLoadGroups(currentUser),fbLoadGroupInvites(currentUser)]);
@@ -11884,11 +11851,11 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     const result=await run(()=>fbRemoveGroupMember(currentUser,active.id,member));
     if(result)await reload(active.id);
   };
-  const transfer=async()=>{
-    if(!transferTarget)return;
-    if(!window.confirm(`Make ${transferTarget} the owner?`))return;
-    const result=await run(()=>fbTransferGroup(currentUser,active.id,transferTarget));
-    if(result){setTransferTarget("");setManaging(false);await reload(active.id);}
+  const transfer=async nextOwner=>{
+    if(!nextOwner)return;
+    if(!window.confirm(`Make ${nextOwner} the owner?`))return;
+    const result=await run(()=>fbTransferGroup(currentUser,active.id,nextOwner));
+    if(result){setTransferPickerOpen(false);setManaging(false);await reload(active.id);}
   };
   const removeGroup=async()=>{
     if(!window.confirm(`Delete ${active.name}? This removes the group for every member.`))return;
@@ -11908,20 +11875,25 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     {groupsError&&<div style={gl.errorState} role="alert"><strong>Couldn't load groups</strong><span>{groupsError}</span><button style={gl.retryBtn} onClick={()=>reload()}>Try again</button></div>}
 
     {!groupsError&&groups.length>1&&<div style={gl.groupTabs}>
-      {groups.map(g=><button key={g.id} style={{...gl.groupTab,...(g.id===activeId?gl.groupTabOn:{})}} onClick={()=>{setActiveId(g.id);setManaging(false);setError("");}}>{g.name}</button>)}
+      {groups.map(g=><button key={g.id} style={{...gl.groupTab,...(g.id===activeId?gl.groupTabOn:{})}} onClick={()=>{setActiveId(g.id);setManaging(false);setEditingGroup(false);setError("");}}>{g.name}</button>)}
     </div>}
 
     {active&&<>
       <div style={gl.headCard}>
-        <div style={{minWidth:0}}>
-          <div style={gl.kicker}>GROUP DETAILS</div>
-          <div style={gl.name}>{active.name}</div>
-          <div style={gl.memberCount}>{active.members?.length||0}/{GROUP_MAX_MEMBERS} members · {weeklyEligibility.participantCount} participating this week</div>
-        </div>
-        <button style={gl.manageBtn} onClick={()=>setManaging(v=>!v)}>{managing?"Done":"Group settings"}</button>
+        <div style={gl.name}>{active.name}</div>
+        <button style={gl.detailsBtn} onClick={()=>{setManaging(v=>!v);setEditingGroup(false);}} aria-expanded={managing}>
+          {managing?"Hide details":"Group details"} <span style={gl.detailsIcon} aria-hidden="true">i</span>
+        </button>
       </div>
 
       {managing&&<div style={gl.manageCard}>
+        <div style={gl.groupSummary}>
+          <div style={gl.summaryLabel}>GROUP OVERVIEW</div>
+          <div style={gl.summaryStats}>
+            <span style={gl.summaryStat}><b>{active.members?.length||0}</b> members</span>
+            <span style={{...gl.summaryStat,...gl.summaryStatSeparated}}><b>{weeklyEligibility.participantCount}</b> participating this week</span>
+          </div>
+        </div>
         <div style={gl.inviteCard}>
           <div>
             <div style={gl.inviteLabel}>PERMANENT GROUP CODE</div>
@@ -11939,22 +11911,34 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
           </div>)}
         </div>}
         <div style={gl.manageTitle}>Members</div>
-        {(active.members||[]).map(member=><div key={member} style={gl.memberRow}>
-          <span>{member}{canonUsername(member)===canonUsername(active.owner)&&<span style={gl.ownerTag}>owner</span>}</span>
-          {owner&&canonUsername(member)!==canonUsername(currentUser)&&<button style={gl.removeBtn} onClick={()=>removeMember(member)} disabled={busy}>Remove</button>}
-        </div>)}
-        {owner&&active.members?.length>1&&<div style={gl.transferRow}>
-          <select style={gl.select} value={transferTarget} onChange={e=>setTransferTarget(e.target.value)}>
-            <option value="">Transfer ownership…</option>
-            {active.members.filter(m=>canonUsername(m)!==canonUsername(currentUser)).map(m=><option key={m} value={m}>{m}</option>)}
-          </select>
-          <button style={gl.smallBtn} disabled={!transferTarget||busy} onClick={transfer}>Transfer</button>
-        </div>}
-        <div style={gl.dangerRow}>
-          {owner
-            ? <><button style={gl.mutedBtn} onClick={refreshInvite} disabled={busy}>Replace invite</button><button style={gl.dangerBtn} onClick={removeGroup} disabled={busy}>Delete group</button></>
-            : <button style={gl.dangerBtn} onClick={leave} disabled={busy}>Leave group</button>}
+        <div style={gl.memberList}>
+          {(active.members||[]).map(member=><div key={member} style={gl.memberRow}>
+            <span>{member}{canonUsername(member)===canonUsername(active.owner)&&<span style={gl.ownerTag}>owner</span>}</span>
+            {owner&&editingGroup&&canonUsername(member)!==canonUsername(currentUser)&&<button style={gl.removeBtn} onClick={()=>removeMember(member)} disabled={busy}>Remove</button>}
+          </div>)}
         </div>
+        {owner ? <>
+          <button style={gl.editGroupBtn} onClick={()=>setEditingGroup(v=>!v)} aria-expanded={editingGroup}>
+            {editingGroup?"Finish editing":"Edit group"} <span aria-hidden="true">{editingGroup?"⌃":"⌄"}</span>
+          </button>
+          {editingGroup&&<div style={gl.ownerEditArea}>
+            {active.members?.length>1&&<div style={gl.transferSection}>
+              <button style={gl.transferPicker} onClick={()=>setTransferPickerOpen(value=>!value)} aria-expanded={transferPickerOpen}>
+                <span>Transfer ownership</span><span aria-hidden="true">{transferPickerOpen?"×":"+"}</span>
+              </button>
+              {transferPickerOpen&&<div style={gl.transferChoices}>
+                <div style={gl.transferHint}>Choose a member to become owner.</div>
+                {active.members.filter(m=>canonUsername(m)!==canonUsername(currentUser)).map(member=><button key={member} style={gl.transferChoice} onClick={()=>transfer(member)} disabled={busy}>
+                  <span>{member}</span><span>Make owner</span>
+                </button>)}
+              </div>}
+            </div>}
+            <div style={gl.dangerRow}>
+              <button style={gl.mutedBtn} onClick={refreshInvite} disabled={busy}>Replace invite</button>
+              <button style={gl.dangerBtn} onClick={removeGroup} disabled={busy}>Delete group</button>
+            </div>
+          </div>}
+        </> : <div style={gl.dangerRow}><button style={gl.leaveBtn} onClick={leave} disabled={busy}>Leave group</button></div>}
       </div>}
 
 
@@ -11975,14 +11959,12 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
         emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
         emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
       }
-      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view!=="allTime"
-          ? displayedEligibility.eligible
-            ? view==="past"
-              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
-              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Monday's 4:00 am reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Three participating members are required for rewards.`
-          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      {!showBoardLoading&&!showBoardError&&(view==="allTime"||displayedEligibility.eligible)&&<div style={{...gl.badgeNote,...(view!=="allTime"?gl.rewardEligibleNote:{})}}>
+        {view==="allTime"
+          ? "📚 All-time totals show this group's full study history and do not affect weekly rewards."
+          : view==="past"
+            ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+            : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Monday's 4:00 am reset. Each user can receive one group prize, from their biggest eligible group."}
       </div>}
 
 
@@ -12045,10 +12027,10 @@ const gl={
   inviteInbox:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:13,padding:"10px",marginBottom:10},
   incomingRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,padding:"5px 2px"},incomingIcon:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",fontSize:15},incomingText:{minWidth:0},incomingName:{fontSize:12.5,fontWeight:750,color:"#263D2D",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},incomingMeta:{fontSize:9.5,color:"#8A958D",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},acceptBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:10,padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},declineBtn:{width:28,height:28,border:"none",background:"#F2F4F1",color:"#849087",borderRadius:9,fontSize:17,cursor:"pointer",lineHeight:1},
   groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"var(--sg-theme-accent-wash,#E8F5EE)",borderColor:"#BFE3CE",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
-  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"11px 13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{fontSize:17,fontWeight:800,color:"#1A2E22",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},
+  headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{minWidth:0,fontSize:18,fontWeight:800,color:"#1A2E22",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},detailsBtn:{display:"inline-flex",alignItems:"center",gap:6,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"6px 9px",fontSize:10.5,fontWeight:750,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},detailsIcon:{display:"inline-grid",placeItems:"center",width:14,height:14,borderRadius:"50%",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#486351)",fontSize:9,fontWeight:900,fontFamily:"Georgia,serif",fontStyle:"italic"},
   inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"var(--sg-theme-neutral,#fff)",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
   rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",borderColor:"#BFE2CC"},
-  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"6px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferRow:{display:"flex",gap:7,marginTop:9},select:{flex:1,minWidth:0,padding:"8px",border:"1px solid #DDE5DA",borderRadius:10,background:"var(--sg-theme-neutral,#fff)",fontSize:11},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
+  badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},groupSummary:{background:"#F4F8F2",border:"1px solid #E1E9DE",borderRadius:11,padding:"9px 10px",marginBottom:8},summaryLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#7B8A7F",marginBottom:5},summaryStats:{display:"grid",gridTemplateColumns:"minmax(0,.8fr) minmax(0,1.6fr)",fontSize:10.5,color:"#65746A"},summaryStat:{display:"flex",alignItems:"baseline",gap:4,whiteSpace:"nowrap"},summaryStatSeparated:{borderLeft:"1px solid #DDE7D9",paddingLeft:12},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberList:{borderTop:"1px solid #EDF1EA"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"7px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},editGroupBtn:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",marginTop:9,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",color:"#5F6F64",borderRadius:10,padding:"8px 10px",fontSize:10.5,fontWeight:750,cursor:"pointer"},ownerEditArea:{background:"#FAFCF9",border:"1px solid #E4EBE1",borderRadius:11,padding:"9px",marginTop:7},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferSection:{marginBottom:10},transferPicker:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",color:"#5F6F64",borderRadius:10,padding:"8px 10px",fontSize:10.5,fontWeight:750,cursor:"pointer"},transferChoices:{marginTop:6,border:"1px solid #E2EAE0",borderRadius:10,overflow:"hidden",background:"var(--sg-theme-neutral,#fff)"},transferHint:{padding:"7px 9px",fontSize:9.5,color:"#829087",background:"#F5F8F4",borderBottom:"1px solid #E6ECE4"},transferChoice:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:0,borderBottom:"1px solid #EDF1EA",background:"transparent",color:"#526358",padding:"8px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer",textAlign:"left"},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},leaveBtn:{border:"none",background:"transparent",color:"#8E776F",padding:"5px 2px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
   boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"var(--sg-theme-neutral,#F0F8F3)",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#DCEFE3)",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
@@ -12293,7 +12275,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showAddModal,setShowAddModal]=useState(false);
   const [editMode,setEditMode]=useState(false);
   const [modePickerOpen,setModePickerOpen]=useState(false); // timer/stopwatch chooser popover
-  const [subjScrollRef, subjScrollEdge, scrollSubjects] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|")); // wheel, drag and arrow access on desktop
+  const [subjScrollRef] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|"));
   const [coins,setCoins]=useState(()=>lsGet(LS_COINS,0));
   const walletCoins=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins;
   const [claimedMilestoneRewards,setClaimedMilestoneRewards]=useState([]);
@@ -12312,7 +12294,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return [...new Set(["default",...available])];
   });
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
-  const [theme,setTheme]=useState(()=>lsRaw(LS_THEME,"light"));
+  const theme="light";
   const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
   const [prefersReducedMotion,setPrefersReducedMotion]=useState(false);
   const [adminRoleVerified,setAdminRoleVerified]=useState(false);
@@ -12336,6 +12318,34 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [tasksLoading,setTasksLoading]=useState(false);
   const [tasksError,setTasksError]=useState("");
   const [selectedTaskId,setSelectedTaskId]=useState(()=>lsRaw(LS_SELECTED_TASK,""));
+  const plannerUrgency=useMemo(()=>{
+    const today=assessmentDayNumber(assessmentDateKey(new Date()));
+    const upcomingAssessments=exams
+      .map(exam=>({...exam,days:assessmentDayNumber(exam.date)-today}))
+      .filter(exam=>!exam.completed&&Number.isFinite(exam.days)&&exam.days>=0&&exam.days<=7)
+      .sort((a,b)=>a.days-b.days);
+    const dueTasks=tasks
+      .filter(task=>!task.completed&&task.dueDate)
+      .map(task=>({...task,days:assessmentDayNumber(task.dueDate)-today}))
+      .filter(task=>Number.isFinite(task.days)&&task.days<=7)
+      .sort((a,b)=>a.days-b.days);
+    if(!upcomingAssessments.length&&!dueTasks.length)return null;
+    const overdueCount=dueTasks.filter(task=>task.days<0).length;
+    const parts=[];
+    if(upcomingAssessments.length)parts.push(`${upcomingAssessments.length} assessment${upcomingAssessments.length===1?"":"s"}`);
+    if(dueTasks.length)parts.push(`${dueTasks.length} task${dueTasks.length===1?"":"s"} due`);
+    const nearestAssessment=upcomingAssessments[0];
+    const nearestTask=dueTasks[0];
+    const taskLeads=nearestTask&&(!nearestAssessment||nearestTask.days<nearestAssessment.days);
+    const detail=overdueCount
+      ? `${overdueCount} overdue`
+      : taskLeads
+        ? `${nearestTask.title} · ${nearestTask.days===0?"Today":assessmentDaysLabel(nearestTask.days)}`
+        : nearestAssessment
+        ? `${nearestAssessment.name} · ${assessmentDaysLabel(nearestAssessment.days)}`
+        : "Due soon";
+    return {summary:parts.join(" · "),detail,urgent:overdueCount>0||upcomingAssessments.some(exam=>exam.days<=3)||dueTasks.some(task=>task.days<=1)};
+  },[exams,tasks]);
   const [badges,setBadges]=useState(()=>lsGet(LS_BADGES,[]));            // unlocked badge ids
   const [showGardenShop,setShowGardenShop]=useState(false);
   const [showBackgroundShop,setShowBackgroundShop]=useState(false);
@@ -12426,60 +12436,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return ()=>{active=false;unsubscribe();};
   },[]);
 
-  // Apply theme to the document root so the injected dark CSS takes effect
+  // Lumora uses a single light appearance across the app and backgrounds.
   useEffect(()=>{
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", "light");
     document.documentElement.style.background=renderedBackgroundAppearance.baseColor;
     document.body.style.background=renderedBackgroundAppearance.baseColor;
     document.body.style.transition = "background 0.25s ease";
     const themeMeta=document.querySelector('meta[name="theme-color"]');
     if(themeMeta)themeMeta.setAttribute("content",renderedBackgroundAppearance.baseColor);
-  },[theme,renderedBackgroundAppearance]);
-
-  // Dark mode uses a shell-level colour inversion. Preserve emoji artwork by
-  // wrapping only emoji glyphs in a counter-inverted span, including content
-  // added later by toasts, menus, or async data.
-  useEffect(()=>{
-    if(theme!=="dark")return;
-    const root=document.querySelector(".sg-shell");
-    if(!root)return;
-    const emojiPattern=/(?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)/gu;
-    const containsEmoji=/\p{Extended_Pictographic}/u;
-    const wrapText=node=>{
-      if(!node.parentElement||node.parentElement.closest("[data-sg-emoji], .sg-keepcolor")||!containsEmoji.test(node.nodeValue||""))return;
-      const text=node.nodeValue||"";
-      const fragment=document.createDocumentFragment();
-      let cursor=0;
-      for(const match of text.matchAll(emojiPattern)){
-        if(match.index>cursor)fragment.append(text.slice(cursor,match.index));
-        const emoji=document.createElement("span");
-        emoji.dataset.sgEmoji="true";
-        emoji.textContent=match[0];
-        fragment.append(emoji);
-        cursor=match.index+match[0].length;
-      }
-      if(cursor===0)return;
-      if(cursor<text.length)fragment.append(text.slice(cursor));
-      node.replaceWith(fragment);
-    };
-    const scan=node=>{
-      if(node.nodeType===Node.ELEMENT_NODE&&node.matches("[data-sg-emoji]"))return;
-      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
-      const nodes=[];
-      while(walker.nextNode())nodes.push(walker.currentNode);
-      nodes.forEach(wrapText);
-    };
-    scan(root);
-    const observer=new MutationObserver(records=>{
-      records.forEach(record=>record.addedNodes.forEach(node=>{
-        if(node.nodeType===Node.TEXT_NODE)wrapText(node);
-        else if(node.nodeType===Node.ELEMENT_NODE)scan(node);
-      }));
-    });
-    observer.observe(root,{childList:true,subtree:true});
-    return()=>observer.disconnect();
-  },[theme]);
-  const toggleTheme=()=>{ const t=theme==="dark"?"light":"dark"; setTheme(t); lsSetR(LS_THEME,t); };
+  },[renderedBackgroundAppearance]);
 
   useEffect(()=>{
     const media=window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -13705,7 +13670,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   if(!authReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>🧑‍🎓 Lumora</div>
@@ -13715,7 +13680,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   if(!user)return (
     <div className="sg-shell">
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
       <LoginScreen onLogin={handleLogin}/>
     </div>
@@ -13726,7 +13691,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // subjects can never flash or be acted on while the new account hydrates.
   if(!prefsReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
@@ -13741,7 +13706,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   return (
     <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
@@ -13830,7 +13795,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
-              user={user} coins={walletCoins} theme={theme} streak={streak}
+              user={user} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
               animationMode={animationMode}
               onAnimationModeChange={changeAnimationMode}
@@ -13845,32 +13810,29 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               canAddTestCoins={canAddTestCoins}
               onAdmin={()=>{setShowMenu(false);setAdminFromMenu(true);setShowAdmin(true);}}
               onAddTestCoins={addTestCoins}
-              onToggleTheme={toggleTheme}
               onLogout={()=>{setShowMenu(false);handleLogout();}}
               onClose={()=>setShowMenu(false)}
             />
           )}
 
           <nav className="sg-main-nav" style={S.nav}>
-            {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["stats","📊 Stats"]].map(([id,lbl])=>(
+            {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["planner","▦ Planner"],["stats","📊 Stats"]].map(([id,lbl])=>(
               <button key={id} className={`sg-main-nav-button${tab===id?" is-active":""}`} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}}
                 onClick={()=>{setTab(id);if(id==="leaderboard")loadLB();}}>{lbl}</button>
             ))}
           </nav>
 
           {tab==="timer"&&(
-            <div style={S.timerView} className="sg-view-anim" key="view-timer">
-              <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
-                onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
-                onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
-                onChange={handleSaveExams}/>
-
-              <ChecklistCard tasks={tasks} loading={tasksLoading} error={tasksError}
-                subjects={subjects} selectedTaskId={selectedTaskId}
-                onSelect={chooseTask} onCreate={createTask} onUpdate={updateTask} onDelete={deleteTask}/>
-
+            <div style={S.timerView} className="sg-view-anim lumora-focus-view" key="view-timer">
               {/* Studying now — passive accountability */}
               <StudyingNow presence={presence} currentUser={user}/>
+
+              {plannerUrgency&&<button type="button" className={`lumora-urgency-pill${plannerUrgency.urgent?" is-urgent":""}`}
+                onClick={()=>setTab("planner")} aria-label={`${plannerUrgency.summary}. ${plannerUrgency.detail}. Open Planner`}>
+                <span aria-hidden="true">▦</span>
+                <span className="lumora-urgency-copy"><strong>{plannerUrgency.summary}</strong><small>{plannerUrgency.detail}</small></span>
+                <span aria-hidden="true">›</span>
+              </button>}
 
               <div className="sg-timer-style" role="group" aria-label="Focus timer style">
                 <button type="button" aria-pressed={timerStyle==="standard"}
@@ -13981,14 +13943,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                       onClick={()=>setEditMode(e=>!e)} title={editMode?"Done editing":"Edit subjects"}>{editMode?"✓":"✎"}</button>
                   )}
                 </div>
-                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,left:0,...(subjScrollEdge.atStart?S.subjScrollArrowDisabled:{})}}
-                  onClick={()=>scrollSubjects(-260)} disabled={subjScrollEdge.atStart} aria-label="Show earlier subjects" title="Earlier subjects">◀</button>
-                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,right:0,...(subjScrollEdge.atEnd?S.subjScrollArrowDisabled:{})}}
-                  onClick={()=>scrollSubjects(260)} disabled={subjScrollEdge.atEnd} aria-label="Show more subjects" title="More subjects">▶</button>
               </div>
 
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
-              <div style={S.focusCore}>
+              <div style={S.focusCore} className="lumora-focus-core">
                 {/* Today total + streak flame — the two numbers that matter daily */}
                 <div style={S.todayWrap}>
                   <div style={S.todayLabel}>TODAY</div>
@@ -14004,21 +13962,19 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   </div>
                 </div>
 
-                {/* Bigger tree in a soft planting-spot circle, with a quiet living world around it */}
-                <div style={S.plantStage} className="sg-focus-anim">
+                {/* A calm, static learner stage keeps the focus tab distinct from StudyGrove. */}
+                <div style={S.plantStage} className="lumora-learner-stage">
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
-                  <FocusAmbience layer="back"/>
-                  <div style={S.treeWrap}>
+                  <div style={S.treeWrap} className="lumora-learner-art">
                     {loginStageImage
                       ? <img src={loginStageImage} alt={`${loginSkin.name} stage 1`} style={S.loginStageImage}/>
                       : <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
                     }
                   </div>
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
-                  <FocusAmbience layer="front"/>
                 </div>
 
-                <div style={{...S.timerDisplay,color:subjectObj.color}}>
+                <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
                   {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
                 </div>
                 <div style={S.timerLabel}>
@@ -14027,7 +13983,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                     : mode==="timer"?"Set a duration and grow your learner":"Tap start — stopwatch counts up"}
                 </div>
                 {timerStyle==="standard"&&mode==="timer"&&(
-                  <div style={S.durationSliderWrap}>
+                  <div style={S.durationSliderWrap} className="lumora-duration-control">
                     <div style={S.durationScale}><span>5 min</span><strong style={{color:subjectObj.color}}>{Math.round(duration/60)} minutes</strong><span>3 hr</span></div>
                     <input className="sg-duration-slider" type="range" min="5" max="180" step="5"
                       value={Math.round(duration/60)} aria-label="Study duration in minutes"
@@ -14070,6 +14026,23 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             </div>
           )}
 
+          {tab==="planner"&&(
+            <div style={S.boardView} className="sg-view-anim lumora-planner-view" key="view-planner">
+              <div className="lumora-planner-heading">
+                <span>STUDY PLANNER</span>
+                <h2>Plan what comes next</h2>
+                <p>Keep assessments and study tasks together, then return to Focus when you're ready.</p>
+              </div>
+              <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
+                onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
+                onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
+                onChange={handleSaveExams}/>
+              <ChecklistCard tasks={tasks} loading={tasksLoading} error={tasksError}
+                subjects={subjects} selectedTaskId={selectedTaskId}
+                onSelect={chooseTask} onCreate={createTask} onUpdate={updateTask} onDelete={deleteTask}/>
+            </div>
+          )}
+
           {tab==="stats"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-stats">
               <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout} currentWeekKey={studyWeekKey}/>
@@ -14107,8 +14080,6 @@ const S = {
   subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 8px",WebkitOverflowScrolling:"touch",scrollBehavior:"smooth",cursor:"grab"},
   subjFadeL:{position:"absolute",left:0,top:0,bottom:6,width:24,background:"linear-gradient(to right,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
   subjFadeR:{position:"absolute",right:0,top:0,bottom:6,width:24,background:"linear-gradient(to left,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
-  subjScrollArrow:{position:"absolute",bottom:-6,zIndex:12,width:20,height:20,border:0,background:"transparent",boxShadow:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,lineHeight:1,color:"var(--sg-theme-accent,#2D6A4F)",cursor:"pointer",padding:0},
-  subjScrollArrowDisabled:{opacity:.35,cursor:"default"},
   subjPill:{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
   subjDot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
   subjAddPill:{display:"flex",alignItems:"center",padding:"9px 14px",border:"1.5px dashed #C8D8C4",background:"transparent",borderRadius:22,cursor:"pointer",color:"#7AA56B",fontWeight:600,whiteSpace:"nowrap",flexShrink:0},
