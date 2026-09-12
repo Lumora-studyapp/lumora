@@ -12320,6 +12320,34 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [tasksLoading,setTasksLoading]=useState(false);
   const [tasksError,setTasksError]=useState("");
   const [selectedTaskId,setSelectedTaskId]=useState(()=>lsRaw(LS_SELECTED_TASK,""));
+  const plannerUrgency=useMemo(()=>{
+    const today=assessmentDayNumber(assessmentDateKey(new Date()));
+    const upcomingAssessments=exams
+      .map(exam=>({...exam,days:assessmentDayNumber(exam.date)-today}))
+      .filter(exam=>!exam.completed&&Number.isFinite(exam.days)&&exam.days>=0&&exam.days<=7)
+      .sort((a,b)=>a.days-b.days);
+    const dueTasks=tasks
+      .filter(task=>!task.completed&&task.dueDate)
+      .map(task=>({...task,days:assessmentDayNumber(task.dueDate)-today}))
+      .filter(task=>Number.isFinite(task.days)&&task.days<=7)
+      .sort((a,b)=>a.days-b.days);
+    if(!upcomingAssessments.length&&!dueTasks.length)return null;
+    const overdueCount=dueTasks.filter(task=>task.days<0).length;
+    const parts=[];
+    if(upcomingAssessments.length)parts.push(`${upcomingAssessments.length} assessment${upcomingAssessments.length===1?"":"s"}`);
+    if(dueTasks.length)parts.push(`${dueTasks.length} task${dueTasks.length===1?"":"s"} due`);
+    const nearestAssessment=upcomingAssessments[0];
+    const nearestTask=dueTasks[0];
+    const taskLeads=nearestTask&&(!nearestAssessment||nearestTask.days<nearestAssessment.days);
+    const detail=overdueCount
+      ? `${overdueCount} overdue`
+      : taskLeads
+        ? `${nearestTask.title} · ${nearestTask.days===0?"Today":assessmentDaysLabel(nearestTask.days)}`
+        : nearestAssessment
+        ? `${nearestAssessment.name} · ${assessmentDaysLabel(nearestAssessment.days)}`
+        : "Due soon";
+    return {summary:parts.join(" · "),detail,urgent:overdueCount>0||upcomingAssessments.some(exam=>exam.days<=3)||dueTasks.some(task=>task.days<=1)};
+  },[exams,tasks]);
   const [badges,setBadges]=useState(()=>lsGet(LS_BADGES,[]));            // unlocked badge ids
   const [showGardenShop,setShowGardenShop]=useState(false);
   const [showBackgroundShop,setShowBackgroundShop]=useState(false);
@@ -13790,7 +13818,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           )}
 
           <nav className="sg-main-nav" style={S.nav}>
-            {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["stats","📊 Stats"]].map(([id,lbl])=>(
+            {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["planner","▦ Planner"],["stats","📊 Stats"]].map(([id,lbl])=>(
               <button key={id} className={`sg-main-nav-button${tab===id?" is-active":""}`} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}}
                 onClick={()=>{setTab(id);if(id==="leaderboard")loadLB();}}>{lbl}</button>
             ))}
@@ -13798,20 +13826,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {tab==="timer"&&(
             <div style={S.timerView} className="sg-view-anim lumora-focus-view" key="view-timer">
-              <details className="lumora-planner">
-                <summary>Study planner · Assessments & tasks</summary>
-              <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
-                onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
-                onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
-                onChange={handleSaveExams}/>
-
-              <ChecklistCard tasks={tasks} loading={tasksLoading} error={tasksError}
-                subjects={subjects} selectedTaskId={selectedTaskId}
-                onSelect={chooseTask} onCreate={createTask} onUpdate={updateTask} onDelete={deleteTask}/>
-              </details>
-
               {/* Studying now — passive accountability */}
               <StudyingNow presence={presence} currentUser={user}/>
+
+              {plannerUrgency&&<button type="button" className={`lumora-urgency-pill${plannerUrgency.urgent?" is-urgent":""}`}
+                onClick={()=>setTab("planner")} aria-label={`${plannerUrgency.summary}. ${plannerUrgency.detail}. Open Planner`}>
+                <span aria-hidden="true">▦</span>
+                <span className="lumora-urgency-copy"><strong>{plannerUrgency.summary}</strong><small>{plannerUrgency.detail}</small></span>
+                <span aria-hidden="true">›</span>
+              </button>}
 
               <div className="sg-timer-style" role="group" aria-label="Focus timer style">
                 <button type="button" aria-pressed={timerStyle==="standard"}
@@ -14002,6 +14025,23 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             <div style={S.boardView} className="sg-view-anim" key="view-board">
               <StudyingNow presence={presence} currentUser={user}/>
               <MemoLeaderboardHub data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}/>
+            </div>
+          )}
+
+          {tab==="planner"&&(
+            <div style={S.boardView} className="sg-view-anim lumora-planner-view" key="view-planner">
+              <div className="lumora-planner-heading">
+                <span>STUDY PLANNER</span>
+                <h2>Plan what comes next</h2>
+                <p>Keep assessments and study tasks together, then return to Focus when you're ready.</p>
+              </div>
+              <ExamBanner exams={exams} subjects={subjects} loading={!prefsReady} error={assessmentError}
+                onEdit={index=>{setEditingAssessmentIndex(index);setShowExamModal(true);}}
+                onAdd={()=>{setEditingAssessmentIndex(null);setShowExamModal(true);}}
+                onChange={handleSaveExams}/>
+              <ChecklistCard tasks={tasks} loading={tasksLoading} error={tasksError}
+                subjects={subjects} selectedTaskId={selectedTaskId}
+                onSelect={chooseTask} onCreate={createTask} onUpdate={updateTask} onDelete={deleteTask}/>
             </div>
           )}
 
