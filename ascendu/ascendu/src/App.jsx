@@ -76,7 +76,6 @@ const ANNOUNCEMENT_ADMIN = ADMIN_USERS[0] || "";
 const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
 const LS_EXAMS    = "studygrove_exams";
 const LS_SKIN     = "studygrove_skin";
-const LS_THEME    = "studygrove_theme";
 const LS_ANIMATION_MODE = "lumora_animation_mode";
 const LS_TARGETS  = "studygrove_targets";
 const LS_DECOR    = "studygrove_decorations"; // owned garden decorations (account-level)
@@ -88,32 +87,6 @@ const LS_SELECTED_TASK = "studygrove_selected_task";
 const LS_RECAP    = "studygrove_recap_shown";
   // last week-key the recap auto-showed
 
-// Dark theme — a hue-preserving invert applied to the app shell. We invert +
-// rotate hue (so colours stay roughly themselves rather than flipping), then
-// COUNTER-invert the colourful/media bits (garden SVG, the focus screen, the
-// tree) so they render normally. This is reliable across browsers and doesn't
-// depend on how React serialises inline styles.
-const DARK_CSS = `
-[data-theme] .sg-shell { --sg-counter-filter: ; }
-[data-theme="dark"] .sg-shell {
-  filter: invert(0.93) hue-rotate(180deg);
-  --sg-counter-filter: invert(1) hue-rotate(180deg);
-  background: #ECF1ED;
-  transition: filter 0.25s ease;
-}
-/* Counter-filter media and marked brand elements so they keep their real colours. */
-[data-theme="dark"] .sg-shell .sg-keepcolor {
-  filter: invert(1) hue-rotate(180deg);
-}
-[data-theme="dark"] .sg-shell img,
-[data-theme="dark"] .sg-shell svg {
-  filter: invert(1) hue-rotate(180deg);
-}
-/* Emoji are wrapped at runtime only while dark mode is active. */
-[data-theme="dark"] .sg-shell [data-sg-emoji] {
-  filter: invert(1) hue-rotate(180deg);
-}
-`;
 export const APP_CSS = `
 @keyframes sgpulse {
   0%   { box-shadow: 0 0 0 0 rgba(52,199,89,0.5); }
@@ -2085,7 +2058,6 @@ const migrateLumoraCache = () => {
     ascendu_subjects:LS_SUBJECTS,
     ascendu_mode:LS_MODE,
     ascendu_coins:LS_COINS,
-    ascendu_theme:LS_THEME,
     ascendu_targets:LS_TARGETS,
     ascendu_badges:LS_BADGES,
   };
@@ -8314,7 +8286,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onToggleTheme, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const items = [
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
@@ -8379,12 +8351,6 @@ function HeaderMenu({ user, coins, theme, streak, badgeCount, isAdmin, canAddTes
               onClick={()=>onAnimationModeChange(id)}>{label}</button>)}
           </div>
         </div>
-        <button style={hm.row} onClick={onToggleTheme}>
-          <span style={hm.itemIcon}>{theme==="dark"?"☀️":"🌙"}</span>
-          <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#444"}}>
-            {theme==="dark"?"Light mode":"Dark mode"}
-          </span>
-        </button>
         <button style={hm.row} onClick={onLogout}>
           <span style={hm.itemIcon}>↩</span>
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#E07B54"}}>Log out</span>
@@ -12330,7 +12296,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return [...new Set(["default",...available])];
   });
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
-  const [theme,setTheme]=useState(()=>lsRaw(LS_THEME,"light"));
+  const theme="light";
   const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
   const [prefersReducedMotion,setPrefersReducedMotion]=useState(false);
   const [adminRoleVerified,setAdminRoleVerified]=useState(false);
@@ -12444,60 +12410,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return ()=>{active=false;unsubscribe();};
   },[]);
 
-  // Apply theme to the document root so the injected dark CSS takes effect
+  // Lumora uses a single light appearance across the app and backgrounds.
   useEffect(()=>{
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", "light");
     document.documentElement.style.background=renderedBackgroundAppearance.baseColor;
     document.body.style.background=renderedBackgroundAppearance.baseColor;
     document.body.style.transition = "background 0.25s ease";
     const themeMeta=document.querySelector('meta[name="theme-color"]');
     if(themeMeta)themeMeta.setAttribute("content",renderedBackgroundAppearance.baseColor);
-  },[theme,renderedBackgroundAppearance]);
-
-  // Dark mode uses a shell-level colour inversion. Preserve emoji artwork by
-  // wrapping only emoji glyphs in a counter-inverted span, including content
-  // added later by toasts, menus, or async data.
-  useEffect(()=>{
-    if(theme!=="dark")return;
-    const root=document.querySelector(".sg-shell");
-    if(!root)return;
-    const emojiPattern=/(?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)/gu;
-    const containsEmoji=/\p{Extended_Pictographic}/u;
-    const wrapText=node=>{
-      if(!node.parentElement||node.parentElement.closest("[data-sg-emoji], .sg-keepcolor")||!containsEmoji.test(node.nodeValue||""))return;
-      const text=node.nodeValue||"";
-      const fragment=document.createDocumentFragment();
-      let cursor=0;
-      for(const match of text.matchAll(emojiPattern)){
-        if(match.index>cursor)fragment.append(text.slice(cursor,match.index));
-        const emoji=document.createElement("span");
-        emoji.dataset.sgEmoji="true";
-        emoji.textContent=match[0];
-        fragment.append(emoji);
-        cursor=match.index+match[0].length;
-      }
-      if(cursor===0)return;
-      if(cursor<text.length)fragment.append(text.slice(cursor));
-      node.replaceWith(fragment);
-    };
-    const scan=node=>{
-      if(node.nodeType===Node.ELEMENT_NODE&&node.matches("[data-sg-emoji]"))return;
-      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
-      const nodes=[];
-      while(walker.nextNode())nodes.push(walker.currentNode);
-      nodes.forEach(wrapText);
-    };
-    scan(root);
-    const observer=new MutationObserver(records=>{
-      records.forEach(record=>record.addedNodes.forEach(node=>{
-        if(node.nodeType===Node.TEXT_NODE)wrapText(node);
-        else if(node.nodeType===Node.ELEMENT_NODE)scan(node);
-      }));
-    });
-    observer.observe(root,{childList:true,subtree:true});
-    return()=>observer.disconnect();
-  },[theme]);
-  const toggleTheme=()=>{ const t=theme==="dark"?"light":"dark"; setTheme(t); lsSetR(LS_THEME,t); };
+  },[renderedBackgroundAppearance]);
 
   useEffect(()=>{
     const media=window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -13723,7 +13644,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   if(!authReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>🧑‍🎓 Lumora</div>
@@ -13733,7 +13654,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   if(!user)return (
     <div className="sg-shell">
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
       <LoginScreen onLogin={handleLogin}/>
     </div>
@@ -13744,7 +13665,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // subjects can never flash or be acted on while the new account hydrates.
   if(!prefsReady)return (
     <div className="sg-shell" style={appBackgroundStyle}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
@@ -13759,7 +13680,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   return (
     <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
-      <style>{DARK_CSS+APP_CSS+BACKGROUND_CSS}</style>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
@@ -13848,7 +13769,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
-              user={user} coins={walletCoins} theme={theme} streak={streak}
+              user={user} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
               animationMode={animationMode}
               onAnimationModeChange={changeAnimationMode}
@@ -13863,7 +13784,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               canAddTestCoins={canAddTestCoins}
               onAdmin={()=>{setShowMenu(false);setAdminFromMenu(true);setShowAdmin(true);}}
               onAddTestCoins={addTestCoins}
-              onToggleTheme={toggleTheme}
               onLogout={()=>{setShowMenu(false);handleLogout();}}
               onClose={()=>setShowMenu(false)}
             />
