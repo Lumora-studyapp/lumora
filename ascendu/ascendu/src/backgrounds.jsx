@@ -978,7 +978,7 @@ export function BackgroundShop({
         <div className="sg-background-shop-heading">
           {onBack && <button type="button" className="sg-background-round-btn" onClick={onBack} aria-label="Back">←</button>}
           <div>
-            <h3>◫ Backgrounds</h3>
+            <h3>Backgrounds</h3>
             <p>{ownedIds.length} of {BACKGROUND_CATALOGUE.length} owned</p>
           </div>
         </div>
