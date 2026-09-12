@@ -292,7 +292,6 @@ export const APP_CSS = `
 .sg-shell[data-background] .sg-task-check,
 .sg-shell[data-background] .sg-task-edit input,
 .sg-shell[data-background] .sg-task-edit select,
-.sg-shell[data-background] .sg-subj-scroll-arrow,
 .sg-shell[data-background] .sg-shop-sheet,
 .sg-shell[data-background] .sg-pop-anim,
 .sg-shell[data-background] .sg-assessment-editor,
@@ -11996,14 +11995,12 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
         emptyTitle={view==="weekly"?"No focus time this week":view==="past"?"No focus time that week":"No all-time focus time yet"}
         emptyBody={view==="weekly"?"Complete a session to enter this week's ranking.":view==="past"?"No group members recorded focus time during this week.":"Group members appear here after completing a session."}/>
       }
-      {!showBoardLoading&&!showBoardError&&<div style={{...gl.badgeNote,...(view!=="allTime"&&displayedEligibility.eligible?gl.rewardEligibleNote:{})}}>
-        {view!=="allTime"
-          ? displayedEligibility.eligible
-            ? view==="past"
-              ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
-              : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Monday's 4:00 am reset. Each user can receive one group prize, from their biggest eligible group."
-            : `🔒 ${displayedEligibility.participantCount}/${displayedEligibility.minimum} members studied. Three participating members are required for rewards.`
-          : "📚 All-time totals show this group's full study history and do not affect weekly rewards."}
+      {!showBoardLoading&&!showBoardError&&(view==="allTime"||displayedEligibility.eligible)&&<div style={{...gl.badgeNote,...(view!=="allTime"?gl.rewardEligibleNote:{})}}>
+        {view==="allTime"
+          ? "📚 All-time totals show this group's full study history and do not affect weekly rewards."
+          : view==="past"
+            ? "🏆 This group reached reward eligibility for this week. The podium used that week's rotating prize plan."
+            : "🏆 This group is reward eligible. The top three receive this week's rotating prizes after Monday's 4:00 am reset. Each user can receive one group prize, from their biggest eligible group."}
       </div>}
 
 
@@ -12314,7 +12311,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showAddModal,setShowAddModal]=useState(false);
   const [editMode,setEditMode]=useState(false);
   const [modePickerOpen,setModePickerOpen]=useState(false); // timer/stopwatch chooser popover
-  const [subjScrollRef, subjScrollEdge, scrollSubjects] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|")); // wheel, drag and arrow access on desktop
+  const [subjScrollRef] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|"));
   const [coins,setCoins]=useState(()=>lsGet(LS_COINS,0));
   const walletCoins=DEV_UNLIMITED_COINS?DEV_COIN_BALANCE:coins;
   const [claimedMilestoneRewards,setClaimedMilestoneRewards]=useState([]);
@@ -14002,10 +13999,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                       onClick={()=>setEditMode(e=>!e)} title={editMode?"Done editing":"Edit subjects"}>{editMode?"✓":"✎"}</button>
                   )}
                 </div>
-                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,left:0,...(subjScrollEdge.atStart?S.subjScrollArrowDisabled:{})}}
-                  onClick={()=>scrollSubjects(-260)} disabled={subjScrollEdge.atStart} aria-label="Show earlier subjects" title="Earlier subjects">◀</button>
-                <button type="button" className="sg-subj-scroll-arrow" style={{...S.subjScrollArrow,right:0,...(subjScrollEdge.atEnd?S.subjScrollArrowDisabled:{})}}
-                  onClick={()=>scrollSubjects(260)} disabled={subjScrollEdge.atEnd} aria-label="Show more subjects" title="More subjects">▶</button>
               </div>
 
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
@@ -14025,10 +14018,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   </div>
                 </div>
 
-                {/* Bigger tree in a soft planting-spot circle, with a quiet living world around it */}
-                <div style={S.plantStage} className="sg-focus-anim">
+                {/* A calm, static learner stage keeps the focus tab distinct from StudyGrove. */}
+                <div style={S.plantStage}>
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
-                  <FocusAmbience layer="back"/>
                   <div style={S.treeWrap}>
                     {loginStageImage
                       ? <img src={loginStageImage} alt={`${loginSkin.name} stage 1`} style={S.loginStageImage}/>
@@ -14036,7 +14028,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                     }
                   </div>
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
-                  <FocusAmbience layer="front"/>
                 </div>
 
                 <div style={{...S.timerDisplay,color:subjectObj.color}}>
@@ -14128,8 +14119,6 @@ const S = {
   subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 8px",WebkitOverflowScrolling:"touch",scrollBehavior:"smooth",cursor:"grab"},
   subjFadeL:{position:"absolute",left:0,top:0,bottom:6,width:24,background:"linear-gradient(to right,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
   subjFadeR:{position:"absolute",right:0,top:0,bottom:6,width:24,background:"linear-gradient(to left,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
-  subjScrollArrow:{position:"absolute",bottom:-6,zIndex:12,width:20,height:20,border:0,background:"transparent",boxShadow:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,lineHeight:1,color:"var(--sg-theme-accent,#2D6A4F)",cursor:"pointer",padding:0},
-  subjScrollArrowDisabled:{opacity:.35,cursor:"default"},
   subjPill:{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
   subjDot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
   subjAddPill:{display:"flex",alignItems:"center",padding:"9px 14px",border:"1.5px dashed #C8D8C4",background:"transparent",borderRadius:22,cursor:"pointer",color:"#7AA56B",fontWeight:600,whiteSpace:"nowrap",flexShrink:0},
