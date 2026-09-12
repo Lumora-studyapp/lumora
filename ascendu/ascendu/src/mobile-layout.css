@@ -13,14 +13,23 @@ body { margin: 0; }
 .sg-shell .sg-main-menu-button,
 .sg-shell .sg-main-nav-button { min-height: 44px; }
 .sg-shell .lumora-focus-view { padding: 8px 12px 12px !important; }
-.lumora-planner { margin-bottom: 8px; min-width: 0; }
-.lumora-planner > summary {
-  padding: 12px; min-height: 44px; cursor: pointer; border-radius: 12px;
-  background: var(--sg-theme-panel-solid, #fff); font-size: 13px;
-  color: var(--sg-theme-text, #31443a); font-weight: 650;
+.lumora-urgency-pill {
+  width: 100%; min-height: 44px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: 9px; margin: 0 0 8px; padding: 7px 11px; border: 1px solid
+  color-mix(in srgb, var(--sg-theme-accent, #527a8f) 38%, transparent); border-radius: 999px;
+  background: color-mix(in srgb, var(--sg-theme-panel-solid, #fff) 88%, var(--sg-theme-accent-wash, #e8f5ee));
+  color: var(--sg-theme-text, #31443a); text-align: left; cursor: pointer;
 }
-.lumora-planner[open] > summary { margin-bottom: 8px; }
-.lumora-planner > summary:focus-visible { outline: 3px solid var(--sg-theme-accent, #527a8f); }
+.lumora-urgency-pill.is-urgent { border-color: #e7aa82; background: #fff7ec; }
+.lumora-urgency-copy { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.lumora-urgency-copy strong, .lumora-urgency-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lumora-urgency-copy strong { font-size: 11px; }
+.lumora-urgency-copy small { margin-top: 2px; color: var(--sg-theme-muted, #718078); font-size: 9.5px; }
+.lumora-planner-view { padding: 14px 14px max(28px, env(safe-area-inset-bottom, 0px)) !important; }
+.lumora-planner-heading { margin: 2px 2px 14px; }
+.lumora-planner-heading span { color: var(--sg-theme-accent-strong, #456451); font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
+.lumora-planner-heading h2 { margin: 3px 0 4px; color: var(--sg-theme-text, #26362c); font-size: 21px; line-height: 1.15; }
+.lumora-planner-heading p { margin: 0; color: var(--sg-theme-muted, #718078); font-size: 11.5px; line-height: 1.45; }
 .sg-shell .lumora-learner-stage {
   margin: 4px 0 !important;
   min-height: 0 !important;
@@ -46,6 +55,10 @@ body { margin: 0; }
   .lumora-focus-view > * { grid-column: 1; min-width: 0; }
   .lumora-focus-view > .lumora-focus-core { grid-column: 2; grid-row: 1 / span 12; margin-top: 0 !important; }
   .sg-shell .lumora-learner-stage { height: clamp(48px, calc(100svh - 370px), 160px); }
+}
+@media (max-width: 360px) {
+  .sg-shell .sg-main-nav-button { font-size: 10px !important; }
+  .sg-shell .sg-main-nav { gap: 1px !important; padding-inline: 6px !important; }
 }
 @media (min-width: 700px) and (min-height: 601px) {
   .sg-shell { max-width: 680px !important; }
