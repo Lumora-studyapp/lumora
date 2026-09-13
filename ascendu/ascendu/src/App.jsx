@@ -13707,7 +13707,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   );
 
   return (
-    <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
+    <div className={`sg-shell${tab==="timer"&&!running&&!paused?" lumora-focus-shell":""}`} style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
@@ -13826,9 +13826,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {tab==="timer"&&(
             <div style={S.timerView} className="sg-view-anim lumora-focus-view" key="view-timer">
-              {/* Studying now — passive accountability */}
-              <StudyingNow presence={presence} currentUser={user}/>
-
               {plannerUrgency&&<button type="button" className={`lumora-urgency-pill${plannerUrgency.urgent?" is-urgent":""}`}
                 onClick={()=>setTab("planner")} aria-label={`${plannerUrgency.summary}. ${plannerUrgency.detail}. Open Planner`}>
                 <span aria-hidden="true">▦</span>
@@ -13843,6 +13840,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   onClick={()=>chooseTimerStyle("pomodoro")}>Pomodoro</button>
               </div>
 
+              <details className="lumora-focus-settings">
+                <summary><span>{subjectObj.emoji} {subjectObj.label}</span><span>{timerStyle==="pomodoro"?`${pomodoro.focusLengthMinutes}/${pomodoro.breakLengthMinutes} min`:mode==="timer"?"Timer":"Stopwatch"} · Settings</span></summary>
+                <div className="lumora-focus-settings-panel">
+              <StudyingNow presence={presence} currentUser={user}/>
               {/* Single mode button → opens Timer/Stopwatch chooser */}
               {timerStyle==="standard"&&<div style={{position:"relative",marginBottom:12}}>
                 <button style={S.modePickBtn} onClick={()=>{ if(!running) setModePickerOpen(o=>!o); }}>
@@ -13947,10 +13948,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 </div>
               </div>
 
+                </div>
+              </details>
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
               <div style={S.focusCore} className="lumora-focus-core">
                 {/* Today total + streak flame — the two numbers that matter daily */}
-                <div style={S.todayWrap}>
+                <div style={S.todayWrap} className="lumora-today-summary">
                   <div style={S.todayLabel}>TODAY</div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{...S.todayTime,color:todaySecs>0?subjectObj.color:"#ccc"}}>
@@ -13976,6 +13979,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                 </div>
 
+                <div className="lumora-focus-actions">
                 <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
                   {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
                 </div>
@@ -14017,6 +14021,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                     </div>
                   );
                 })()}
+                </div>
               </div>
             </div>
           )}
