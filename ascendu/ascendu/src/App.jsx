@@ -272,6 +272,7 @@ export const APP_CSS = `
   box-shadow:0 9px 28px var(--sg-theme-shadow)!important;
   color:var(--sg-theme-text)!important;
 }
+.sg-main-header .sg-main-menu-button{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:var(--sg-theme-muted)!important}
 .sg-shell .sg-pop-anim.sg-add-subject-modal{
   background:color-mix(in srgb,#fff 80%,var(--sg-theme-accent,#56B68B) 20%)!important;
 }
@@ -310,6 +311,10 @@ export const APP_CSS = `
 .sg-shell[data-background] .sg-sheet-theme-header,
 .sg-shell[data-background] .sg-privacy-policy-frame{
   background:var(--sg-theme-sheet)!important;
+}
+/* Let the shop's continuous sheet gradient show through the header. */
+.sg-shell .sg-shop-sheet > .sg-sheet-theme-header{
+  background:transparent!important;
 }
 [data-theme="dark"] .sg-shell[data-background] .sg-assessment-summary{
   --sg-assessment-fill:var(--sg-theme-panel-solid)!important;
@@ -6702,7 +6707,7 @@ function CoinShop({ coins, ownedSkins, activeSkin, enhancements={}, onBuy, onEqu
 const sh = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300,padding:0,overflow:"hidden"},
   modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"26px 26px 0 0",padding:"22px max(14px,env(safe-area-inset-right)) max(34px,calc(env(safe-area-inset-bottom) + 18px)) max(14px,env(safe-area-inset-left))",width:"100%",maxWidth:460,maxHeight:"min(88dvh,88vh)",overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"},
-  header:{position:"sticky",top:-22,zIndex:12,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,margin:"-22px 0 10px",padding:"22px 0 10px",background:"linear-gradient(180deg,#fff 82%,rgba(255,255,255,.94))"},
+  header:{position:"relative",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,margin:"-22px 0 10px",padding:"22px 0 10px",background:"transparent"},
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1,marginTop:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
   subtitle:{fontSize:11.5,color:"#9AA69C",fontWeight:600,marginTop:2},
@@ -13787,7 +13792,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
               <button className="sg-main-menu-button" onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
-                <span className="sg-main-menu-avatar" style={S.menuAvatar}>{user.slice(0,1).toUpperCase()}</span>
                 <span style={S.menuBars}>☰</span>
               </button>
             </div>
@@ -13823,16 +13827,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           </nav>
 
           {tab==="timer"&&(
-            <div style={S.timerView} className="sg-view-anim lumora-focus-view" key="view-timer">
+            <div style={S.timerView} className={`sg-view-anim lumora-focus-view${timerStyle==="standard"&&mode==="stopwatch"?" lumora-focus-stopwatch":""}`} key="view-timer">
               {/* Studying now — passive accountability */}
               <StudyingNow presence={presence} currentUser={user}/>
-
-              {plannerUrgency&&<button type="button" className={`lumora-urgency-pill${plannerUrgency.urgent?" is-urgent":""}`}
-                onClick={()=>setTab("planner")} aria-label={`${plannerUrgency.summary}. ${plannerUrgency.detail}. Open Planner`}>
-                <span aria-hidden="true">▦</span>
-                <span className="lumora-urgency-copy"><strong>{plannerUrgency.summary}</strong><small>{plannerUrgency.detail}</small></span>
-                <span aria-hidden="true">›</span>
-              </button>}
 
               <div className="sg-timer-style" role="group" aria-label="Focus timer style">
                 <button type="button" aria-pressed={timerStyle==="standard"}
@@ -13842,7 +13839,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               </div>
 
               {/* Single mode button → opens Timer/Stopwatch chooser */}
-              {timerStyle==="standard"&&<div style={{position:"relative",marginBottom:12}}>
+              {timerStyle==="standard"&&<div className="lumora-mode-picker" style={{position:"relative",marginBottom:12}}>
                 <button style={S.modePickBtn} onClick={()=>{ if(!running) setModePickerOpen(o=>!o); }}>
                   <span>{mode==="timer"?"⏳ Timer":"⏱ Stopwatch"}</span>
                   <span className="sg-centered-chevron" style={{...S.modeChev,transform:modePickerOpen?"rotate(180deg)":"none"}}>▾</span>
@@ -13919,7 +13916,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               </section>}
 
               {/* Subject pills — label moved into the row, actions shrunk to icons */}
-              <div style={S.subjScrollWrap}>
+              <div className="lumora-subject-scroll-wrap" style={S.subjScrollWrap}>
                 <div className="sg-subject-scroll" style={S.subjScroll} ref={subjScrollRef}>
                   {subjects.map(s=>{
                     const sel = subject===s.id;
@@ -13948,10 +13945,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               {/* ── Focus center: tree preview, today total, timer, duration, plant ── */}
               <div style={S.focusCore} className="lumora-focus-core">
                 {/* Today total + streak flame — the two numbers that matter daily */}
-                <div style={S.todayWrap}>
+                <div style={S.todayWrap} className="lumora-today-wrap">
                   <div style={S.todayLabel}>TODAY</div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{...S.todayTime,color:todaySecs>0?subjectObj.color:"#ccc"}}>
+                    <div className="lumora-today-time" style={{...S.todayTime,color:todaySecs>0?subjectObj.color:"#ccc"}}>
                       {todaySecs>0?fmtMins(todaySecs):"—"}
                     </div>
                     {streak>0 && (
@@ -14061,9 +14058,9 @@ const S = {
   logo:{fontSize:17,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.3px"},
   userChip:{fontSize:11,color:"#555",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
   coinChip:{fontSize:11.5,color:"#B8860B",background:"linear-gradient(180deg,#FFFBEF,#FFF4D6)",border:"1px solid #F0D875",borderRadius:20,padding:"5px 11px",fontWeight:700,boxShadow:"0 1px 2px rgba(184,134,11,0.12)"},
-  menuBtn:{display:"flex",alignItems:"center",gap:6,background:"var(--sg-theme-panel-solid,#fff)",border:"1px solid var(--sg-theme-border,#E6EAE4)",borderRadius:20,padding:"3px 9px 3px 3px",cursor:"pointer",boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.06))"},
+  menuBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:32,height:32,background:"transparent",border:"none",borderRadius:0,padding:0,cursor:"pointer",boxShadow:"none"},
   menuAvatar:{width:22,height:22,borderRadius:"50%",background:"var(--sg-theme-accent-strong,#2D6A4F)",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  menuBars:{fontSize:13,color:"var(--sg-theme-muted,#888)",lineHeight:1},
+  menuBars:{fontSize:19,color:"var(--sg-theme-muted,#888)",lineHeight:1},
   logoutBtn:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
   nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},

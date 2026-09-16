@@ -10,9 +10,35 @@ body { margin: 0; }
   padding-right: env(safe-area-inset-right, 0px);
 }
 .sg-shell .sg-main-header { padding-top: 8px !important; }
-.sg-shell .sg-main-menu-button,
-.sg-shell .sg-main-nav-button { min-height: 44px; }
+.sg-shell .sg-main-menu-button { width: 36px !important; height: 36px !important; }
+.sg-shell .sg-main-nav { padding-top: 6px !important; padding-bottom: 6px !important; }
+.sg-shell .sg-main-nav-button { min-height: 40px; padding-top: 7px !important; padding-bottom: 7px !important; }
 .sg-shell .lumora-focus-view { padding: 8px 12px 12px !important; }
+.sg-shell .lumora-focus-stopwatch {
+  position: relative;
+  top: 0;
+}
+.sg-shell .lumora-focus-view .sg-timer-style {
+  margin-bottom: 10px !important;
+}
+.sg-shell .lumora-focus-view .sg-timer-style button {
+  min-height: 38px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+.sg-shell .lumora-focus-view .lumora-mode-picker {
+  margin-bottom: 12px !important;
+}
+.sg-shell .lumora-focus-view .lumora-mode-picker > button {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+.sg-shell .lumora-focus-view .lumora-subject-scroll-wrap { margin-bottom: 10px !important; }
+.sg-shell .lumora-focus-view .sg-subject-scroll { padding-bottom: 4px !important; }
+.sg-shell .lumora-focus-view .sg-subject-scroll > div > button {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
 .lumora-urgency-pill {
   width: 100%; min-height: 44px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center; gap: 9px; margin: 0 0 8px; padding: 7px 11px; border: 1px solid
@@ -31,10 +57,14 @@ body { margin: 0; }
 .lumora-planner-heading h2 { margin: 3px 0 4px; color: var(--sg-theme-text, #26362c); font-size: 21px; line-height: 1.15; }
 .lumora-planner-heading p { margin: 0; color: var(--sg-theme-muted, #718078); font-size: 11.5px; line-height: 1.45; }
 .sg-shell .lumora-learner-stage {
-  margin: 4px 0 !important;
+  margin: 0 0 4px !important;
   min-height: 0 !important;
-  height: clamp(64px, calc(100svh - 540px), 236px);
+  height: clamp(140px, calc(100svh - 430px), 300px);
 }
+.sg-shell .lumora-focus-core .lumora-today-wrap { transform: translateY(-4px); margin-bottom: 0 !important; }
+.sg-shell .lumora-focus-core .lumora-today-time { line-height: .9; margin-top: -8px !important; margin-bottom: 0 !important; }
+.sg-shell .lumora-learner-art > img,
+.sg-shell .lumora-learner-art > svg { transform: translateY(18px) scale(1.16); transform-origin: center bottom; }
 .sg-shell .lumora-learner-art { height: 100%; transform: none !important; }
 .sg-shell .lumora-learner-art > img,
 .sg-shell .lumora-learner-art > svg {
