@@ -41,9 +41,9 @@ import {
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
-  GoogleAuthProvider, OAuthProvider,
+  getRedirectResult, GoogleAuthProvider, OAuthProvider,
   onAuthStateChanged, reauthenticateWithCredential,
-  signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup, linkWithPopup,
+  signInWithEmailAndPassword, signInWithCustomToken, signInWithRedirect, linkWithPopup,
   signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -85,7 +85,35 @@ const LS_TIMER_STYLE = "studygrove_timer_style";
 const LS_POMODORO = "studygrove_pomodoro";
 const LS_SELECTED_TASK = "studygrove_selected_task";
 const LS_RECAP    = "studygrove_recap_shown";
+const LS_ONBOARDING_COMPLETE = "lumora_onboarding_complete";
   // last week-key the recap auto-showed
+
+const ONBOARDING_WELCOME_IMAGE = "/mascot/lumora-gorilla-3d-waving-no-background.png";
+const ONBOARDING_EDUCATION_IMAGE = "/mascot/lumora-gorilla-3d-uni-no-background.png";
+const ONBOARDING_REFERRAL_IMAGE = "/mascot/lumora-gorilla-3d-point-no-background.png";
+const ONBOARDING_PROGRESS_IMAGE = "/mascot/lumora-gorilla-3d-progress-no-background.png";
+const EDUCATION_OPTIONS = [
+  "Primary school student",
+  "High school student",
+  "University student",
+  "Completing further studies",
+  "Other",
+];
+const STUDY_HOUR_OPTIONS = [
+  "5–10 hours",
+  "10–15 hours",
+  "15–25 hours",
+  "25–40 hours",
+  "40+ hours",
+];
+const REFERRAL_OPTIONS = [
+  "Instagram",
+  "TikTok",
+  "Advertisements",
+  "Word of mouth",
+  "App/Play Store",
+  "Other",
+];
 
 export const APP_CSS = `
 @keyframes sgpulse {
@@ -1076,6 +1104,14 @@ async function usernameForUid(uid){
   const snap=await getDocs(query(collection(db,"usernames"),where("uid","==",uid),limit(1)));
   const match=snap.docs[0];
   return match?(match.data().displayName||match.id):null;
+}
+
+function withTimeout(promise,ms,message="The request took too long."){
+  let timer;
+  const timeout=new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(new Error(message)),ms);
+  });
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
 }
 
 const genTabId = () => (crypto?.randomUUID ? crypto.randomUUID() : `t${Date.now()}_${Math.random().toString(36).slice(2)}`);
@@ -3055,14 +3091,39 @@ async function fbSignInWithSocialProvider(kind) {
     provider.addScope("name");
   }
   try{
-    const credential=await signInWithPopup(auth,provider);
-    const username=await usernameForUid(credential.user.uid);
-    return username
-      ? {ok:true,username}
-      : {ok:true,needsUsername:true,user:credential.user};
+    localStorage.setItem("lumora_social_redirect_pending",kind);
+    await signInWithRedirect(auth,provider);
+    return {ok:true,redirecting:true};
   }catch(error){
+    localStorage.removeItem("lumora_social_redirect_pending");
     return {ok:false,error:socialAuthError(error)};
   }
+}
+
+// Cache redirect consumption so React Strict Mode cannot consume the same
+// Firebase result twice during development's mount/unmount check.
+let socialRedirectResultPromise=null;
+function fbGetSocialRedirectResult(){
+  if(!socialRedirectResultPromise){
+    socialRedirectResultPromise=getRedirectResult(auth)
+      .then(async credential=>{
+        localStorage.removeItem("lumora_social_redirect_pending");
+        // Firebase can legitimately return null after auth state has already
+        // been restored (and on ordinary reloads). That is not an auth error;
+        // onAuthStateChanged is responsible for routing the restored user.
+        if(!credential)return {ok:true,noRedirect:true};
+        const username=await usernameForUid(credential.user.uid);
+        return username
+          ? {ok:true,username}
+          : {ok:true,needsUsername:true,user:credential.user};
+      })
+      .catch(error=>{
+        localStorage.removeItem("lumora_social_redirect_pending");
+        console.error("Lumora social redirect sign-in failed:",error);
+        return {ok:false,error:socialAuthError(error)};
+      });
+  }
+  return socialRedirectResultPromise;
 }
 
 // Providers must be attached to the *current* Firebase user. Signing in with
@@ -8289,7 +8350,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const items = [
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
@@ -8299,6 +8360,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins,
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
     { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
     { icon:"◇", label:"Privacy & Data", sub:"Read the Lumora privacy policy", onClick:onPrivacyData },
+    { icon:"👋", label:"Replay onboarding", sub:"View the welcome questions again", onClick:onReplayOnboarding },
     ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
   return (
@@ -9591,10 +9653,200 @@ const RECOVERY_QUESTIONS = [
   "What's your mother's maiden name?",
 ];
 
-function LoginScreen({ onLogin }) {
+function OnboardingWelcome({ onNext }) {
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={S.onboardingWelcomeInner} aria-labelledby="onboarding-welcome-title">
+        <div style={S.onboardingWelcomeCopy}>
+          <span style={S.onboardingEyebrow}>WELCOME TO</span>
+          <h1 id="onboarding-welcome-title" style={S.onboardingTitle}>Lumora</h1>
+          <p style={S.onboardingBody}>
+            Please answer a few quick questions to personalise your experience.
+          </p>
+        </div>
+
+        <div style={S.onboardingMascotWrap} aria-hidden="true">
+          <img src={ONBOARDING_WELCOME_IMAGE} alt="" style={S.onboardingMascot}/>
+        </div>
+
+        <button type="button" style={S.onboardingNextButton} onClick={onNext}>
+          <span>Next</span>
+          <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function OnboardingBackButton({ onBack }) {
+  return (
+    <button type="button" onClick={onBack} style={S.onboardingBackButton} aria-label="Go back">
+      <span aria-hidden="true" style={S.onboardingBackArrow}>←</span>
+      <span>Back</span>
+    </button>
+  );
+}
+
+function OnboardingEducation({ onNext, onBack, initialValue="" }) {
+  const initialIsOption=EDUCATION_OPTIONS.includes(initialValue);
+  const [selection,setSelection]=useState(initialValue?(initialIsOption?initialValue:"Other"):"");
+  const [other,setOther]=useState(initialValue&&!initialIsOption?initialValue:"");
+  const canContinue=Boolean(selection);
+
+  const continueOnboarding=()=>{
+    if(!canContinue)return;
+    onNext(selection==="Other"?(other.trim()||"Other"):selection);
+  };
+
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={S.onboardingQuestionInner} aria-labelledby="onboarding-education-title">
+        <div style={S.onboardingQuestionCopy}>
+          <span style={S.onboardingEyebrow}>LET'S GET TO KNOW YOU</span>
+          <h1 id="onboarding-education-title" style={S.onboardingQuestionTitle}>
+            Which of the following options best describes you?
+          </h1>
+        </div>
+
+        <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
+          <img src={ONBOARDING_EDUCATION_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+        </div>
+
+        <div role="radiogroup" aria-label="Education stage" style={S.onboardingOptions}>
+          {EDUCATION_OPTIONS.map(option=>{
+            const selected=selection===option;
+            return (
+              <button key={option} type="button" role="radio" aria-checked={selected}
+                style={{...S.onboardingOption,...(selected?S.onboardingOptionSelected:{})}}
+                onClick={()=>{
+                  setSelection(option);
+                  if(option!=="Other")onNext(option);
+                }}>
+                <span>{option}</span>
+                <span aria-hidden="true" style={{...S.onboardingRadio,...(selected?S.onboardingRadioSelected:{})}}>
+                  {selected?"✓":""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {selection==="Other"&&(
+          <input style={S.onboardingOtherInput} value={other} maxLength={80} autoFocus
+            aria-label="Describe yourself (optional)" placeholder="Specify (optional)"
+            onChange={event=>setOther(event.target.value)}
+            onKeyDown={event=>event.key==="Enter"&&continueOnboarding()}/>
+        )}
+
+        <div style={S.onboardingActions}>
+          <OnboardingBackButton onBack={onBack}/>
+          <button type="button" disabled={!canContinue} onClick={continueOnboarding}
+            style={{...S.onboardingNextButton,flex:1,...(!canContinue?S.onboardingNextButtonDisabled:{})}}>
+            <span>Next</span>
+            <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function OnboardingReferral({ onNext, onBack, initialValue="" }) {
+  const [selection,setSelection]=useState(initialValue);
+
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={S.onboardingQuestionInner} aria-labelledby="onboarding-referral-title">
+        <div style={S.onboardingQuestionCopy}>
+          <span style={S.onboardingEyebrow}>HOW YOU FOUND US</span>
+          <h1 id="onboarding-referral-title" style={S.onboardingQuestionTitle}>
+            How did you hear about us?
+          </h1>
+        </div>
+
+        <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
+          <img src={ONBOARDING_REFERRAL_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+        </div>
+
+        <div role="radiogroup" aria-label="How you heard about Lumora" style={S.onboardingOptions}>
+          {REFERRAL_OPTIONS.map(option=>{
+            const selected=selection===option;
+            return (
+              <button key={option} type="button" role="radio" aria-checked={selected}
+                style={{...S.onboardingOption,...(selected?S.onboardingOptionSelected:{})}}
+                onClick={()=>{setSelection(option);onNext(option);}}>
+                <span>{option}</span>
+                <span aria-hidden="true" style={{...S.onboardingRadio,...(selected?S.onboardingRadioSelected:{})}}>
+                  {selected?"✓":""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={S.onboardingActions}>
+          <OnboardingBackButton onBack={onBack}/>
+          <button type="button" disabled={!selection} onClick={()=>selection&&onNext(selection)}
+            style={{...S.onboardingNextButton,flex:1,...(!selection?S.onboardingNextButtonDisabled:{})}}>
+            <span>Next</span>
+            <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function OnboardingStudyHours({ onNext, onBack, initialValue="" }) {
+  const [selection,setSelection]=useState(initialValue);
+
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={S.onboardingQuestionInner} aria-labelledby="onboarding-hours-title">
+        <div style={S.onboardingQuestionCopy}>
+          <span style={S.onboardingEyebrow}>YOUR STUDY GOAL</span>
+          <h1 id="onboarding-hours-title" style={S.onboardingQuestionTitle}>
+            How many hours do you aim to study?
+          </h1>
+        </div>
+
+        <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
+          <img src={ONBOARDING_PROGRESS_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+        </div>
+
+        <div role="radiogroup" aria-label="Study hours goal" style={S.onboardingOptions}>
+          {STUDY_HOUR_OPTIONS.map(option=>{
+            const selected=selection===option;
+            return (
+              <button key={option} type="button" role="radio" aria-checked={selected}
+                style={{...S.onboardingOption,...(selected?S.onboardingOptionSelected:{})}}
+                onClick={()=>{setSelection(option);onNext(option);}}>
+                <span>{option}</span>
+                <span aria-hidden="true" style={{...S.onboardingRadio,...(selected?S.onboardingRadioSelected:{})}}>
+                  {selected?"✓":""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={S.onboardingActions}>
+          <OnboardingBackButton onBack={onBack}/>
+          <button type="button" disabled={!selection} onClick={()=>selection&&onNext(selection)}
+            style={{...S.onboardingNextButton,flex:1,...(!selection?S.onboardingNextButtonDisabled:{})}}>
+            <span>Next</span>
+            <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   const [name,setName]=useState("");
   const [pass,setPass]=useState("");
-  const [err,setErr]=useState("");
+  const [err,setErr]=useState(initialError);
   const [loading,setLoading]=useState(false);
   // Optional recovery setup (used only when creating a new account)
   const [showRecovery,setShowRecovery]=useState(false);
@@ -9606,8 +9858,8 @@ function LoginScreen({ onLogin }) {
   const [fpQuestion,setFpQuestion]=useState("");
   const [fpAnswer,setFpAnswer]=useState("");
   const [fpNewPass,setFpNewPass]=useState("");
-  const [socialUser,setSocialUser]=useState(null);
-  const [socialUsername,setSocialUsername]=useState("");
+  const [socialUser,setSocialUser]=useState(initialSocialUser);
+  const [socialUsername,setSocialUsername]=useState(()=>(initialSocialUser?.displayName||initialSocialUser?.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
   const [emailSignup,setEmailSignup]=useState(false);
 
   const go=async()=>{
@@ -9665,6 +9917,7 @@ function LoginScreen({ onLogin }) {
     const result=await fbSignInWithSocialProvider(kind);
     setLoading(false);
     if(!result.ok){setErr(result.error);return;}
+    if(result.redirecting)return;
     if(result.needsUsername){
       setSocialUser(result.user);
       setSocialUsername((result.user.displayName||result.user.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
@@ -12262,6 +12515,12 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
 export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [user,setUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
+  const [redirectSocialUser,setRedirectSocialUser]=useState(null);
+  const [redirectAuthError,setRedirectAuthError]=useState("");
+  const [onboardingStep,setOnboardingStep]=useState(()=>
+    !lsRaw(LS_USER,lsRaw("ascendu_username",""))&&lsRaw(LS_ONBOARDING_COMPLETE,"")!=="1"?1:0
+  );
+  const [onboardingAnswers,setOnboardingAnswers]=useState({educationStage:"",referralSource:"",studyHours:""});
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS).map(item=>({...item,label:capitalizeSubjectLabel(item.label)})));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
   const [mode,setMode]=useState(()=>lsRaw(LS_MODE,"stopwatch"));
@@ -12412,28 +12671,44 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const unsubscribe=onAuthStateChanged(auth,async firebaseUser=>{
       if(!active)return;
       if(!firebaseUser){
+        // During a redirect Firebase briefly reports no current user before
+        // getRedirectResult restores it. Keep the loading gate closed so the
+        // login/onboarding screens cannot flash or win that race.
+        if(localStorage.getItem("lumora_social_redirect_pending"))return;
         setUser(null);setAuthReady(true);return;
       }
       try{
-        const cached=canonUsername(lsRaw(LS_USER,lsRaw("ascendu_username","")));
-        let username=null;
-        if(cached){
-          const mapping=await getDoc(doc(db,"usernames",cached));
-          if(mapping.exists()&&mapping.data().uid===firebaseUser.uid){
-            username=mapping.data().displayName||cached;
+        // A Firestore read can remain pending indefinitely in embedded
+        // browsers. Never let profile hydration hold the entire app on its
+        // splash screen: either resolve the username promptly or continue to
+        // the username-completion screen for this authenticated account.
+        const username=await withTimeout((async()=>{
+          const cached=canonUsername(lsRaw(LS_USER,lsRaw("ascendu_username","")));
+          if(cached){
+            const mapping=await getDoc(doc(db,"usernames",cached));
+            if(mapping.exists()&&mapping.data().uid===firebaseUser.uid){
+              return mapping.data().displayName||cached;
+            }
           }
-        }
-        if(!username)username=await usernameForUid(firebaseUser.uid);
+          return usernameForUid(firebaseUser.uid);
+        })(),8000,"Account profile lookup timed out.");
         if(!active)return;
         if(username){
           const canonical=canonUsername(username);
           lsSetR(LS_USER,canonical);setUser(canonical);
         }else{
           setUser(null);
+          setRedirectSocialUser(firebaseUser);
+          setOnboardingStep(0);
         }
       }catch(error){
         console.error("Lumora account hydration error:",error);
-        if(active)setUser(null);
+        if(active){
+          setUser(null);
+          setRedirectSocialUser(firebaseUser);
+          setRedirectAuthError("You're signed in. Please choose a username to finish setting up your account.");
+          setOnboardingStep(0);
+        }
       }finally{
         if(active)setAuthReady(true);
       }
@@ -12443,13 +12718,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   // Lumora uses a single light appearance across the app and backgrounds.
   useEffect(()=>{
+    const pageBackground=onboardingStep?"#fff":renderedBackgroundAppearance.baseColor;
     document.documentElement.setAttribute("data-theme", "light");
-    document.documentElement.style.background=renderedBackgroundAppearance.baseColor;
-    document.body.style.background=renderedBackgroundAppearance.baseColor;
+    document.documentElement.style.background=pageBackground;
+    document.body.style.background=pageBackground;
     document.body.style.transition = "background 0.25s ease";
     const themeMeta=document.querySelector('meta[name="theme-color"]');
-    if(themeMeta)themeMeta.setAttribute("content",renderedBackgroundAppearance.baseColor);
-  },[renderedBackgroundAppearance]);
+    if(themeMeta)themeMeta.setAttribute("content",pageBackground);
+  },[renderedBackgroundAppearance,user,onboardingStep]);
 
   useEffect(()=>{
     const media=window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -13267,8 +13543,37 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setOwnedBackgrounds(cachedOwned);
     setActiveBackground(canEquipBackground(cachedActive,cachedOwned)?cachedActive:DEFAULT_BACKGROUND_ID);
     setPrefsReady(false);
-    lsSetR(LS_USER,uname);setUser(uname);
+    lsSetR(LS_USER,uname);setUser(uname);setAuthReady(true);
   };
+
+  // Redirect sign-in must be consumed before the auth-ready gate below.
+  // Processing it inside LoginScreen creates a deadlock because that screen is
+  // not mounted until Firebase auth initialization has already completed.
+  useEffect(()=>{
+    let active=true;
+    fbGetSocialRedirectResult().then(result=>{
+      if(!active)return;
+      if(result.noRedirect){setAuthReady(true);return;}
+      if(!result.ok){
+        setRedirectAuthError(result.error);
+        setOnboardingStep(0);
+        setAuthReady(true);
+        return;
+      }
+      if(result.needsUsername){
+        setRedirectSocialUser(result.user);
+        setOnboardingStep(0);
+        setAuthReady(true);
+        return;
+      }
+      handleLogin(result.username,"");
+    });
+    return()=>{active=false;};
+  // The redirect is consumed once per full page load; caching in
+  // fbGetSocialRedirectResult also protects this from React Strict Mode.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const handleLogout=()=>{
     const backgroundKey=backgroundCacheKey(user);
     const ownedBackgroundKey=ownedBackgroundsCacheKey(user);
@@ -13298,6 +13603,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
     setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
+  };
+
+  const handleReplayOnboarding=()=>{
+    lsRemove(LS_ONBOARDING_COMPLETE);
+    setOnboardingAnswers({educationStage:"",referralSource:"",studyHours:""});
+    setShowMenu(false);
+    setOnboardingStep(1);
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
@@ -13459,7 +13771,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     prefsLoadedRef.current = true;
     setPrefsReady(false);
     (async()=>{
-      const prefs = await fbLoadPrefs(user);
+      try{
+      const prefs = await withTimeout(fbLoadPrefs(user),8000,"Account preferences lookup timed out.");
       if(prefs){
         if(Array.isArray(prefs.subjects) && prefs.subjects.length){
           const normalizedSubjects=prefs.subjects.map(item=>({...item,label:capitalizeSubjectLabel(item.label)}));
@@ -13528,13 +13841,21 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         }
       } else {
         // No cloud prefs yet — seed from whatever this device has
-        await fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
+        await withTimeout(fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
           timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,
-          privacy:{sharePresence:true} });
+          privacy:{sharePresence:true} }),8000,"Initial account preferences sync timed out.");
       }
-      setPrefsReady(true);
+      }catch(error){
+        // Cloud preferences improve cross-device continuity, but they must not
+        // prevent an authenticated user from reaching the Focus page. Keep
+        // the already-loaded local/default values and allow a later save or
+        // reload to retry synchronization.
+        console.error("Lumora preferences hydration error:",error);
+      }finally{
+        setPrefsReady(true);
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[user]);
@@ -13683,11 +14004,35 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     </div>
   );
 
+  if(onboardingStep)return (
+    <>
+      <style>{APP_CSS+BACKGROUND_CSS}</style>
+      {onboardingStep===1
+        ? <OnboardingWelcome onNext={()=>setOnboardingStep(2)}/>
+        : onboardingStep===2
+        ? <OnboardingEducation initialValue={onboardingAnswers.educationStage} onBack={()=>setOnboardingStep(1)} onNext={educationStage=>{
+            setOnboardingAnswers(current=>({...current,educationStage}));
+            setOnboardingStep(3);
+          }}/>
+        : onboardingStep===3
+        ? <OnboardingReferral initialValue={onboardingAnswers.referralSource} onBack={()=>setOnboardingStep(2)} onNext={referralSource=>{
+            setOnboardingAnswers(current=>({...current,referralSource}));
+            setOnboardingStep(4);
+          }}/>
+        : <OnboardingStudyHours initialValue={onboardingAnswers.studyHours} onBack={()=>setOnboardingStep(3)} onNext={studyHours=>{
+            setOnboardingAnswers(current=>({...current,studyHours}));
+            lsSetR(LS_ONBOARDING_COMPLETE,"1");
+            setOnboardingStep(0);
+          }}/>
+      }
+    </>
+  );
+
   if(!user)return (
     <div className="sg-shell">
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
-      <LoginScreen onLogin={handleLogin}/>
+      <LoginScreen onLogin={handleLogin} initialSocialUser={redirectSocialUser} initialError={redirectAuthError}/>
     </div>
   );
 
@@ -13810,6 +14155,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onSessions={()=>{setShowMenu(false);setSessionsFromMenu(true);setShowSessions(true);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
               onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
+              onReplayOnboarding={handleReplayOnboarding}
               isAdmin={isAdmin}
               canAddTestCoins={canAddTestCoins}
               onAdmin={()=>{setShowMenu(false);setAdminFromMenu(true);setShowAdmin(true);}}
@@ -14153,6 +14499,31 @@ const S = {
   boardRowMe:{border:"2px solid #56B68B",background:"var(--sg-theme-accent-wash,#F0FBF6)"},
   boardRank:{width:32,fontSize:18,textAlign:"center"},
   empty:{textAlign:"center",color:"#aaa",fontSize:14,marginTop:40},
+  onboardingWelcome:{minHeight:"100dvh",background:"#fff",color:"#17251C",display:"flex",justifyContent:"center",fontFamily:"inherit"},
+  onboardingWelcomeInner:{width:"100%",maxWidth:520,minHeight:"100dvh",boxSizing:"border-box",padding:"clamp(42px,8vh,76px) 24px max(24px,env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center",overflow:"hidden"},
+  onboardingWelcomeCopy:{width:"100%",maxWidth:410,textAlign:"center",position:"relative",zIndex:1},
+  onboardingEyebrow:{display:"block",fontSize:12,fontWeight:800,letterSpacing:"0.18em",color:"#69A884",marginBottom:10},
+  onboardingTitle:{fontSize:"clamp(42px,11vw,58px)",lineHeight:.98,fontWeight:850,letterSpacing:"-0.055em",color:"#244F39",margin:"0 0 20px"},
+  onboardingBody:{fontSize:"clamp(14px,3.7vw,16px)",lineHeight:1.55,fontWeight:500,color:"#5F6E65",margin:0},
+  onboardingMascotWrap:{flex:"1 1 260px",minHeight:220,width:"min(100%,410px)",display:"flex",alignItems:"flex-end",justifyContent:"center",margin:"18px 0 8px",overflow:"hidden"},
+  onboardingMascot:{display:"block",width:"min(100%,390px)",height:"100%",maxHeight:390,objectFit:"contain",objectPosition:"center bottom",mixBlendMode:"multiply"},
+  onboardingNextButton:{flex:"0 0 auto",width:"100%",maxWidth:410,minHeight:56,padding:"0 21px",border:0,borderRadius:16,background:"linear-gradient(135deg,#2D6A4F,#418264)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontSize:17,fontWeight:800,letterSpacing:"0.01em",cursor:"pointer",boxShadow:"0 10px 24px rgba(45,106,79,.2)",WebkitTapHighlightColor:"transparent"},
+  onboardingNextButtonDisabled:{background:"#DCE6E0",color:"#91A098",cursor:"not-allowed",boxShadow:"none"},
+  onboardingNextArrow:{fontSize:22,lineHeight:1,marginTop:-1},
+  onboardingActions:{width:"100%",maxWidth:410,display:"flex",alignItems:"stretch",gap:10,marginTop:16},
+  onboardingBackButton:{flex:"0 0 116px",minHeight:56,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"0 16px",border:"1.5px solid #C9DBD0",borderRadius:16,background:"#fff",color:"#37684E",fontSize:15,fontWeight:800,cursor:"pointer",WebkitTapHighlightColor:"transparent"},
+  onboardingBackArrow:{fontSize:21,lineHeight:1,marginTop:-2},
+  onboardingQuestionInner:{width:"100%",maxWidth:520,minHeight:"100dvh",boxSizing:"border-box",padding:"clamp(30px,5vh,52px) 24px max(24px,env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center"},
+  onboardingQuestionCopy:{width:"100%",maxWidth:410,textAlign:"center"},
+  onboardingQuestionTitle:{fontSize:"clamp(24px,5.8vw,29px)",lineHeight:1.18,fontWeight:850,letterSpacing:"-0.03em",color:"#244F39",margin:0},
+  onboardingQuestionMascotWrap:{width:"100%",height:320,display:"flex",alignItems:"flex-end",justifyContent:"center",margin:"12px 0 14px",overflow:"hidden"},
+  onboardingQuestionMascot:{display:"block",width:"min(100%,320px)",height:"100%",objectFit:"contain",objectPosition:"center bottom",mixBlendMode:"multiply"},
+  onboardingOptions:{width:"100%",maxWidth:410,display:"flex",flexDirection:"column",gap:9},
+  onboardingOption:{width:"100%",minHeight:50,padding:"10px 14px 10px 17px",border:"1.5px solid #DDE8E1",borderRadius:14,background:"#fff",color:"#34443A",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,fontSize:15,fontWeight:700,textAlign:"left",cursor:"pointer",boxShadow:"0 2px 8px rgba(39,73,54,.035)",WebkitTapHighlightColor:"transparent"},
+  onboardingOptionSelected:{borderColor:"#3B7D5D",background:"#F0F8F3",color:"#24573D",boxShadow:"0 0 0 2px rgba(59,125,93,.08)"},
+  onboardingRadio:{width:22,height:22,borderRadius:"50%",border:"1.5px solid #B8C9BF",display:"grid",placeItems:"center",flex:"0 0 auto",fontSize:13,fontWeight:900,color:"#fff"},
+  onboardingRadioSelected:{borderColor:"#3B7D5D",background:"#3B7D5D"},
+  onboardingOtherInput:{width:"100%",maxWidth:410,boxSizing:"border-box",marginTop:9,padding:"13px 15px",border:"1.5px solid #3B7D5D",borderRadius:13,background:"#fff",color:"#26372D",fontSize:15,outline:"none",boxShadow:"0 0 0 3px rgba(59,125,93,.08)"},
   loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(160deg,#D8F0E0 0%,#F5F7F2 60%)",padding:20},
   loginCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(45,106,79,0.12)",textAlign:"center"},
   loginTitle:{fontSize:28,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",margin:"0 0 6px",letterSpacing:"-0.5px"},

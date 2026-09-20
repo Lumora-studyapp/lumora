@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
 
 const ENHANCEMENT_PRICING_REPLACEMENTS = [
   ['25% / 50% / 100%', '15% / 30% / 60%'],
@@ -222,6 +223,21 @@ function studyGroveSourcePatches() {
 
 export default defineConfig({
   plugins: [studyGroveSourcePatches(), react()],
+  server: {
+    port: 5173,
+    strictPort: true,
+    https: {
+      key: readFileSync(new URL('./.cert/localhost-key.pem', import.meta.url)),
+      cert: readFileSync(new URL('./.cert/localhost-cert.pem', import.meta.url)),
+    },
+    proxy: {
+      '/__/auth': {
+        target: 'https://lumora-c8437.firebaseapp.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {
