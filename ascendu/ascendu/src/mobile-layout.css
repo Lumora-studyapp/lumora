@@ -53,7 +53,7 @@ body { margin: 0; }
 .lumora-urgency-copy small { margin-top: 2px; color: var(--sg-theme-muted, #718078); font-size: 9.5px; }
 .lumora-planner-view { padding: 14px 14px max(28px, env(safe-area-inset-bottom, 0px)) !important; }
 .lumora-planner-heading { margin: 2px 2px 14px; }
-.lumora-planner-heading span { color: var(--sg-theme-accent-strong, #456451); font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
+.lumora-planner-heading span { color: var(--sg-theme-accent-strong, #5A2767); font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
 .lumora-planner-heading h2 { margin: 3px 0 4px; color: var(--sg-theme-text, #26362c); font-size: 21px; line-height: 1.15; }
 .lumora-planner-heading p { margin: 0; color: var(--sg-theme-muted, #718078); font-size: 11.5px; line-height: 1.45; }
 .sg-shell .lumora-learner-stage {
