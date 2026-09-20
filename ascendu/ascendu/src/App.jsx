@@ -43,7 +43,7 @@ import {
   createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
   getRedirectResult, GoogleAuthProvider, OAuthProvider,
   onAuthStateChanged, reauthenticateWithCredential,
-  signInWithEmailAndPassword, signInWithCustomToken, signInWithRedirect, linkWithPopup,
+  signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup, linkWithPopup,
   signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -3108,9 +3108,16 @@ async function fbSignInWithSocialProvider(kind) {
     provider.addScope("name");
   }
   try{
-    localStorage.setItem("lumora_social_redirect_pending",kind);
-    await signInWithRedirect(auth,provider);
-    return {ok:true,redirecting:true};
+    // Keep the OAuth result on the current page. Redirect-based Firebase Auth
+    // relies on cross-origin browser storage, which can be unavailable on
+    // Vercel/custom domains and return users to the login screen with a null
+    // redirect result even though Google authentication completed.
+    localStorage.removeItem("lumora_social_redirect_pending");
+    const credential=await signInWithPopup(auth,provider);
+    const username=await usernameForUid(credential.user.uid);
+    return username
+      ? {ok:true,username}
+      : {ok:true,needsUsername:true,user:credential.user};
   }catch(error){
     localStorage.removeItem("lumora_social_redirect_pending");
     return {ok:false,error:socialAuthError(error)};
