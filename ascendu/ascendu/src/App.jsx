@@ -9862,6 +9862,21 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   const [socialUsername,setSocialUsername]=useState(()=>(initialSocialUser?.displayName||initialSocialUser?.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
   const [emailSignup,setEmailSignup]=useState(false);
 
+  // Firebase's redirect result and its auth-state notification can resolve in
+  // either order. If the notification finishes second, this screen is already
+  // mounted with no initial social user. Sync the late result so a successful
+  // Google sign-in always reaches username completion instead of looking like
+  // it returned to the login screen.
+  useEffect(()=>{
+    if(!initialSocialUser)return;
+    setSocialUser(initialSocialUser);
+    setSocialUsername((initialSocialUser.displayName||initialSocialUser.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
+  },[initialSocialUser]);
+
+  useEffect(()=>{
+    if(initialError)setErr(initialError);
+  },[initialError]);
+
   const go=async()=>{
     const t=name.trim();
     const emailLogin=isEmailLogin(t);
@@ -13543,6 +13558,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setOwnedBackgrounds(cachedOwned);
     setActiveBackground(canEquipBackground(cachedActive,cachedOwned)?cachedActive:DEFAULT_BACKGROUND_ID);
     setPrefsReady(false);
+    setRedirectSocialUser(null);setRedirectAuthError("");
     lsSetR(LS_USER,uname);setUser(uname);setAuthReady(true);
   };
 
