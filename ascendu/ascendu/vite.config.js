@@ -1,6 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+
+const LOCAL_HTTPS_KEY_URL = new URL('./.cert/localhost-key.pem', import.meta.url)
+const LOCAL_HTTPS_CERT_URL = new URL('./.cert/localhost-cert.pem', import.meta.url)
+const LOCAL_HTTPS = process.env.VERCEL !== '1' && existsSync(LOCAL_HTTPS_KEY_URL) && existsSync(LOCAL_HTTPS_CERT_URL)
+  ? {
+      key: readFileSync(LOCAL_HTTPS_KEY_URL),
+      cert: readFileSync(LOCAL_HTTPS_CERT_URL),
+    }
+  : undefined
 
 const ENHANCEMENT_PRICING_REPLACEMENTS = [
   ['25% / 50% / 100%', '15% / 30% / 60%'],
@@ -226,10 +235,7 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    https: {
-      key: readFileSync(new URL('./.cert/localhost-key.pem', import.meta.url)),
-      cert: readFileSync(new URL('./.cert/localhost-cert.pem', import.meta.url)),
-    },
+    https: LOCAL_HTTPS,
     proxy: {
       '/__/auth': {
         target: 'https://lumora-c8437.firebaseapp.com',
