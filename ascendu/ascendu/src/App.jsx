@@ -10015,7 +10015,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   return (
     <div style={S.loginWrap}>
       <div style={S.loginCard}>
-        <div style={{fontSize:60,marginBottom:8}}>🧑‍🎓</div>
+        <img src="/lumora-mark.png" alt="" aria-hidden="true" style={{width:72,height:72,objectFit:"contain",marginBottom:8}}/>
         <h1 style={S.loginTitle}>Lumora</h1>
         <p style={S.loginSub}>Grow your focus. Build your future.</p>
         <input style={{...S.input,...(err&&!pass?S.inputErr:{})}}
@@ -14015,7 +14015,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
-        <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>🧑‍🎓 Lumora</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>
+          <img src="/lumora-mark.png" alt="" aria-hidden="true" style={{width:24,height:24,objectFit:"contain"}}/> Lumora
+        </div>
       </div>
     </div>
   );
@@ -14061,7 +14063,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
-          <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",marginBottom:18}}>🧑‍🎓 Lumora</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",marginBottom:18}}>
+            <img src="/lumora-mark.png" alt="" aria-hidden="true" style={{width:24,height:24,objectFit:"contain"}}/> Lumora
+          </div>
           <div className="sg-skeleton" style={{height:14,width:"42%",margin:"0 auto 10px"}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%",marginBottom:8}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%"}}/>
@@ -14149,7 +14153,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           )}
 
           <header className="sg-main-header" style={S.header}>
-            <span className="sg-keepcolor" style={S.logo}>🧑‍🎓 Lumora</span>
+            <span className="sg-keepcolor" style={{...S.logo,display:"inline-flex",alignItems:"center",gap:6}}>
+              <img src="/lumora-mark.png" alt="" aria-hidden="true" style={{width:22,height:22,objectFit:"contain"}}/> Lumora
+            </span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
               <button className="sg-main-menu-button" onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
