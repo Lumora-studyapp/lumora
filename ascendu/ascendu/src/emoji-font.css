@@ -10,3 +10,13 @@ html, body, #root { width: 100%; max-width: 100%; min-height: 100%; overflow-x: 
 html { font-family: 'Noto Color Emoji', system-ui, sans-serif; }
 body { font-family: 'Noto Color Emoji', system-ui, sans-serif; }
 html, body { background: var(--sg-boot-bg, #F5F7F2); }
+
+.lumora-emoji-image {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin: 0 0.025em;
+  object-fit: contain;
+  vertical-align: -0.14em;
+  user-select: none;
+}

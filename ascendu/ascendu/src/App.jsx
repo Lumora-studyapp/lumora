@@ -21,8 +21,8 @@ import {
   isAdminConsoleUsername, normalizeAnimationMode, shouldDisableAnimations,
 } from "./accessSettings.js";
 import {
-  filterBoardForFriends, friendConnectionId, friendNetworkFromConnections,
-  normalizeFriendUsername, normalizePresenceRecord,
+  filterBoardForFriends, filterFriendUsernameSuggestions, friendConnectionId, friendNetworkErrorMessage,
+  friendNetworkFromConnections, normalizeFriendUsername, normalizePresenceRecord,
 } from "./friendships.js";
 import {
   GROUP_REWARD_MIN_PARTICIPANTS, groupCanReachRewards, groupRewardEligibility, groupRows,
@@ -37,13 +37,13 @@ import {
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion,
   collection, getDocs, increment, runTransaction, onSnapshot,
-  query, where, orderBy, limit, startAfter, serverTimestamp
+  query, where, orderBy, limit, startAfter, startAt, endAt, documentId, serverTimestamp
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
   getRedirectResult, GoogleAuthProvider, OAuthProvider,
   onAuthStateChanged, reauthenticateWithCredential,
-  signInWithEmailAndPassword, signInWithCustomToken, signInWithRedirect, linkWithPopup,
+  signInWithEmailAndPassword, signInWithCustomToken, signInWithRedirect, linkWithCredential, linkWithPopup,
   signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -92,6 +92,7 @@ const ONBOARDING_WELCOME_IMAGE = "/mascot/lumora-gorilla-3d-waving-no-background
 const ONBOARDING_EDUCATION_IMAGE = "/mascot/lumora-gorilla-3d-uni-no-background.png";
 const ONBOARDING_REFERRAL_IMAGE = "/mascot/lumora-gorilla-3d-point-no-background.png";
 const ONBOARDING_PROGRESS_IMAGE = "/mascot/lumora-gorilla-3d-progress-no-background.png";
+const LUMORA_LOGO_IMAGE = "/Logo/Lumora%20default%20logo";
 const EDUCATION_OPTIONS = [
   "Primary school student",
   "High school student",
@@ -116,6 +117,19 @@ const REFERRAL_OPTIONS = [
 ];
 
 export const APP_CSS = `
+@keyframes lumoraOnboardingForward {
+  from { opacity: 0; transform: translate3d(22px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes lumoraOnboardingBack {
+  from { opacity: 0; transform: translate3d(-22px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.lumora-onboarding-slide { min-height: 100dvh; animation: lumoraOnboardingForward 300ms cubic-bezier(.2,.75,.25,1) both; will-change: opacity, transform; }
+.lumora-onboarding-slide.is-back { animation-name: lumoraOnboardingBack; }
+@media (prefers-reduced-motion: reduce) {
+  .lumora-onboarding-slide { animation-duration: 1ms; }
+}
 @keyframes sgpulse {
   0%   { box-shadow: 0 0 0 0 rgba(52,199,89,0.5); }
   70%  { box-shadow: 0 0 0 7px rgba(52,199,89,0); }
@@ -300,7 +314,24 @@ export const APP_CSS = `
   box-shadow:0 9px 28px var(--sg-theme-shadow)!important;
   color:var(--sg-theme-text)!important;
 }
-.sg-main-header .sg-main-menu-button{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:var(--sg-theme-muted)!important}
+.sg-main-header .sg-main-menu-button{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#000!important}
+.sg-notification-count{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:19px;
+  height:19px;
+  padding:0 4px;
+  border:0;
+  border-radius:999px;
+  background:#E31B32;
+  color:#fff;
+  font:800 10px/1 'Inter','Segoe UI',sans-serif;
+  letter-spacing:-.15px;
+  box-shadow:0 2px 6px rgba(85,13,22,.26);
+  white-space:nowrap;
+}
+.sg-main-menu-button .sg-notification-count{position:absolute;top:-3px;right:-5px}
 .sg-shell .sg-pop-anim.sg-add-subject-modal{
   background:color-mix(in srgb,#fff 80%,var(--sg-theme-accent,#56B68B) 20%)!important;
 }
@@ -313,6 +344,13 @@ export const APP_CSS = `
   isolation:isolate;
   background:transparent!important;
 }
+.sg-main-header{
+  min-height:64px;
+  padding:14px 18px 12px!important;
+  border-bottom:1px solid color-mix(in srgb,var(--sg-theme-accent,#56B68B) 22%,transparent);
+  backdrop-filter:blur(9px) saturate(.9);
+  -webkit-backdrop-filter:blur(9px) saturate(.9);
+}
 .sg-main-header::before,
 .sg-main-nav::before{
   content:"";
@@ -322,15 +360,21 @@ export const APP_CSS = `
   pointer-events:none;
 }
 .sg-main-header::before{
-  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-accent) 18%,transparent),color-mix(in srgb,var(--sg-theme-accent-2) 16%,transparent));
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--sg-theme-accent) 17%,transparent) 0%,
+    color-mix(in srgb,var(--sg-theme-accent-2) 10%,transparent) 68%,
+    transparent 100%);
 }
 .sg-main-nav::before{
-  background:linear-gradient(180deg,color-mix(in srgb,var(--sg-theme-accent-2) 16%,transparent),color-mix(in srgb,var(--sg-theme-accent) 12%,transparent));
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--sg-theme-accent-2) 10%,transparent) 0%,
+    color-mix(in srgb,var(--sg-theme-accent) 7%,transparent) 65%,
+    transparent 100%);
 }
 .sg-main-nav {
-  border-bottom:1px solid color-mix(in srgb,var(--sg-theme-accent,#56B68B) 45%,transparent)!important;
-  backdrop-filter:none!important;
-  -webkit-backdrop-filter:none!important;
+  border-bottom:1px solid color-mix(in srgb,var(--sg-theme-accent,#56B68B) 26%,transparent)!important;
+  backdrop-filter:blur(7px) saturate(.9)!important;
+  -webkit-backdrop-filter:blur(7px) saturate(.9)!important;
 }
 .sg-shell[data-background] .sg-assessment-summary{
   background:var(--sg-theme-neutral)!important;
@@ -468,7 +512,7 @@ export const APP_CSS = `
     --sg-theme-panel-soft:color-mix(in srgb,rgba(16,20,28,.68) 60%,var(--sg-theme-accent-2) 40%);
     --sg-theme-panel-solid:color-mix(in srgb,#171b22 68%,var(--sg-theme-accent) 32%);
   }
-  .sg-main-header{padding-top:max(12px,env(safe-area-inset-top))!important}
+  .sg-main-header{padding-top:max(14px,env(safe-area-inset-top))!important}
   .sg-main-nav{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
   .sg-session-screen{
     background:linear-gradient(160deg,color-mix(in srgb,var(--sg-theme-accent) 20%,transparent),color-mix(in srgb,var(--sg-focus-surface,rgba(242,247,241,.91)) 66%,transparent))!important;
@@ -490,7 +534,7 @@ export const APP_CSS = `
 .sg-shell button:active { transform: scale(0.94); filter: brightness(0.97); }
 /* The big plant button presses a touch deeper for a satisfying "commit" feel */
 .sg-plant-btn:active { transform: scale(0.97) translateY(1px); }
-.sg-focus-ring:focus { border-color: #56B68B !important; box-shadow: 0 0 0 3px rgba(86,182,139,0.15); }
+.sg-focus-ring:focus { border-color:var(--sg-theme-accent,#56B68B)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--sg-theme-accent,#56B68B) 15%,transparent); }
 
 /* Entrance animations */
 @keyframes sgFadeIn   { from { opacity: 0; } to { opacity: 1; } }
@@ -951,16 +995,16 @@ export const APP_CSS = `
 .sg-duration-slider::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--sg-theme-neutral,#fff);border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
 .sg-duration-slider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:var(--sg-theme-neutral,#fff);border:3px solid var(--sg-slider-color);box-shadow:0 2px 8px rgba(30,50,35,.18)}
 .sg-duration-slider:focus-visible{outline:3px solid color-mix(in srgb,var(--sg-slider-color) 28%,transparent);outline-offset:8px}
-.sg-timer-style{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0;overflow:hidden;background:#EAF0E7;border-radius:13px;margin-bottom:10px}
-.sg-timer-style button{min-height:46px;border:0;border-radius:13px;background:transparent;color:#788177;font-size:12px;font-weight:700;cursor:pointer}
+.sg-timer-style{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0;overflow:hidden;background:#EAF0E7;border-radius:13px;margin-bottom:14px}
+.sg-timer-style button{min-height:54px;border:0;border-radius:13px;background:transparent;color:var(--sg-theme-muted,#788177);font-size:13px;font-weight:700;cursor:pointer}
 .sg-timer-style button[aria-pressed="true"]{background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-accent-strong,#2D6A4F);box-shadow:0 1px 4px var(--sg-theme-shadow,rgba(35,64,43,.1))}
 .sg-pomodoro-presets{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:1px 1px 5px;overscroll-behavior-inline:contain}
 .sg-pomodoro-presets::-webkit-scrollbar{display:none}
-.sg-shell[data-background] .sg-pomodoro-presets button{flex:0 0 auto;min-height:40px;padding:7px 12px;border:1px solid #DDE7DA;border-radius:18px;background:transparent!important;box-shadow:none!important;color:#747D73;font-size:12px;font-weight:700;cursor:pointer}
+.sg-shell[data-background] .sg-pomodoro-presets button{flex:0 0 auto;min-height:40px;padding:7px 12px;border:1px solid var(--sg-theme-border,#DDE7DA);border-radius:18px;background:transparent!important;box-shadow:none!important;color:var(--sg-theme-muted,#747D73);font-size:12px;font-weight:700;cursor:pointer}
 .sg-shell[data-background] .sg-pomodoro-presets button[aria-pressed="true"]{border-color:var(--sg-theme-accent)!important;background:transparent!important;color:var(--sg-theme-accent-strong)!important;box-shadow:none!important}
 .sg-pomo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .sg-pomo-field label{display:block;font-size:9.5px;font-weight:750;letter-spacing:.35px;text-transform:uppercase;color:#929A91;margin:0 0 4px}
-.sg-pomo-field input,.sg-pomo-field select{width:100%;min-height:38px;border:1px solid #DDE5DB;border-radius:10px;background:var(--sg-theme-neutral,#fff);color:#31443A;padding:7px 8px;font:600 12px/1.2 Inter,system-ui,sans-serif}
+.sg-pomo-field input,.sg-pomo-field select{width:100%;min-height:38px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:10px;background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-text,#31443A);padding:7px 8px;font:600 12px/1.2 Inter,system-ui,sans-serif}
 .sg-shell[data-background] .sg-pomo-field input,.sg-shell[data-background] .sg-pomo-field select{box-shadow:none!important}
 .sg-task-card button:focus-visible,.sg-task-card input:focus-visible,.sg-task-card select:focus-visible,
 .sg-timer-style button:focus-visible,.sg-pomodoro-presets button:focus-visible{outline:3px solid rgba(45,106,79,.2);outline-offset:2px}
@@ -970,17 +1014,17 @@ export const APP_CSS = `
 .sg-task-row:last-child{border-bottom:1px solid #EDF1EB}
 .sg-task-check{position:relative;width:24px;height:24px;justify-self:center;padding:0;border-radius:50%;border:1px solid var(--sg-theme-border,#DCE5D9);background:var(--sg-theme-neutral,#fff);color:var(--sg-theme-accent-strong,#2D6A4F);font-size:12px;line-height:1;cursor:pointer;transition:transform .16s ease,background .16s ease,border-color .16s ease}
 .sg-shell[data-background] .sg-task-check[data-overdue="true"]{border:2px solid #D94B4B!important;background:color-mix(in srgb,var(--sg-theme-panel-solid,#FFF) 84%,#F6B9B9)!important;box-shadow:0 0 0 3px rgba(217,75,75,.16),0 3px 9px rgba(139,28,28,.22)!important}
-.sg-task-check[data-checked="true"]{background:#E6F3E8;border-color:#94B99B;transform:scale(.94)}
-.sg-task-title{min-width:0;padding-left:7px;color:#34453B;font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}
+.sg-task-check[data-checked="true"]{background:var(--sg-theme-accent-wash,#E6F3E8);border-color:var(--sg-theme-border,#94B99B);transform:scale(.94)}
+.sg-task-title{min-width:0;padding-left:7px;color:var(--sg-theme-text,#34453B);font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}
 .sg-task-title[data-complete="true"]{color:#99A29A;text-decoration:line-through}
 .sg-task-row[data-completing="true"] .sg-task-title{animation:sgTaskStrike .3s ease forwards}
 .sg-task-row[data-completing="true"] .sg-task-check::after{content:"";position:absolute;inset:-1px;border:2px solid color-mix(in srgb,var(--sg-theme-accent,#2D6A4F) 48%,var(--sg-theme-neutral,#fff));border-radius:50%;pointer-events:none;animation:sgTaskRipple .48s ease-out forwards}
-@keyframes sgTaskStrike{from{color:#34453B;text-decoration-color:transparent}to{color:#99A29A;text-decoration:line-through;text-decoration-color:currentColor}}
+@keyframes sgTaskStrike{from{color:var(--sg-theme-text,#34453B);text-decoration-color:transparent}to{color:var(--sg-theme-muted,#99A29A);text-decoration:line-through;text-decoration-color:currentColor}}
 @keyframes sgTaskRipple{0%{opacity:.7;transform:scale(.7)}100%{opacity:0;transform:scale(2.05)}}
 .sg-task-icon{width:40px;height:40px;border:0;border-radius:10px;background:transparent;color:#8A948A;cursor:pointer}
 .sg-task-icon[aria-pressed="true"]{background:var(--sg-theme-accent-wash,#E8F4EB);color:var(--sg-theme-accent-strong,#2D6A4F)}
 .sg-task-edit{display:grid;grid-template-columns:minmax(0,1fr) minmax(92px,.55fr);gap:7px;margin-top:7px}
-.sg-task-edit input,.sg-task-edit select{min-width:0;min-height:40px;border:1px solid #DDE5DB;border-radius:10px;background:var(--sg-theme-neutral,#fff);padding:8px 10px;color:#31443A;font-size:12px}
+.sg-task-edit input,.sg-task-edit select{min-width:0;min-height:40px;border:1px solid var(--sg-theme-border,#DDE5DB);border-radius:10px;background:var(--sg-theme-neutral,#fff);padding:8px 10px;color:var(--sg-theme-text,#31443A);font-size:12px}
 .sg-shell[data-background] .sg-task-edit select.sg-task-select{appearance:none;-webkit-appearance:none;padding-right:32px!important;background-color:var(--sg-theme-panel-solid,#fff)!important;background-image:linear-gradient(45deg,transparent 50%,var(--sg-theme-muted,#718078) 50%),linear-gradient(135deg,var(--sg-theme-muted,#718078) 50%,transparent 50%)!important;background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px!important;background-size:5px 5px,5px 5px!important;background-repeat:no-repeat!important;cursor:pointer}
 .sg-task-card:has(.sg-task-dropdown-trigger[aria-expanded="true"]){position:relative;z-index:35;overflow:visible!important}
 .sg-task-dropdown{min-width:0;position:relative}
@@ -2270,6 +2314,19 @@ async function fbLoadLeaderboard() {
 // Friend connections are keyed by the two Firebase UIDs, not usernames, so a
 // later display-name change cannot create duplicate relationships. Username
 // snapshots are retained for the current UI and existing username-keyed data.
+async function fbSearchFriendUsernames(prefixRaw){
+  const prefix=normalizeFriendUsername(prefixRaw);
+  if(prefix.length<2)return {ok:true,usernames:[]};
+  try{
+    const matches=await getDocs(query(
+      collection(db,"usernames"),orderBy(documentId()),startAt(prefix),endAt(`${prefix}\uf8ff`),limit(30),
+    ));
+    return {ok:true,usernames:matches.docs.map(item=>item.id)};
+  }catch(error){
+    return {ok:false,error};
+  }
+}
+
 async function fbSendFriendRequest(currentUsernameRaw,targetUsernameRaw){
   const currentUsername=canonUsername(currentUsernameRaw);
   const targetUsername=normalizeFriendUsername(targetUsernameRaw);
@@ -3129,21 +3186,50 @@ function fbGetSocialRedirectResult(){
 // Providers must be attached to the *current* Firebase user. Signing in with
 // a provider from the login screen creates (or selects) a separate identity;
 // it cannot safely merge that identity's data on the client.
-async function fbLinkGoogleProvider() {
+async function fbLinkSocialProvider(kind) {
   const currentUser=auth.currentUser;
-  if(!currentUser)return {ok:false,error:"Sign in again before linking Google."};
-  if(currentUser.providerData?.some(provider=>provider.providerId==="google.com")){
+  const providerId=kind==="google"?"google.com":"apple.com";
+  const providerName=kind==="google"?"Google":"Apple";
+  if(!currentUser)return {ok:false,error:`Sign in again before linking ${providerName}.`};
+  if(currentUser.providerData?.some(provider=>provider.providerId===providerId)){
     return {ok:true,alreadyLinked:true};
   }
   try{
-    await linkWithPopup(currentUser,new GoogleAuthProvider());
+    const provider=kind==="google"?new GoogleAuthProvider():new OAuthProvider("apple.com");
+    if(kind==="apple"){
+      provider.addScope("email");
+      provider.addScope("name");
+    }
+    await linkWithPopup(currentUser,provider);
     return {ok:true};
   }catch(error){
     const code=String(error?.code||"");
     if(code.includes("credential-already-in-use")||code.includes("account-exists-with-different-credential")){
-      return {ok:false,error:"That Google account is already attached to another Lumora sign-in. Contact support to merge the two accounts; do not create another username."};
+      return {ok:false,error:`That ${providerName} account is already attached to another Lumora sign-in. Contact support to merge the accounts.`};
     }
     return {ok:false,error:socialAuthError(error)};
+  }
+}
+
+async function fbLinkEmailProvider(email,password) {
+  const currentUser=auth.currentUser;
+  const normalizedEmail=String(email||"").trim().toLowerCase();
+  if(!currentUser)return {ok:false,error:"Sign in again before adding email sign-in."};
+  if(currentUser.providerData?.some(provider=>provider.providerId==="password"))return {ok:true,alreadyLinked:true};
+  if(!normalizedEmail||normalizedEmail.length>254||!/^\S+@\S+\.\S+$/.test(normalizedEmail)){
+    return {ok:false,error:"Enter a valid email address."};
+  }
+  if(String(password||"").length<6)return {ok:false,error:"Password must be at least 6 characters."};
+  try{
+    await linkWithCredential(currentUser,EmailAuthProvider.credential(normalizedEmail,password));
+    return {ok:true};
+  }catch(error){
+    const code=String(error?.code||"");
+    if(code.includes("email-already-in-use")||code.includes("credential-already-in-use")||code.includes("account-exists-with-different-credential")){
+      return {ok:false,error:"That email is already attached to another Lumora account. Sign in to that account instead or contact support to merge the accounts."};
+    }
+    if(code.includes("requires-recent-login"))return {ok:false,error:"For security, sign out and sign back in before adding email sign-in."};
+    return {ok:false,error:directAuthError(error)};
   }
 }
 
@@ -5696,9 +5782,9 @@ function TreeSVG({ progress, color, paused, large, skin, enhance=0, thumbnail=fa
       })}
       {/* sparkles floating around */}
       {mg.sparkle && progress>=1 && [[-1.1,-0.4],[1.0,-0.7],[0.2,-1.2]].map(([dx,dy],i)=>(
-        <text key={i} x={cx+dx*canopyR} y={canopyTopY+dy*canopyR} fontSize={large?15:11} opacity="0.9">
-          ✨<animate attributeName="opacity" values="0.3;1;0.3" dur={`${2.5+i}s`} repeatCount="indefinite" begin={`${i*0.5}s`}/>
-        </text>
+        <image key={i} href={emojiAssetUrl("✨")} x={cx+dx*canopyR} y={canopyTopY+dy*canopyR-(large?12:9)} width={large?15:11} height={large?15:11} opacity="0.9">
+          <animate attributeName="opacity" values="0.3;1;0.3" dur={`${2.5+i}s`} repeatCount="indefinite" begin={`${i*0.5}s`}/>
+        </image>
       ))}
       {/* Enchanted Tree: soft pulsing fireflies (round glow dots, not diamonds —
           keeps it visually distinct from the star-family mystical skins) */}
@@ -6784,9 +6870,9 @@ const sh = {
   chipFadeL:{position:"absolute",left:0,top:0,bottom:4,width:26,background:"linear-gradient(to right,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
   chipFadeR:{position:"absolute",right:0,top:0,bottom:4,width:26,background:"linear-gradient(to left,#fff,rgba(255,255,255,0))",pointerEvents:"none"},
   chip:{flexShrink:0,display:"flex",alignItems:"center",gap:5,fontSize:12.5,fontWeight:600,color:"#5A6A5C",background:"#F5F7F2",border:"1.5px solid transparent",borderRadius:20,padding:"7px 13px",cursor:"pointer",whiteSpace:"nowrap"},
-  chipActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1.5px solid #BFE3CE"},
+  chipActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1.5px solid var(--sg-theme-border,#BFE3CE)"},
   chipCount:{fontSize:10,fontWeight:700,color:"#9AA69C",background:"var(--sg-theme-neutral,#fff)",borderRadius:8,padding:"1px 5px",marginLeft:1},
-  chipCountActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"#D7EEDF"},
+  chipCountActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#D7EEDF)"},
 
   toast:{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:12,textAlign:"center"},
 
@@ -6795,7 +6881,7 @@ const sh = {
 
   grid:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginTop:4,width:"100%",minWidth:0},
   card:{minWidth:0,minHeight:472,background:"var(--sg-theme-neutral,#F9FBF8)",borderRadius:17,padding:"13px 10px 18px",display:"flex",flexDirection:"column",alignItems:"center",border:"1.5px solid #E8EDE4",boxShadow:"0 2px 8px rgba(26,42,32,0.05)",position:"relative"},
-  cardActive:{border:"2px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#F0FBF6)",boxShadow:"0 3px 12px rgba(45,106,79,0.12)"},
+  cardActive:{border:"2px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#F0FBF6)",boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(45,106,79,0.12))"},
   newBadge:{position:"absolute",top:8,left:8,fontSize:9.5,fontWeight:800,color:"#fff",background:"linear-gradient(135deg,#FF8B6B,#FF6F61)",borderRadius:8,padding:"2px 7px",letterSpacing:0.6,boxShadow:"0 2px 5px rgba(255,111,97,0.35)"},
   flagshipBadge:{position:"absolute",top:8,left:8,fontSize:9,fontWeight:900,color:"#4B3B10",background:"linear-gradient(135deg,#FFF4A8,#E8C84E)",border:"1px solid #D8B83A",borderRadius:8,padding:"2px 7px",letterSpacing:0.8,boxShadow:"0 2px 7px rgba(190,145,25,0.24)",zIndex:2},
   tierBadge:{position:"absolute",top:8,right:9,fontSize:10,fontWeight:800,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:10,padding:"2px 7px",letterSpacing:1},
@@ -6805,8 +6891,8 @@ const sh = {
   skinName:{width:"100%",minWidth:0,fontSize:13,fontWeight:800,color:"#1a1a2e",marginTop:8,marginBottom:7,textAlign:"center",lineHeight:1.25,overflowWrap:"anywhere"},
   skinDesc:{width:"100%",minHeight:27,fontSize:9.75,color:"#929A93",marginBottom:7,textAlign:"center",lineHeight:1.35,display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:2,overflow:"hidden",overflowWrap:"anywhere"},
   tagRow:{width:"100%",minHeight:42,display:"flex",alignItems:"flex-start",justifyContent:"center",alignContent:"flex-start",gap:4,flexWrap:"wrap",marginBottom:16},
-  tag:{fontSize:9.5,fontWeight:750,lineHeight:1,color:"var(--sg-theme-accent-strong,#397553)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1px solid #CBE7D5",borderRadius:99,padding:"4px 7px",whiteSpace:"nowrap"},
-  freeBadge:{fontSize:10.5,color:"#56B68B",fontWeight:600,marginBottom:4,minHeight:14},
+  tag:{fontSize:9.5,fontWeight:750,lineHeight:1,color:"var(--sg-theme-accent-strong,#397553)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"1px solid var(--sg-theme-border,#CBE7D5)",borderRadius:99,padding:"4px 7px",whiteSpace:"nowrap"},
+  freeBadge:{fontSize:10.5,color:"var(--sg-theme-accent,#56B68B)",fontWeight:600,marginBottom:4,minHeight:14},
   costBadge:{fontSize:10.5,color:"#B8860B",fontWeight:700,marginBottom:4,minHeight:14},
   equippedBtn:{width:"100%",maxWidth:132,textAlign:"center",fontSize:11,color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,padding:"6px 10px",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20,marginTop:2},
   equipBtn:{width:"100%",maxWidth:150,height:40,boxSizing:"border-box",fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",border:"none",borderRadius:20,padding:"0 10px",cursor:"pointer",marginTop:0},
@@ -6877,7 +6963,7 @@ function EnhanceModal({ skin, tier, coins, onUpgrade, onClose, onBack }) {
         <div style={em.pipsRow}>
           {[1,2,3].map(t=>(
             <div key={t} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flex:1}}>
-              <div style={{...em.pipBar,...(t<=tier?em.pipBarOn:{}),...(t===previewTier?{outline:"2px solid #2D6A4F55",outlineOffset:2}:{})}}/>
+              <div style={{...em.pipBar,...(t<=tier?em.pipBarOn:{}),...(t===previewTier?{outline:"2px solid color-mix(in srgb, var(--sg-theme-accent) 45%, transparent)",outlineOffset:2}:{})}}/>
               <span style={{...em.pipLabel,...(t<=tier?{color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700}:{})}}>{tierMeta(t).name}</span>
             </div>
           ))}
@@ -6915,31 +7001,31 @@ const em = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:320},
   modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:440,maxHeight:"88vh",overflowY:"auto"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},
-  back:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
+  back:{background:"var(--sg-theme-control-track,#F0F2EE)",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"var(--sg-theme-muted,#666)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
   kicker:{fontSize:10,fontWeight:800,letterSpacing:1.5,color:"var(--sg-theme-accent-strong,#2D6A4F)"},
   title:{fontSize:19,fontWeight:700,color:"#1a1a2e",margin:0,letterSpacing:-0.2},
   coinBal:{fontSize:14,fontWeight:700,color:"#B8860B",background:"#FFF8E7",border:"1px solid #F0D060",borderRadius:20,padding:"4px 12px"},
   previewWrap:{display:"flex",alignItems:"center",gap:4,margin:"4px 0 6px"},
-  previewStage:{flex:1,height:230,display:"flex",alignItems:"flex-end",justifyContent:"center",position:"relative",background:"linear-gradient(180deg,#F2F8F0 0%,#E9F3E5 100%)",borderRadius:18,overflow:"hidden",boxShadow:"inset 0 1px 3px rgba(26,42,32,0.06)"},
+  previewStage:{flex:1,height:230,display:"flex",alignItems:"flex-end",justifyContent:"center",position:"relative",background:"var(--sg-theme-soft-gradient,linear-gradient(180deg,#F2F8F0 0%,#E9F3E5 100%))",borderRadius:18,overflow:"hidden",boxShadow:"inset 0 1px 3px var(--sg-theme-shadow,rgba(26,42,32,0.06))"},
   previewTree:{transform:"scale(0.82)",transformOrigin:"bottom center",paddingBottom:6},
-  arrow:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:36,height:36,fontSize:20,color:"#4A5A50",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1},
+  arrow:{background:"var(--sg-theme-control-track,#F0F2EE)",border:"none",borderRadius:"50%",width:36,height:36,fontSize:20,color:"var(--sg-theme-text,#4A5A50)",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1},
   lockBadge:{position:"absolute",top:10,right:10,background:"rgba(26,26,46,0.82)",color:"#fff",fontSize:11,fontWeight:700,borderRadius:14,padding:"5px 11px",backdropFilter:"blur(3px)"},
   bloomRing:{position:"absolute",left:"50%",bottom:70,width:60,height:60,marginLeft:-30,borderRadius:"50%",background:"radial-gradient(circle,rgba(255,240,180,0.85) 0%,rgba(180,230,190,0.4) 45%,transparent 70%)",pointerEvents:"none"},
   pipsRow:{display:"flex",gap:8,margin:"12px 2px 4px"},
-  pipBar:{height:6,width:"100%",borderRadius:4,background:"#E7ECE5",transition:"background 0.4s ease"},
-  pipBarOn:{background:"linear-gradient(90deg,#56B68B,#2D6A4F)"},
+  pipBar:{height:6,width:"100%",borderRadius:4,background:"var(--sg-theme-control-track,#E7ECE5)",transition:"background 0.4s ease"},
+  pipBarOn:{background:"var(--sg-theme-primary-gradient,linear-gradient(90deg,#56B68B,#2D6A4F))"},
   pipLabel:{fontSize:10.5,color:"#9AA69C",fontWeight:600},
-  detailCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,padding:"13px 15px",marginTop:12},
+  detailCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,padding:"13px 15px",marginTop:12},
   detailName:{fontSize:14,fontWeight:700,color:"#1a1a2e",display:"flex",alignItems:"center",gap:7},
   ownedTag:{fontSize:10,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:10,padding:"2px 8px"},
   lockedTag:{fontSize:10,fontWeight:700,color:"#8A8FA0",background:"#EEF0F4",borderRadius:10,padding:"2px 8px"},
   detailBlurb:{fontSize:12.5,color:"#7A857C",lineHeight:1.55,marginTop:4},
-  upgradeBtn:{display:"block",width:"100%",marginTop:14,padding:"14px 0",background:"linear-gradient(135deg,#2D6A4F,#3E8E68)",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#fff",cursor:"pointer",boxShadow:"0 4px 14px rgba(45,106,79,0.25)"},
+  upgradeBtn:{display:"block",width:"100%",marginTop:14,padding:"14px 0",background:"var(--sg-theme-primary-gradient,linear-gradient(135deg,#2D6A4F,#3E8E68))",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#fff",cursor:"pointer",boxShadow:"0 4px 14px var(--sg-theme-shadow,rgba(45,106,79,0.25))"},
   upgradeBtnDisabled:{background:"#D5DBD3",boxShadow:"none",cursor:"not-allowed",color:"#fff"},
   shortNote:{textAlign:"center",fontSize:12.5,color:"#C0392B",fontWeight:600,marginTop:8},
   applyNote:{textAlign:"center",fontSize:11.5,color:"#A9B2A9",marginTop:8,lineHeight:1.5},
-  maxedCard:{textAlign:"center",fontSize:13.5,fontWeight:600,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"linear-gradient(135deg,#EAF6EE,#F3FAF0)",border:"1px solid #D7EBDC",borderRadius:14,padding:"15px 14px",marginTop:14,lineHeight:1.5},
-  doneBtn:{display:"block",width:"100%",marginTop:12,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
+  maxedCard:{textAlign:"center",fontSize:13.5,fontWeight:600,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-soft-gradient,linear-gradient(135deg,#EAF6EE,#F3FAF0))",border:"1px solid var(--sg-theme-border,#D7EBDC)",borderRadius:14,padding:"15px 14px",marginTop:14,lineHeight:1.5},
+  doneBtn:{display:"block",width:"100%",marginTop:12,padding:"13px 0",background:"var(--sg-theme-control-track,#F5F7F2)",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"var(--sg-theme-muted,#666)",cursor:"pointer"},
 };
 
 // ── Garden Decoration Shop ────────────────────────────────────────────────────
@@ -7015,7 +7101,7 @@ const gs = {
   dDesc:{fontSize:10,color:"#aaa",marginBottom:8,textAlign:"center",lineHeight:1.3},
   ownedBadge:{fontSize:11,color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,padding:"5px 12px",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20},
   buyBtn:{fontSize:12,fontWeight:700,color:"#fff",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:20,padding:"6px 16px",cursor:"pointer"},
-  restoreBtn:{fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"#F3F8F1",border:"1px solid #CFE0CF",borderRadius:20,padding:"6px 14px",cursor:"pointer"},
+  restoreBtn:{fontSize:12,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#F3F8F1)",border:"1px solid var(--sg-theme-border,#CFE0CF)",borderRadius:20,padding:"6px 14px",cursor:"pointer"},
   buyBtnDisabled:{background:"#ccc",cursor:"not-allowed"},
   closeBtn:{display:"block",width:"100%",marginTop:18,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
 };
@@ -7217,7 +7303,7 @@ function AdminPanel({ admin, selfTools, animationMode, onAnimationModeChange, on
           )}
         </div>
 
-        {msg && <div style={{...ap.msg,textAlign:"center",color:msg.type==="ok"?"#2D6A4F":"#D9534F"}}>{msg.text}</div>}
+        {msg && <div style={{...ap.msg,textAlign:"center",color:msg.type==="ok"?"var(--sg-theme-accent-strong,#2D6A4F)":"#D9534F"}}>{msg.text}</div>}
 
         {/* Coins */}
         <div style={ap.section}>
@@ -7620,6 +7706,7 @@ const ase = {
 };
 
 function AccountPanel({ user, admin, onClose, onBack }) {
+  const readLinkedProviders=()=>auth.currentUser?.providerData?.map(provider=>provider.providerId)||[];
   const [adminCoins, setAdminCoins] = useState("");
   const [loading, setLoading]   = useState(true);
   const [recQ, setRecQ]         = useState(null);   // currently-set recovery question (or null)
@@ -7634,14 +7721,23 @@ function AccountPanel({ user, admin, onClose, onBack }) {
   const [ans, setAns]           = useState("");
   const [recMsg, setRecMsg]     = useState(null);
   const [recBusy, setRecBusy]   = useState(false);
-  const [googleMsg, setGoogleMsg] = useState(null);
-  const [googleBusy, setGoogleBusy] = useState(false);
+  const [linkedProviders, setLinkedProviders] = useState(readLinkedProviders);
+  const [linkMsg, setLinkMsg] = useState(null);
+  const [linkBusy, setLinkBusy] = useState("");
+  const [linkEmail, setLinkEmail] = useState(()=>auth.currentUser?.email||"");
+  const [linkPassword, setLinkPassword] = useState("");
+  const [linkPasswordConfirm, setLinkPasswordConfirm] = useState("");
 
   useEffect(()=>{ (async()=>{
     const info = await fbGetAccountInfo(user);
     if(info.ok){ setRecQ(info.recoveryQuestion); if(info.recoveryQuestion) setSelQ(info.recoveryQuestion); }
+    setLinkedProviders(readLinkedProviders());
+    setLinkEmail(auth.currentUser?.email||"");
     setLoading(false);
   })(); },[user]);
+
+  const providerLinked=providerId=>linkedProviders.includes(providerId);
+  const hasPasswordProvider=providerLinked("password");
 
   const changePassword = async () => {
     setPwMsg(null);
@@ -7668,14 +7764,32 @@ function AccountPanel({ user, admin, onClose, onBack }) {
     else setRecMsg({type:"err",text:res.error});
   };
 
-  const linkGoogle = async () => {
-    setGoogleMsg(null);
-    setGoogleBusy(true);
-    const res=await fbLinkGoogleProvider();
-    setGoogleBusy(false);
+  const linkSocial = async kind => {
+    const providerName=kind==="google"?"Google":"Apple";
+    setLinkMsg(null);
+    setLinkBusy(kind);
+    const res=await fbLinkSocialProvider(kind);
+    setLinkBusy("");
     if(res.ok){
-      setGoogleMsg({type:"ok",text:res.alreadyLinked?"Google is already linked to this account.":"Google sign-in linked ✓"});
-    }else setGoogleMsg({type:"err",text:res.error});
+      setLinkedProviders(readLinkedProviders());
+      setLinkMsg({type:"ok",text:res.alreadyLinked?`${providerName} is already linked.`:`${providerName} sign-in linked ✓`});
+    }else setLinkMsg({type:"err",text:res.error});
+  };
+
+  const linkEmailAndPassword = async () => {
+    setLinkMsg(null);
+    if(linkPassword!==linkPasswordConfirm){
+      setLinkMsg({type:"err",text:"Passwords don't match."});
+      return;
+    }
+    setLinkBusy("password");
+    const res=await fbLinkEmailProvider(linkEmail,linkPassword);
+    setLinkBusy("");
+    if(res.ok){
+      setLinkedProviders(readLinkedProviders());
+      setLinkPassword("");setLinkPasswordConfirm("");
+      setLinkMsg({type:"ok",text:res.alreadyLinked?"Email sign-in is already linked.":"Email and password sign-in linked ✓"});
+    }else setLinkMsg({type:"err",text:res.error});
   };
 
   return (
@@ -7704,8 +7818,8 @@ function AccountPanel({ user, admin, onClose, onBack }) {
               </div>
             )}
 
-            {/* Change password */}
-            <div style={ap.section}>
+            {/* Change password is available only after password sign-in is linked. */}
+            {hasPasswordProvider && <div style={ap.section}>
               <div style={ap.secTitle}>Change password</div>
               <input style={ap.input} type="password" placeholder="Current password"
                 value={curPw} onChange={e=>setCurPw(e.target.value)} autoComplete="current-password"/>
@@ -7713,21 +7827,46 @@ function AccountPanel({ user, admin, onClose, onBack }) {
                 value={newPw} onChange={e=>setNewPw(e.target.value)} autoComplete="new-password"/>
               <input style={ap.input} type="password" placeholder="Confirm new password"
                 value={confPw} onChange={e=>setConfPw(e.target.value)} autoComplete="new-password"/>
-              {pwMsg && <div style={{...ap.msg,color:pwMsg.type==="ok"?"#2D6A4F":"#D9534F"}}>{pwMsg.text}</div>}
+              {pwMsg && <div style={{...ap.msg,color:pwMsg.type==="ok"?"var(--sg-theme-accent-strong,#2D6A4F)":"#D9534F"}}>{pwMsg.text}</div>}
               <button style={{...ap.saveBtn,opacity:pwBusy?0.6:1}} disabled={pwBusy} onClick={changePassword}>
                 {pwBusy?"Saving…":"Update password"}
               </button>
-            </div>
+            </div>}
 
             <div style={ap.section}>
               <div style={ap.secTitle}>Linked sign-in methods</div>
               <div style={{fontSize:12.5,color:"#777",lineHeight:1.5,marginBottom:10}}>
-                Add Google to this same Lumora account so either method works.
+                Pair more ways to sign in without creating a separate Lumora profile.
               </div>
-              {googleMsg && <div style={{...ap.msg,color:googleMsg.type==="ok"?"#2D6A4F":"#D9534F"}}>{googleMsg.text}</div>}
-              <button style={{...ap.saveBtn,opacity:googleBusy?0.6:1}} disabled={googleBusy} onClick={linkGoogle}>
-                {googleBusy?"Linking…":"Link Google account"}
-              </button>
+              <div style={ap.linkedMethods} aria-label="Currently linked sign-in methods">
+                {providerLinked("google.com")&&<span style={ap.linkedMethod}>G&nbsp; Google ✓</span>}
+                {providerLinked("apple.com")&&<span style={ap.linkedMethod}>&nbsp; Apple ✓</span>}
+                {hasPasswordProvider&&<span style={ap.linkedMethod}>✉&nbsp; Email ✓</span>}
+              </div>
+              {linkMsg && <div style={{...ap.msg,color:linkMsg.type==="ok"?"var(--sg-theme-accent-strong,#2D6A4F)":"#D9534F"}}>{linkMsg.text}</div>}
+              {!providerLinked("google.com")&&<button style={{...ap.providerBtn,opacity:linkBusy?0.6:1}}
+                disabled={!!linkBusy} onClick={()=>linkSocial("google")}>
+                <span style={ap.providerIcon}>G</span><span>{linkBusy==="google"?"Linking Google…":"Link Google account"}</span>
+              </button>}
+              {!providerLinked("apple.com")&&<button style={{...ap.providerBtn,...ap.appleProviderBtn,opacity:linkBusy?0.6:1}}
+                disabled={!!linkBusy} onClick={()=>linkSocial("apple")}>
+                <span style={ap.providerIcon}></span><span>{linkBusy==="apple"?"Linking Apple…":"Link Apple account"}</span>
+              </button>}
+              {!hasPasswordProvider&&<div style={ap.emailLinkBox}>
+                <div style={ap.emailLinkTitle}>Add email and password</div>
+                <input style={ap.input} type="email" placeholder="Email address" autoComplete="email"
+                  value={linkEmail} onChange={e=>setLinkEmail(e.target.value)}/>
+                <input style={ap.input} type="password" placeholder="Create a password" autoComplete="new-password"
+                  value={linkPassword} onChange={e=>setLinkPassword(e.target.value)}/>
+                <input style={ap.input} type="password" placeholder="Confirm password" autoComplete="new-password"
+                  value={linkPasswordConfirm} onChange={e=>setLinkPasswordConfirm(e.target.value)}/>
+                <button style={{...ap.saveBtn,opacity:linkBusy?0.6:1}} disabled={!!linkBusy} onClick={linkEmailAndPassword}>
+                  {linkBusy==="password"?"Linking email…":"Link email sign-in"}
+                </button>
+              </div>}
+              {providerLinked("google.com")&&providerLinked("apple.com")&&hasPasswordProvider&&(
+                <div style={ap.allLinked}>All available sign-in methods are linked.</div>
+              )}
             </div>
 
             {/* Recovery question */}
@@ -7739,7 +7878,7 @@ function AccountPanel({ user, admin, onClose, onBack }) {
               </select>
               <input style={ap.input} type="text" placeholder="Your answer"
                 value={ans} onChange={e=>setAns(e.target.value)}/>
-              {recMsg && <div style={{...ap.msg,color:recMsg.type==="ok"?"#2D6A4F":"#D9534F"}}>{recMsg.text}</div>}
+              {recMsg && <div style={{...ap.msg,color:recMsg.type==="ok"?"var(--sg-theme-accent-strong,#2D6A4F)":"#D9534F"}}>{recMsg.text}</div>}
               <button style={{...ap.saveBtn,opacity:recBusy?0.6:1}} disabled={recBusy} onClick={saveRecovery}>
                 {recBusy?"Saving…":(recQ?"Update recovery question":"Set recovery question")}
               </button>
@@ -7777,22 +7916,30 @@ function AccountPanel({ user, admin, onClose, onBack }) {
 }
 const ap = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:340},
-  modal:{background:"#F7FAF6",borderRadius:"24px 24px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 -8px 32px rgba(0,0,0,0.18)"},
+  modal:{background:"var(--sg-theme-sheet,#F7FAF6)",borderRadius:"24px 24px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 -8px 32px rgba(0,0,0,0.18)"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16},
-  back:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:16,color:"#666",cursor:"pointer",flexShrink:0,lineHeight:1,marginTop:4},
-  kicker:{fontSize:10,fontWeight:700,color:"#7AA56B",letterSpacing:"1.5px",marginBottom:2},
+  back:{background:"var(--sg-theme-control-track,#EAEFE7)",border:"none",borderRadius:"50%",width:30,height:30,fontSize:16,color:"var(--sg-theme-muted,#666)",cursor:"pointer",flexShrink:0,lineHeight:1,marginTop:4},
+  kicker:{fontSize:10,fontWeight:700,color:"var(--sg-theme-accent-strong,#7AA56B)",letterSpacing:"1.5px",marginBottom:2},
   title:{fontSize:21,fontWeight:800,color:"#1a1a2e",margin:0,letterSpacing:"-0.5px"},
-  x:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,color:"#888",cursor:"pointer",flexShrink:0},
+  x:{background:"var(--sg-theme-control-track,#EAEFE7)",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,color:"var(--sg-theme-muted,#888)",cursor:"pointer",flexShrink:0},
   loading:{textAlign:"center",color:"#888",padding:"30px 0"},
   warn:{display:"flex",gap:9,alignItems:"flex-start",background:"#FFF6E5",border:"1.5px solid #F0D98C",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#8A6D2F",lineHeight:1.45,marginBottom:16,fontWeight:600},
   section:{background:"var(--sg-theme-neutral,#fff)",borderRadius:16,padding:"16px 15px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"},
   secTitle:{fontSize:14,fontWeight:800,color:"#1a1a2e",marginBottom:12},
   current:{fontSize:12,color:"#888",marginBottom:10,lineHeight:1.4},
-  input:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:14,marginBottom:9,background:"#FAFCF9",outline:"none"},
-  select:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:13.5,marginBottom:9,background:"#FAFCF9",outline:"none",cursor:"pointer"},
+  input:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",borderRadius:12,fontSize:14,marginBottom:9,background:"var(--sg-theme-panel-solid,#FAFCF9)",color:"var(--sg-theme-text,#1a1a2e)",outline:"none"},
+  select:{display:"block",width:"100%",boxSizing:"border-box",padding:"11px 13px",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",borderRadius:12,fontSize:13.5,marginBottom:9,background:"var(--sg-theme-panel-solid,#FAFCF9)",color:"var(--sg-theme-text,#1a1a2e)",outline:"none",cursor:"pointer"},
   msg:{fontSize:12.5,fontWeight:600,margin:"2px 2px 10px"},
   saveBtn:{display:"block",width:"100%",padding:"12px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",marginTop:3},
-  doneBtn:{display:"block",width:"100%",marginTop:6,padding:"14px 0",background:"#F0F2EE",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"#666",cursor:"pointer"},
+  linkedMethods:{display:"flex",flexWrap:"wrap",gap:7,marginBottom:11},
+  linkedMethod:{display:"inline-flex",alignItems:"center",padding:"6px 9px",borderRadius:999,background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:11,fontWeight:750},
+  providerBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"11px 12px",marginTop:8,border:"1.5px solid var(--sg-theme-border,#DDE5DB)",borderRadius:12,background:"var(--sg-theme-panel-solid,#fff)",color:"var(--sg-theme-text,#26362D)",fontSize:13.5,fontWeight:700,cursor:"pointer"},
+  appleProviderBtn:{background:"#1F2421",borderColor:"#1F2421",color:"#fff"},
+  providerIcon:{display:"inline-grid",placeItems:"center",width:20,fontSize:16,fontWeight:800,lineHeight:1},
+  emailLinkBox:{marginTop:10,paddingTop:12,borderTop:"1px solid var(--sg-theme-border,#E0E8DC)"},
+  emailLinkTitle:{fontSize:12.5,fontWeight:750,color:"var(--sg-theme-text,#33463A)",marginBottom:9},
+  allLinked:{padding:"10px 12px",borderRadius:11,background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:12,fontWeight:700,textAlign:"center"},
+  doneBtn:{display:"block",width:"100%",marginTop:6,padding:"14px 0",background:"var(--sg-theme-control-track,#F0F2EE)",border:"none",borderRadius:14,fontSize:15,fontWeight:700,color:"var(--sg-theme-muted,#666)",cursor:"pointer"},
 };
 
 const formatAnnouncementDate = ms => {
@@ -8259,7 +8406,7 @@ function Announcements({user,isAdmin,theme,lastReadAt,onRead}){
 
 const announceStyles = {
   panelHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"calc(17px + env(safe-area-inset-top)) 16px 13px",borderBottom:"1px solid #E3EAE0",background:"var(--sg-theme-neutral,rgba(255,255,255,.86))",backdropFilter:"blur(10px)"},
-  panelKicker:{fontSize:9.5,fontWeight:800,letterSpacing:"1.3px",color:"#7AA56B"},
+  panelKicker:{fontSize:9.5,fontWeight:800,letterSpacing:"1.3px",color:"var(--sg-theme-accent-strong,#7AA56B)"},
   panelTitle:{fontSize:20,fontWeight:800,letterSpacing:"-.4px",margin:"2px 0 0",color:"#213127"},
   closeBtn:{width:32,height:32,border:0,borderRadius:"50%",background:"#EDF2EB",color:"#6E7D71",fontSize:13,cursor:"pointer",flexShrink:0},
   newBtn:{display:"block",width:"100%",padding:"10px 12px",margin:"14px 0 10px",border:"1px solid #D7E4D3",borderRadius:12,background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#376048)",fontSize:12.5,fontWeight:750,cursor:"pointer"},
@@ -8350,22 +8497,31 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
+  const viewItems = [
+    { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
+    { id:"leaderboard", icon:"🏆", label:"Board", sub:"Rankings and groups", notificationCount:friendRequestsNotificationCount, notificationLabel:"incoming friend requests" },
+    { id:"planner", icon:"▦", label:"Planner", sub:"Tasks and deadlines", notificationCount:plannerNotificationCount, notificationLabel:"planner notifications" },
+    { id:"stats", icon:"📊", label:"Stats", sub:"Progress and history" },
+  ];
   const items = [
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
-    { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, onClick:onBadges },
+    { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, notificationCount:achievementsNotificationCount, notificationLabel:"unclaimed achievement rewards", onClick:onBadges },
     { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
+    ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
+  ];
+  const boringItems = [
     { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
     { icon:"◇", label:"Privacy & Data", sub:"Read the Lumora privacy policy", onClick:onPrivacyData },
     { icon:"👋", label:"Replay onboarding", sub:"View the welcome questions again", onClick:onReplayOnboarding },
-    ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
-  return (
-    <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
-      <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
+  return createPortal((
+    <div className="sg-shell" style={{...themeStyle,display:"contents"}} data-background={backgroundId}>
+      <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
+        <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
         <div style={hm.grabber}/>
         <button style={hm.profile} className="sg-tap-card" onClick={onAccount}>
           <span style={hm.avatar}>{user.slice(0,1).toUpperCase()}</span>
@@ -8388,8 +8544,45 @@ function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins,
           <span aria-hidden="true">🪙</span>
           <span>{grantingCoins?"Adding…":"Add 1,000 test coins"}</span>
         </button>}
+        <div style={hm.sectionLabel}>VIEWS</div>
+        <div style={hm.list}>
+          {viewItems.map(it=>{
+            const isActive=activeView===it.id;
+            return <button key={it.id} className="sg-tap-card" aria-current={isActive?"page":undefined}
+              style={{...hm.item,...(isActive?hm.viewItemActive:{})}} onClick={()=>onNavigate(it.id)}>
+              <span style={hm.itemIcon}>{it.icon}</span>
+              <span style={{flex:1,textAlign:"left"}}>
+                <span style={{...hm.itemLabel,...(isActive?hm.viewLabelActive:{})}}>{it.label}</span>
+                <span style={hm.itemSub}>{it.sub}</span>
+              </span>
+              {it.notificationCount>0&&<span className="sg-notification-count" aria-label={`${it.notificationCount} ${it.notificationLabel}`}>
+                {it.notificationCount>9?"9+":it.notificationCount}
+              </span>}
+              <span style={isActive?hm.activeMark:hm.chev}>{isActive?"✓":"›"}</span>
+            </button>;
+          })}
+        </div>
+        <div style={hm.divider}/>
+        <div style={hm.sectionLabel}>SETTINGS</div>
         <div style={hm.list}>
           {items.map(it=>(
+            <button key={it.label} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
+              <span style={hm.itemIcon}>{it.icon}</span>
+              <span style={{flex:1,textAlign:"left"}}>
+                <span style={hm.itemLabel}>{it.label}</span>
+                <span style={hm.itemSub}>{it.sub}</span>
+              </span>
+              {it.notificationCount>0&&<span className="sg-notification-count" aria-label={`${it.notificationCount} ${it.notificationLabel}`}>
+                {it.notificationCount>9?"9+":it.notificationCount}
+              </span>}
+              <span style={hm.chev}>›</span>
+            </button>
+          ))}
+        </div>
+        <div style={hm.divider}/>
+        <div style={hm.sectionLabel}>THE BORING STUFF</div>
+        <div style={hm.list}>
+          {boringItems.map(it=>(
             <button key={it.label} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
               <span style={hm.itemIcon}>{it.icon}</span>
               <span style={{flex:1,textAlign:"left"}}>
@@ -8421,34 +8614,39 @@ function HeaderMenu({ user, coins, streak, badgeCount, isAdmin, canAddTestCoins,
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#E07B54"}}>Log out</span>
         </button>
         <button style={hm.closeBtn} onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
-  );
+  ),document.body);
 }
 const hm = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:350},
   sheet:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
   grabber:{width:36,height:4,borderRadius:4,background:"#E0E0E0",margin:"0 auto 14px"},
-  profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,cursor:"pointer",marginBottom:10},
+  profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,cursor:"pointer",marginBottom:10},
   testCoins:{display:"flex",alignItems:"center",justifyContent:"center",gap:7,width:"100%",minHeight:40,margin:"-2px 0 10px",border:"1px solid #E8D28A",borderRadius:13,background:"#FFF8E7",color:"#8B6815",fontSize:12,fontWeight:750,cursor:"pointer"},
   avatar:{width:42,height:42,borderRadius:"50%",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
   name:{fontSize:16,fontWeight:700,color:"#1a1a2e"},
   meta:{fontSize:12,color:"#999",marginTop:2},
+  sectionLabel:{fontSize:10,fontWeight:800,letterSpacing:"1.2px",color:"var(--sg-theme-muted,#888)",padding:"2px 6px 7px"},
   list:{display:"flex",flexDirection:"column",gap:4},
-  item:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,padding:"12px 14px",cursor:"pointer",transition:"background 0.15s"},
+  item:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,padding:"12px 14px",cursor:"pointer",transition:"background 0.15s"},
+  viewItemActive:{background:"var(--sg-theme-panel-solid,#fff)",borderColor:"var(--sg-theme-accent,#2D6A4F)",boxShadow:"0 2px 10px var(--sg-theme-shadow,rgba(0,0,0,.08))"},
   itemIcon:{fontSize:20,width:24,textAlign:"center",flexShrink:0},
   itemLabel:{display:"block",fontSize:14,fontWeight:700,color:"#1a1a2e"},
+  viewLabelActive:{color:"var(--sg-theme-accent-strong,#2D6A4F)"},
   itemSub:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
   chev:{fontSize:18,color:"#ccc",fontWeight:700},
-  divider:{height:1,background:"#EEF2EC",margin:"12px 0"},
+  activeMark:{fontSize:15,color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:800},
+  divider:{height:1,background:"var(--sg-theme-border,#EEF2EC)",margin:"12px 0"},
   motionCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"7px 8px 10px"},
-  motionTitle:{fontSize:13,fontWeight:750,color:"#33463A"},
-  motionSub:{fontSize:9.5,color:"#98A099",marginTop:2},
-  motionOptions:{display:"flex",gap:3,padding:3,borderRadius:11,background:"#EEF2EC",flexShrink:0},
-  motionOption:{border:0,borderRadius:8,background:"transparent",padding:"6px 8px",fontSize:9.5,fontWeight:750,color:"#7A867D",cursor:"pointer"},
+  motionTitle:{fontSize:13,fontWeight:750,color:"var(--sg-theme-text,#33463A)"},
+  motionSub:{fontSize:9.5,color:"var(--sg-theme-muted,#98A099)",marginTop:2},
+  motionOptions:{display:"flex",gap:3,padding:3,borderRadius:11,background:"var(--sg-theme-control-track,#EEF2EC)",flexShrink:0},
+  motionOption:{border:0,borderRadius:8,background:"transparent",padding:"6px 8px",fontSize:9.5,fontWeight:750,color:"var(--sg-theme-muted,#7A867D)",cursor:"pointer"},
   motionOptionOn:{background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",boxShadow:"0 1px 4px rgba(30,55,38,.12)"},
   row:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"transparent",border:"none",borderRadius:12,padding:"11px 14px",cursor:"pointer"},
-  closeBtn:{display:"block",width:"100%",marginTop:10,padding:"13px 0",background:"#F5F7F2",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"#666",cursor:"pointer"},
+  closeBtn:{display:"block",width:"100%",marginTop:10,padding:"13px 0",background:"var(--sg-theme-control-track,#F5F7F2)",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"var(--sg-theme-muted,#666)",cursor:"pointer"},
 };
 
 // ── Smart Analytics Dashboard ─────────────────────────────────────────────────
@@ -8647,7 +8845,7 @@ const sd = {
   modal:{background:"#F7FAF6",borderRadius:"24px 24px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 -8px 32px rgba(0,0,0,0.18)"},
   header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16},
   back:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:16,color:"#666",cursor:"pointer",flexShrink:0,lineHeight:1,marginTop:4},
-  kicker:{fontSize:10,fontWeight:700,color:"#7AA56B",letterSpacing:"1.5px",marginBottom:2},
+  kicker:{fontSize:10,fontWeight:700,color:"var(--sg-theme-accent-strong,#7AA56B)",letterSpacing:"1.5px",marginBottom:2},
   title:{fontSize:21,fontWeight:800,color:"#1a1a2e",margin:0,letterSpacing:"-0.5px"},
   x:{background:"#EAEFE7",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,color:"#888",cursor:"pointer",flexShrink:0},
   empty:{fontSize:14,color:"#888",textAlign:"center",lineHeight:1.6,padding:"30px 12px"},
@@ -8659,7 +8857,7 @@ const sd = {
   secTitle:{fontSize:11,fontWeight:700,color:"#8A968A",textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:10},
   insightList:{display:"flex",flexDirection:"column",gap:8},
   insight:{display:"flex",alignItems:"flex-start",gap:11,borderRadius:14,padding:"13px 14px",border:"1.5px solid"},
-  insightGood:{background:"var(--sg-theme-neutral,#fff)",borderColor:"#D8EBDF"},
+  insightGood:{background:"var(--sg-theme-neutral,#fff)",borderColor:"var(--sg-theme-border,#D8EBDF)"},
   insightSoft:{background:"#FFFBF4",borderColor:"#F0E2C8"},
   insightIcon:{fontSize:20,lineHeight:1.1,flexShrink:0},
   insightTitle:{fontSize:13.5,fontWeight:800,color:"#1a1a2e",marginBottom:2,lineHeight:1.25},
@@ -8878,9 +9076,9 @@ const ec = {
   overlay:{position:"fixed",inset:0,background:"rgba(18,32,23,.44)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:10},
   modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:20,padding:"22px 20px",width:"100%",maxWidth:430,height:"min(92dvh,760px)",maxHeight:"calc(100dvh - 20px)",display:"flex",flexDirection:"column",boxShadow:"0 12px 36px rgba(25,45,32,.2)",overflowY:"auto"},
   header:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16},
-  kicker:{fontSize:9,fontWeight:800,color:"#7AA56B",letterSpacing:"1.1px",marginBottom:2},
+  kicker:{fontSize:9,fontWeight:800,color:"var(--sg-theme-accent-strong,#7AA56B)",letterSpacing:"1.1px",marginBottom:2},
   title:{fontSize:19,fontWeight:800,color:"#1A2E22",margin:0,letterSpacing:"-.35px"},
-  closeBtn:{width:30,height:30,border:"none",borderRadius:"50%",background:"#EEF2EC",color:"#718077",fontSize:20,cursor:"pointer",lineHeight:1},
+  closeBtn:{width:30,height:30,border:"none",borderRadius:"50%",background:"var(--sg-theme-control-track,#EEF2EC)",color:"var(--sg-theme-muted,#718077)",fontSize:20,cursor:"pointer",lineHeight:1},
   label:{display:"flex",flexDirection:"column",gap:5,fontSize:11,fontWeight:700,color:"#69756D",marginBottom:11,minWidth:0},
   input:{display:"block",width:"100%",minWidth:0,padding:"10px 11px",border:"1.5px solid #DDE6DA",borderRadius:11,fontSize:13,color:"#26362C",background:"var(--sg-theme-neutral,#fff)",outline:"none",fontFamily:"inherit"},
   essentialGrid:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9},
@@ -9331,8 +9529,11 @@ function WeeklyTargetsModal({ subjects, targets, onSave, onClose }) {
   return (
     <div style={wt.overlay} className="sg-overlay-anim" onClick={onClose}>
       <div style={wt.modal} className="sg-pop-anim" onClick={e=>e.stopPropagation()}>
-        <h3 style={wt.title}>🎯 Weekly Targets</h3>
-        <p style={wt.sub}>Set focus hours per subject each week. Great for balancing a multi-subject VCE load.</p>
+        <div style={wt.titleRow}>
+          <h3 style={wt.title}>Weekly Targets</h3>
+          <span style={wt.titleEmoji} aria-hidden="true">🎯</span>
+        </div>
+        <p style={wt.sub}>Set focus hours per subject each week.</p>
         {subjects.map(s=>(
           <div key={s.id} style={wt.row}>
             <span style={{...wt.dot,background:s.color}}/>
@@ -9355,8 +9556,10 @@ function WeeklyTargetsModal({ subjects, targets, onSave, onClose }) {
 const wt = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20},
   modal:{background:"var(--sg-theme-neutral,#fff)",borderRadius:20,padding:"24px 20px",width:"100%",maxWidth:360,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",maxHeight:"82vh",overflowY:"auto"},
-  title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:"0 0 4px"},
-  sub:{fontSize:12,color:"#aaa",margin:"0 0 16px",lineHeight:1.5},
+  titleRow:{display:"flex",alignItems:"center",justifyContent:"flex-start",gap:8,marginBottom:4},
+  title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
+  titleEmoji:{display:"inline-flex",alignItems:"center",fontSize:18,lineHeight:1,flexShrink:0},
+  sub:{fontSize:14,color:"#aaa",margin:"0 0 16px",lineHeight:1.45},
   row:{display:"flex",alignItems:"center",gap:8,marginBottom:10},
   dot:{width:9,height:9,borderRadius:"50%",flexShrink:0},
   emoji:{fontSize:16},
@@ -10015,7 +10218,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   return (
     <div style={S.loginWrap}>
       <div style={S.loginCard}>
-        <div style={{fontSize:60,marginBottom:8}}>🧑‍🎓</div>
+        <img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:60,height:60,objectFit:"contain",margin:"0 auto 8px"}}/>
         <h1 style={S.loginTitle}>Lumora</h1>
         <p style={S.loginSub}>Grow your focus. Build your future.</p>
         <input style={{...S.input,...(err&&!pass?S.inputErr:{})}}
@@ -10060,7 +10263,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
           <span>or continue with</span>
           <span style={{height:1,background:"#DFE7DF",flex:1}} />
         </div>
-        <button style={{...S.primaryBtn,background:"var(--sg-theme-neutral,#fff)",color:"#27332A",border:"1px solid #D6E0D6",boxShadow:"none",opacity:loading?0.6:1}}
+        <button style={{...S.primaryBtn,background:"var(--sg-theme-neutral,#fff)",color:"#342738",border:"1px solid #E3D5E7",boxShadow:"none",opacity:loading?0.6:1}}
           onClick={()=>socialSignIn("google")} disabled={loading}>G&nbsp;&nbsp;Continue with Google</button>
         <button style={{...S.primaryBtn,background:"#1F2421",marginTop:8,opacity:loading?0.6:1}}
           onClick={()=>socialSignIn("apple")} disabled={loading}>&nbsp;&nbsp;Continue with Apple</button>
@@ -11685,7 +11888,7 @@ function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={},
         <div style={an.statCard}><div style={an.statVal}>{fmtMins(avg)}</div><div style={an.statLbl}>Avg session</div></div>
       </div>
       <h3 style={an.subTitle}>{range==="week"?"This week by day":range==="month"?"This month by day":"This year by month"}</h3>
-      <BarChart bars={bars} maxVal={Math.max(...bars.map(b=>b.value),1)} color="#56B68B"/>
+            <BarChart bars={bars} maxVal={Math.max(...bars.map(b=>b.value),1)} color="var(--sg-theme-accent,#56B68B)"/>
       <h3 style={an.subTitle}>By subject</h3>
       {balanceNudge && (
         <div style={{...an.nudge,borderColor:balanceNudge.worst.color+"55",background:balanceNudge.worst.color+"0D"}}>
@@ -11865,9 +12068,9 @@ function LeaderboardRows({entries,currentUser,subjects,onVisit,loading=false,emp
     return <div key={entry.username} style={{...gl.boardRow,...(i<3?podiumStyles[i]:{}),...(isMe?gl.boardRowMe:{}),cursor:"pointer"}}
       className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s classroom`}>
       <div style={{...gl.rankBadge,...(i<3?gl.rankBadgePodium:{})}}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
-      <div style={{...gl.avatar,background:isMe?"#4F9D73":"#E6EEE7",color:isMe?"#fff":"#506258"}}>{entry.username.slice(0,1).toUpperCase()}</div>
+      <div style={{...gl.avatar,background:isMe?"var(--sg-theme-accent,#4F9D73)":"var(--sg-theme-accent-wash,#E6EEE7)",color:isMe?"#fff":"var(--sg-theme-muted,#506258)"}}>{entry.username.slice(0,1).toUpperCase()}</div>
       <div style={gl.boardIdentity}>
-        <div style={{...gl.boardUsername,color:isMe?"#2D6A4F":"#1A2E22"}}>{entry.username}{isMe&&<span style={gl.youTag}>you</span>}</div>
+        <div style={{...gl.boardUsername,color:isMe?"var(--sg-theme-accent-strong,#2D6A4F)":"#1A2E22"}}>{entry.username}{isMe&&<span style={gl.youTag}>you</span>}</div>
         <div style={gl.boardMeta}>{entry.sessions} session{entry.sessions!==1?"s":""}{topSubj&&<span> · {topSubj.emoji} {topSubj.label}</span>}</div>
       </div>
       <div style={gl.focusTime}><strong style={{fontSize:13,color:"#23372A"}}>{fmtMins(entry.totalSecs)}</strong><span style={{fontSize:8.5,color:"#9AA39C"}}>focused</span></div>
@@ -11913,15 +12116,45 @@ function WeeklyGroupRewardCard({group,weeklyEntries,rewardDate=new Date(),histor
   </div>;
 }
 
-function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network, currentWeekKey }) {
+function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit, network, currentWeekKey, onRetryNetwork }) {
   const [view,setView]=useState("weekly");
   const [weekOffset,setWeekOffset]=useState(1);
   const [pastEntries,setPastEntries]=useState([]);
   const [pastLoading,setPastLoading]=useState(false);
   const [managing,setManaging]=useState(false);
   const [friendUsername,setFriendUsername]=useState("");
+  const [chosenSuggestion,setChosenSuggestion]=useState("");
+  const [usernameSuggestions,setUsernameSuggestions]=useState([]);
+  const [suggestionsLoading,setSuggestionsLoading]=useState(false);
+  const [suggestionsError,setSuggestionsError]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  useEffect(()=>{
+    const prefix=normalizeFriendUsername(friendUsername);
+    let live=true;
+    if(!managing||prefix.length<2||prefix===chosenSuggestion){
+      setUsernameSuggestions([]);
+      setSuggestionsLoading(false);
+      setSuggestionsError("");
+      return()=>{live=false;};
+    }
+    setUsernameSuggestions([]);
+    setSuggestionsError("");
+    setSuggestionsLoading(true);
+    const timer=setTimeout(async()=>{
+      const result=await fbSearchFriendUsernames(prefix);
+      if(!live)return;
+      setSuggestionsLoading(false);
+      if(result.ok){setUsernameSuggestions(result.usernames);setSuggestionsError("");}
+      else{
+        setUsernameSuggestions([]);
+        setSuggestionsError(result.error?.code?.includes("permission-denied")
+          ? "Username search is blocked by Firebase rules. Publish the current firestore.rules file."
+          : "Username suggestions could not be loaded. You can still enter a username directly.");
+      }
+    },180);
+    return()=>{live=false;clearTimeout(timer);};
+  },[friendUsername,managing,chosenSuggestion]);
   useEffect(()=>{
     if(view!=="past")return;
     let live=true;
@@ -11933,6 +12166,7 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
   },[view,weekOffset,currentWeekKey]);
   const sourceEntries=view==="past"?pastEntries:(data[view]||[]);
   const entries=useMemo(()=>filterBoardForFriends(sourceEntries,currentUser,network.friends),[sourceEntries,currentUser,network.friends]);
+  const visibleSuggestions=useMemo(()=>filterFriendUsernameSuggestions(usernameSuggestions,friendUsername,currentUser,network),[usernameSuggestions,friendUsername,currentUser,network]);
   const showLoading=view==="past"?pastLoading:loading;
   const run=async action=>{
     if(busy)return false;
@@ -11941,7 +12175,7 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
     finally{setBusy(false);}
   };
   const send=async()=>{
-    if(await run(()=>fbSendFriendRequest(currentUser,friendUsername)))setFriendUsername("");
+    if(await run(()=>fbSendFriendRequest(currentUser,friendUsername))){setFriendUsername("");setChosenSuggestion("");setUsernameSuggestions([]);}
   };
   const respond=async(request,accept)=>{await run(()=>fbRespondFriendRequest(currentUser,request.id,accept));};
   const cancel=async request=>{await run(()=>fbCancelFriendRequest(request.id));};
@@ -11955,33 +12189,64 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
         <div><div style={fr.kicker}>YOUR STUDY CIRCLE</div><div style={fr.title}>Friends</div><div style={fr.subtitle}>Only accepted friends can see your status, subject and rankings.</div></div>
         <button style={gl.manageBtn} onClick={()=>setManaging(value=>!value)}>{managing?"Done":"Friend settings"}</button>
       </div>
-      {managing&&<div style={gl.manageCard}><div style={fr.addRow}>
-        <input style={gl.input} value={friendUsername} maxLength={20} onChange={event=>{setFriendUsername(event.target.value);setError("");}}
-          onKeyDown={event=>event.key==="Enter"&&friendUsername.trim()&&send()} placeholder="Add by username" aria-label="Friend username"/>
-        <button style={fr.addBtn} onClick={send} disabled={busy||!friendUsername.trim()}>{busy?"…":"Add"}</button>
-      </div>
-      {error&&<div style={/permission/i.test(error)?fr.notice:gl.error} role="status">
-        {/permission/i.test(error)?"Friend requests are temporarily unavailable.":error}
+      {managing&&<div style={gl.manageCard}>
+        <div style={fr.addRow}>
+          <input style={gl.input} value={friendUsername} maxLength={20} onChange={event=>{setFriendUsername(event.target.value);setChosenSuggestion("");setError("");}}
+            onKeyDown={event=>event.key==="Enter"&&friendUsername.trim()&&send()} placeholder="Add by username" aria-label="Friend username" autoComplete="off"/>
+          <button style={fr.addBtn} onClick={send} disabled={busy||!friendUsername.trim()}>{busy?"…":"Add"}</button>
+        </div>
+        {suggestionsLoading&&<div style={fr.suggestionStatus} role="status">Searching usernames…</div>}
+        {visibleSuggestions.length>0&&<div style={fr.suggestions} aria-label="Matching usernames">
+          {visibleSuggestions.map(username=><div key={username} style={fr.suggestionRow}>
+            <span style={fr.suggestionName}>{username}</span>
+            <button type="button" style={fr.suggestionAdd} onClick={()=>{setFriendUsername(username);setChosenSuggestion(username);setUsernameSuggestions([]);setSuggestionsError("");}}
+              aria-label={`Put ${username} in the friend username field`} title={`Choose ${username}`}>+</button>
+          </div>)}
+        </div>}
+        {suggestionsError&&<div style={fr.suggestionStatus} role="status">{suggestionsError}</div>}
+        {error&&<div style={/permission/i.test(error)?fr.notice:gl.error} role="status">
+          {/permission/i.test(error)?"Friend requests are blocked by Firebase rules. Publish the current firestore.rules file.":error}
+        </div>}
+        {network.friends.length>0&&<div style={fr.friendList}>
+          {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}>
+            <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><span style={fr.friendDot}/>{friend.username}</button>
+            <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
+          </div>)}
+        </div>}
       </div>}
-      {network.error&&<div style={fr.notice} role="status">Friends are temporarily unavailable.</div>}
 
-      {network.incoming.length>0&&<div style={fr.requestCard}>
-        <div style={gl.sectionLabel}>FRIEND REQUESTS</div>
-        {network.incoming.map(request=><div key={request.id} style={fr.requestRow}>
-          <span style={fr.avatar}>{request.username.slice(0,1).toUpperCase()}</span><strong style={fr.requestName}>{request.username}</strong>
-          <button style={gl.acceptBtn} disabled={busy} onClick={()=>respond(request,true)}>Accept</button>
-          <button style={gl.declineBtn} disabled={busy} onClick={()=>respond(request,false)} aria-label={`Decline ${request.username}`}>×</button>
-        </div>)}
+      <section style={fr.reviewCard} aria-label="Friend request review">
+        <div style={fr.reviewHeader}>
+          <strong style={fr.reviewTitle}>Review</strong>
+          {network.incoming.length>0&&<span className="sg-notification-count" aria-label={`${network.incoming.length} incoming friend requests`}>
+            {network.incoming.length>9?"9+":network.incoming.length}
+          </span>}
+        </div>
+        <div style={fr.reviewGroup}>
+          <div style={fr.reviewLabel}>Incoming</div>
+          {network.incoming.length>0?network.incoming.map(request=><div key={request.id} style={fr.requestRow}>
+            <span style={fr.avatar}>{request.username.slice(0,1).toUpperCase()}</span>
+            <strong style={fr.requestName}>{request.username}</strong>
+            <button style={gl.acceptBtn} disabled={busy} onClick={()=>respond(request,true)}>Accept</button>
+            <button style={fr.rejectRequest} disabled={busy} onClick={()=>respond(request,false)} aria-label={`Reject ${request.username}`}>Reject</button>
+          </div>):<div style={fr.reviewEmpty}>No incoming requests.</div>}
+        </div>
+        <div style={fr.reviewGroup}>
+          <div style={fr.reviewLabel}>Outgoing</div>
+          {network.outgoing.length>0?network.outgoing.map(request=><div key={request.id} style={fr.outgoingRow}>
+            <span>Request sent to <b>{request.username}</b></span>
+            <button type="button" style={fr.cancelRequest} onClick={()=>cancel(request)} disabled={busy}>Cancel</button>
+          </div>):<div style={fr.reviewEmpty}>No outgoing requests.</div>}
+        </div>
+      </section>
+
+      {error&&!managing&&<div style={/permission/i.test(error)?fr.networkError:gl.error} role="status">
+        {/permission/i.test(error)?"Friend request changes are blocked by Firebase rules. Publish the current firestore.rules file.":error}
       </div>}
-      {network.outgoing.length>0&&<div style={fr.outgoing}>
-        <span>Pending:</span>{network.outgoing.map(request=><span key={request.id} style={fr.pendingChip}>{request.username}<button onClick={()=>cancel(request)} disabled={busy} aria-label={`Cancel request to ${request.username}`}>×</button></span>)}
+      {network.error&&<div style={fr.networkError} role="status">
+        <span>{friendNetworkErrorMessage(network.error)}</span>
+        <button type="button" style={fr.retryNetwork} onClick={onRetryNetwork}>Retry</button>
       </div>}
-      {network.friends.length>0&&<div style={fr.friendList}>
-        {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}>
-          <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><span style={fr.friendDot}/>{friend.username}</button>
-          <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
-        </div>)}
-      </div>}</div>}
 
       <div style={S.toggleRow}>
         {[["weekly","This Week"],["allTime","All Time"],["past","History"]].map(([id,lbl])=>(
@@ -11999,8 +12264,24 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
 }
 
 const fr={
-  hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"linear-gradient(135deg,#EAF6EE,#F7F4FD)",border:"1px solid #D9E8DD",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"#6E9D7E"},title:{fontSize:18,fontWeight:850,color:"#20372A",marginTop:1},subtitle:{fontSize:10.5,color:"#7C8A81",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--sg-theme-neutral,rgba(255,255,255,.82))",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px rgba(45,106,79,.08)"},
-  addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",gap:7,alignItems:"center",padding:"4px 0"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
+  friendTabLabel:{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6},
+  suggestions:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid var(--sg-theme-border,#E4EAE1)",borderRadius:12,overflow:"hidden",margin:"-3px 0 9px"},
+  suggestionRow:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,minHeight:38,padding:"4px 7px 4px 11px",borderBottom:"1px solid var(--sg-theme-border,#EDF1EB)"},
+  suggestionName:{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",fontSize:12,fontWeight:700,color:"var(--sg-theme-text,#405348)"},
+  suggestionAdd:{display:"grid",placeItems:"center",flex:"0 0 auto",width:27,height:27,border:0,borderRadius:"50%",background:"var(--sg-theme-accent-wash,#EAF4EC)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:19,fontWeight:800,lineHeight:1,cursor:"pointer"},
+  suggestionStatus:{fontSize:10,color:"var(--sg-theme-muted,#718078)",padding:"2px 3px 8px"},
+  reviewCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid var(--sg-theme-border,#E0E8DE)",borderRadius:14,padding:"10px 11px",margin:"0 0 10px"},
+  reviewHeader:{display:"flex",alignItems:"center",gap:8,minHeight:25,marginBottom:7},
+  reviewTitle:{fontSize:13,fontWeight:800,color:"var(--sg-theme-text,#2B3D31)"},
+  reviewGroup:{paddingTop:7,borderTop:"1px solid var(--sg-theme-border,#EDF1EB)"},
+  reviewLabel:{fontSize:9,fontWeight:800,letterSpacing:.8,textTransform:"uppercase",color:"var(--sg-theme-muted,#829087)",marginBottom:4},
+  reviewEmpty:{fontSize:10.5,color:"var(--sg-theme-muted,#89938C)",padding:"5px 1px 7px"},
+  outgoingRow:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontSize:10.5,color:"var(--sg-theme-text,#56645B)",padding:"5px 1px 7px"},
+  cancelRequest:{border:"1px solid var(--sg-theme-border,#E3D7DD)",borderRadius:9,background:"var(--sg-theme-panel-soft,#F8F1F4)",color:"#97556F",padding:"5px 9px",fontSize:10,fontWeight:750,cursor:"pointer"},
+  networkError:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontSize:10.5,color:"#875148",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:11,padding:"8px 10px",margin:"0 0 10px",lineHeight:1.4},
+  retryNetwork:{border:0,borderRadius:9,background:"#F3E4E0",color:"#8F5047",padding:"6px 9px",fontSize:10,fontWeight:750,flex:"0 0 auto",cursor:"pointer"},
+  hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"var(--sg-theme-soft-gradient,linear-gradient(135deg,#EAF6EE,#F7F4FD))",border:"1px solid var(--sg-theme-border,#D9E8DD)",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"var(--sg-theme-accent-strong,#6E9D7E)"},title:{fontSize:18,fontWeight:850,color:"var(--sg-theme-text,#20372A)",marginTop:1},subtitle:{fontSize:10.5,color:"var(--sg-theme-muted,#7C8A81)",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--sg-theme-neutral,rgba(255,255,255,.82))",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px var(--sg-theme-shadow,rgba(45,106,79,.08))"},
+  addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto auto",gap:7,alignItems:"center",padding:"4px 0"},rejectRequest:{border:"1px solid #F0DAD8",borderRadius:10,background:"#FFF7F5",color:"#9A5A51",padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
   outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"var(--sg-theme-accent-strong,#4E6255)",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
   notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
 };
@@ -12280,16 +12561,21 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   </div>;
 }
 
-function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network}){
+function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network,onRetryNetwork}){
   const [section,setSection]=useState("groups");
   return <div>
     <div style={{...S.toggleRow,marginBottom:12}}>
       <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🔐 Groups</button>
-      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>👥 Friends</button>
+      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>
+        <span style={fr.friendTabLabel}>👥 Friends</span>
+        {network.incoming.length>0&&<span className="sg-notification-count" aria-label={`${network.incoming.length} incoming friend requests`}>
+          {network.incoming.length>9?"9+":network.incoming.length}
+        </span>}
+      </button>
     </div>
     {section==="groups"
       ? <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
-      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network} currentWeekKey={currentWeekKey}/>}
+      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network} currentWeekKey={currentWeekKey} onRetryNetwork={onRetryNetwork}/>}
   </div>;
 }
 
@@ -12299,13 +12585,13 @@ const gl={
   sectionLabel:{fontSize:9,fontWeight:800,letterSpacing:1,color:"#849188",marginBottom:6},
   inviteInbox:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E1E9DE",borderRadius:13,padding:"10px",marginBottom:10},
   incomingRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto 28px",alignItems:"center",gap:8,padding:"5px 2px"},incomingIcon:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",fontSize:15},incomingText:{minWidth:0},incomingName:{fontSize:12.5,fontWeight:750,color:"#263D2D",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},incomingMeta:{fontSize:9.5,color:"#8A958D",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},acceptBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:10,padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},declineBtn:{width:28,height:28,border:"none",background:"#F2F4F1",color:"#849087",borderRadius:9,fontSize:17,cursor:"pointer",lineHeight:1},
-  groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"#708076",cursor:"pointer"},groupTabOn:{background:"var(--sg-theme-accent-wash,#E8F5EE)",borderColor:"#BFE3CE",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
+  groupTabs:{display:"flex",gap:6,overflowX:"auto",maxWidth:"100%",padding:"0 1px 7px"},groupTab:{maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0,border:"1px solid var(--sg-theme-border,#DDE7D9)",background:"var(--sg-theme-neutral,#fff)",borderRadius:18,padding:"7px 12px",fontSize:11.5,fontWeight:650,color:"var(--sg-theme-muted,#708076)",cursor:"pointer"},groupTabOn:{background:"var(--sg-theme-accent-wash,#E8F5EE)",borderColor:"var(--sg-theme-border,#BFE3CE)",color:"var(--sg-theme-accent-strong,#2D6A4F)"},
   headCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E7ECE4",borderRadius:14,padding:"13px",marginBottom:8},kicker:{fontSize:8.5,fontWeight:800,letterSpacing:1.1,color:"#7AA58B"},name:{minWidth:0,fontSize:18,fontWeight:800,color:"#1A2E22",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},memberCount:{fontSize:10,color:"#98A29A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},manageBtn:{border:"none",background:"#EEF4EC",borderRadius:15,padding:"7px 11px",fontSize:11,fontWeight:700,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},detailsBtn:{display:"inline-flex",alignItems:"center",gap:6,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"6px 9px",fontSize:10.5,fontWeight:750,color:"var(--sg-theme-accent-strong,#486351)",cursor:"pointer",flexShrink:0},detailsIcon:{display:"inline-grid",placeItems:"center",width:14,height:14,borderRadius:"50%",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#486351)",fontSize:9,fontWeight:900,fontFamily:"Georgia,serif",fontStyle:"italic"},
   inviteCard:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"#FFF9E9",border:"1px solid #F0E1B8",borderRadius:14,padding:"10px 12px",marginBottom:8,minWidth:0},inviteLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#987E39"},inviteCode:{fontSize:17,fontWeight:900,letterSpacing:2.2,color:"#5C4A20",marginTop:1},inviteHint:{fontSize:9,color:"#A2946F",marginTop:2,lineHeight:1.3},copyBtn:{border:"none",background:"var(--sg-theme-neutral,#fff)",borderRadius:13,padding:"8px 10px",fontSize:10.25,fontWeight:750,color:"#796329",cursor:"pointer",boxShadow:"0 1px 3px rgba(90,70,20,.1)",flexShrink:0},
   rewardEligibility:{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:9.5,fontWeight:750,color:"#8B6D29",background:"#FFF8E6",border:"1px solid #F0DFAD",borderRadius:10,padding:"7px 9px",marginTop:8},rewardEligible:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",borderColor:"#BFE2CC"},
   badgeNote:{fontSize:9.75,color:"#6E7D72",background:"#F4F8F2",borderRadius:10,padding:"8px 10px",lineHeight:1.4,marginTop:8},rewardEligibleNote:{color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#EAF6EE)",border:"1px solid #CDE7D5"},manageCard:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #E7ECE4",borderRadius:13,padding:"11px",marginBottom:9},groupSummary:{background:"#F4F8F2",border:"1px solid #E1E9DE",borderRadius:11,padding:"9px 10px",marginBottom:8},summaryLabel:{fontSize:8.5,fontWeight:800,letterSpacing:.9,color:"#7B8A7F",marginBottom:5},summaryStats:{display:"grid",gridTemplateColumns:"minmax(0,.8fr) minmax(0,1.6fr)",fontSize:10.5,color:"#65746A"},summaryStat:{display:"flex",alignItems:"baseline",gap:4,whiteSpace:"nowrap"},summaryStatSeparated:{borderLeft:"1px solid #DDE7D9",paddingLeft:12},manageTitle:{fontSize:12.5,fontWeight:800,color:"#263D2D",marginBottom:7},inviteUserRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:10},pendingList:{borderTop:"1px solid #E7ECE4",borderBottom:"1px solid #E7ECE4",padding:"9px 0 5px",marginBottom:10},pendingRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:7,padding:"5px 1px",fontSize:11},pendingName:{fontWeight:700,color:"#405348",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},pendingSender:{color:"#9AA39C",fontSize:9.5},cancelInviteBtn:{border:"none",background:"#F5ECE9",color:"#9B5B51",borderRadius:9,padding:"4px 7px",fontSize:9.5,fontWeight:700,cursor:"pointer"},memberList:{borderTop:"1px solid #EDF1EA"},memberRow:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#536158",padding:"7px 2px",borderBottom:"1px solid #EDF1EA"},ownerTag:{fontSize:8.5,fontWeight:750,color:"#7A658F",background:"#F1EAF7",borderRadius:9,padding:"2px 6px",marginLeft:6},editGroupBtn:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",marginTop:9,border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",color:"#5F6F64",borderRadius:10,padding:"8px 10px",fontSize:10.5,fontWeight:750,cursor:"pointer"},ownerEditArea:{background:"#FAFCF9",border:"1px solid #E4EBE1",borderRadius:11,padding:"9px",marginTop:7},removeBtn:{border:"none",background:"#F8ECE9",color:"#A35B50",borderRadius:11,padding:"5px 8px",fontSize:9.5,cursor:"pointer"},transferSection:{marginBottom:10},transferPicker:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:"1px solid #DDE7D9",background:"var(--sg-theme-neutral,#fff)",color:"#5F6F64",borderRadius:10,padding:"8px 10px",fontSize:10.5,fontWeight:750,cursor:"pointer"},transferChoices:{marginTop:6,border:"1px solid #E2EAE0",borderRadius:10,overflow:"hidden",background:"var(--sg-theme-neutral,#fff)"},transferHint:{padding:"7px 9px",fontSize:9.5,color:"#829087",background:"#F5F8F4",borderBottom:"1px solid #E6ECE4"},transferChoice:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",border:0,borderBottom:"1px solid #EDF1EA",background:"transparent",color:"#526358",padding:"8px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer",textAlign:"left"},smallBtn:{border:"none",background:"var(--sg-theme-accent-wash,#E8F5EE)",color:"var(--sg-theme-accent-strong,#2D6A4F)",borderRadius:10,padding:"7px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"},dangerRow:{display:"flex",gap:7,justifyContent:"flex-end",marginTop:10},dangerBtn:{border:"none",background:"#F8EAE7",color:"#A14F46",borderRadius:11,padding:"7px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},leaveBtn:{border:"none",background:"transparent",color:"#8E776F",padding:"5px 2px",fontSize:10,fontWeight:700,cursor:"pointer"},mutedBtn:{border:"none",background:"#EEF1EC",color:"#647066",borderRadius:11,padding:"8px 11px",fontSize:10.5,fontWeight:700,cursor:"pointer"},
   boardBar:{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"#859087",fontWeight:700,padding:"3px 3px 7px"},
-  boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E8EDE6",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px rgba(27,48,34,.035)",minWidth:0},boardRowMe:{background:"var(--sg-theme-neutral,#F0F8F3)",borderColor:"#B9DCC8",boxShadow:"inset 3px 0 0 #56A77A"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#DCEFE3)",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
+  boardRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) auto",alignItems:"center",gap:9,background:"var(--sg-theme-neutral,#fff)",border:"1px solid var(--sg-theme-border,#E8EDE6)",borderRadius:12,padding:"9px 10px",marginBottom:6,boxShadow:"0 1px 2px var(--sg-theme-shadow,rgba(27,48,34,.035))",minWidth:0},boardRowMe:{background:"var(--sg-theme-accent-wash,#F0F8F3)",borderColor:"var(--sg-theme-border,#B9DCC8)",boxShadow:"inset 3px 0 0 var(--sg-theme-accent,#56A77A)"},rankGold:{background:"#FFFCF2",borderColor:"#EAD8A1"},rankSilver:{background:"#FAFBFB",borderColor:"#D9DEDF"},rankBronze:{background:"#FFF9F5",borderColor:"#E4C7B2"},rankBadge:{width:28,height:28,display:"grid",placeItems:"center",borderRadius:9,background:"#F1F4F0",color:"#7D887F",fontSize:11,fontWeight:800},rankBadgePodium:{color:"#6C5C37",background:"rgba(255,255,255,.72)"},avatar:{width:34,height:34,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:13,fontWeight:800},boardIdentity:{minWidth:0},boardUsername:{display:"flex",alignItems:"center",gap:5,minWidth:0,fontSize:12.5,fontWeight:750,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},youTag:{fontSize:8.5,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#DCEFE3)",borderRadius:8,padding:"2px 5px",flexShrink:0},boardMeta:{fontSize:9.5,color:"#98A19A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},focusTime:{display:"flex",flexDirection:"column",alignItems:"flex-end",minWidth:48},
   loadingRows:{paddingTop:2},loadingRow:{display:"grid",gridTemplateColumns:"30px 34px minmax(0,1fr) 46px",alignItems:"center",gap:9,padding:"10px",marginBottom:6},boardEmpty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},errorState:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,textAlign:"center",background:"#FFF7F5",border:"1px solid #F0D8D2",borderRadius:14,padding:"19px 15px",fontSize:11,color:"#8A5B53"},retryBtn:{border:"none",background:"#F3E4E0",color:"#8F5047",borderRadius:10,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer"},
   emptyCard:{textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:15,padding:"24px 18px"},emptyTitle:{fontSize:15,fontWeight:800,color:"#263D2D",marginTop:6},emptyBody:{fontSize:11.5,color:"#8C978E",lineHeight:1.5,marginTop:4},error:{fontSize:11.5,color:"#A14F46",background:"#FBEDEA",borderRadius:11,padding:"9px 11px",marginTop:10},formCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E4EAE1",borderRadius:14,padding:13,marginTop:10},formHint:{fontSize:10.5,color:"#849087",lineHeight:1.45,margin:"-2px 0 9px"},input:{display:"block",width:"100%",minWidth:0,padding:"9px 10px",border:"1.5px solid #DDE5DA",borderRadius:10,fontSize:12.5,outline:"none",background:"var(--sg-theme-neutral,#fff)"},formActions:{display:"flex",justifyContent:"flex-end",gap:7,marginTop:9},primaryBtn:{border:"none",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",borderRadius:11,padding:"8px 14px",fontSize:11.5,fontWeight:750,cursor:"pointer"},actionRow:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10},secondaryBtn:{minWidth:0,border:"1px solid #DCE6D9",background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#4F6757)",borderRadius:12,padding:"10px 7px",fontSize:11,fontWeight:700,cursor:"pointer"},
 };
@@ -12379,7 +12665,7 @@ const mp = {
     detailPanel:{ display:"flex", flexDirection:"column", alignSelf:"center", width:"100%", minWidth:0, minHeight:170, borderRadius:16, background:"var(--sg-theme-neutral,rgba(255,255,255,.86))", border:"1px solid #DEE8DF", padding:"14px 12px", boxShadow:"0 5px 14px rgba(38,72,48,.055)" },
     detailName:{ fontSize:16, fontWeight:850, lineHeight:1.16, color:"#213A29", marginTop:0 },
     detailRange:{ fontSize:10.5, fontWeight:650, color:"#7B887F", lineHeight:1.35, marginTop:5 },
-    detailStatus:{ marginTop:"auto", fontSize:10.5, fontWeight:800, lineHeight:1.4, color:"var(--sg-theme-accent-strong,#2D6A4F)", background:"linear-gradient(135deg,#EAF6ED,#F4FAF5)", border:"1px solid #D9EBDE", borderRadius:11, padding:"8px 9px" },
+    detailStatus:{ marginTop:"auto", fontSize:10.5, fontWeight:800, lineHeight:1.4, color:"var(--sg-theme-accent-strong,#2D6A4F)", background:"var(--sg-theme-soft-gradient,linear-gradient(135deg,#EAF6ED,#F4FAF5))", border:"1px solid var(--sg-theme-border,#D9EBDE)", borderRadius:11, padding:"8px 9px" },
     detailStatusLocked:{ color:"#895F35", background:"#F8F1E8" },
     rewardPanel:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:7, minWidth:0, border:"1px solid #E9DDAE", background:"linear-gradient(135deg,#FFFDF5,#FFF8DF)", borderRadius:12, padding:"7px 8px", color:"#6F5D25", boxShadow:"0 3px 9px rgba(145,105,15,.07)" },
     rewardCopy:{ minWidth:0, fontSize:9, fontWeight:800, lineHeight:1.25 },
@@ -12532,9 +12818,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [authReady,setAuthReady]=useState(false);
   const [redirectSocialUser,setRedirectSocialUser]=useState(null);
   const [redirectAuthError,setRedirectAuthError]=useState("");
+  const onboardingReplayRef=useRef(false);
   const [onboardingStep,setOnboardingStep]=useState(()=>
     !lsRaw(LS_USER,lsRaw("ascendu_username",""))&&lsRaw(LS_ONBOARDING_COMPLETE,"")!=="1"?1:0
   );
+  const [onboardingDirection,setOnboardingDirection]=useState(1);
   const [onboardingAnswers,setOnboardingAnswers]=useState({educationStage:"",referralSource:"",studyHours:""});
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS).map(item=>({...item,label:capitalizeSubjectLabel(item.label)})));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
@@ -12589,6 +12877,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [targets,setTargets]=useState(()=>lsGet(LS_TARGETS,{}));   // { subjId: hoursPerWeek }
   const [presence,setPresence]=useState([]);                        // accepted friends online now
   const [friendNetwork,setFriendNetwork]=useState({friends:[],incoming:[],outgoing:[],loading:true,error:""});
+  const [friendNetworkAttempt,setFriendNetworkAttempt]=useState(0);
   const [groupPresencePeers,setGroupPresencePeers]=useState([]);
   const [showTargets,setShowTargets]=useState(false);
   const [decorations,setDecorations]=useState(()=>lsGet(LS_DECOR,[]));   // owned decoration ids
@@ -12644,6 +12933,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [cameFromMenu,setCameFromMenu]=useState(false); // did tree shop open via menu?
   const [recapFromMenu,setRecapFromMenu]=useState(false); // did recap open via menu?
   const prefsLoadedRef = useRef(false);
+  const prefetchedPrefsRef = useRef(null);
   const [prefsReady,setPrefsReady]=useState(false);
   const rewardCheckedWeekRef = useRef("");
   const rewardClaimBusyRef = useRef(false);
@@ -12697,9 +12987,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         // browsers. Never let profile hydration hold the entire app on its
         // splash screen: either resolve the username promptly or continue to
         // the username-completion screen for this authenticated account.
+        let cachedPrefsPromise=null;
         const username=await withTimeout((async()=>{
           const cached=canonUsername(lsRaw(LS_USER,lsRaw("ascendu_username","")));
           if(cached){
+            // Start the account's prefs read alongside the username-to-uid
+            // check. Both reads are needed on a normal returning visit; doing
+            // them sequentially made the branded startup wait for two network
+            // round trips even when the cached username was correct.
+            cachedPrefsPromise=withTimeout(fbLoadPrefs(cached),8000,"Account preferences lookup timed out.")
+              .catch(error=>{console.error("Lumora preferences hydration error:",error);return null;});
             const mapping=await getDoc(doc(db,"usernames",cached));
             if(mapping.exists()&&mapping.data().uid===firebaseUser.uid){
               return mapping.data().displayName||cached;
@@ -12710,7 +13007,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(!active)return;
         if(username){
           const canonical=canonUsername(username);
+          const cached=canonUsername(lsRaw(LS_USER,lsRaw("ascendu_username","")));
+          prefetchedPrefsRef.current=cachedPrefsPromise&&cached===canonical
+            ? {username:canonical,promise:cachedPrefsPromise}
+            : null;
           lsSetR(LS_USER,canonical);setUser(canonical);
+          // A previously authenticated account has already passed first-run
+          // onboarding, even when this browser has no local completion flag.
+          lsSetR(LS_ONBOARDING_COMPLETE,"1");
+          if(!onboardingReplayRef.current)setOnboardingStep(0);
         }else{
           setUser(null);
           setRedirectSocialUser(firebaseUser);
@@ -12827,9 +13132,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       setFriendNetwork({...next,loading:false,error:""});
     },error=>{
       console.error("Friend network load error:",error);
-      setFriendNetwork(current=>({...current,loading:false,error:"Friends couldn't be loaded. Try reopening this page."}));
+      setFriendNetwork(current=>({...current,loading:false,error:{code:error?.code||"",message:error?.message||""}}));
     });
-  },[user,prefsReady]);
+  },[user,prefsReady,friendNetworkAttempt]);
 
   // ── Presence: publish online, studying or paused while this signed-in tab is open ──
   useEffect(()=>{
@@ -12914,7 +13219,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     } catch(e) {}
     try {
       if("Notification" in window && Notification.permission === "granted"){
-        new Notification("🌱 Goal reached!", { body: "Your timer's done — still counting your overtime. End the session whenever you're ready." });
+        new Notification("Goal reached!", { icon: emojiAssetUrl("🌱"), body: "Your timer's done — still counting your overtime. End the session whenever you're ready." });
       }
     } catch(e) {}
     showToast("🌟 Goal reached — now in overtime, keep going!");
@@ -13559,6 +13864,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setActiveBackground(canEquipBackground(cachedActive,cachedOwned)?cachedActive:DEFAULT_BACKGROUND_ID);
     setPrefsReady(false);
     setRedirectSocialUser(null);setRedirectAuthError("");
+    lsSetR(LS_ONBOARDING_COMPLETE,"1");
+    onboardingReplayRef.current=false;
+    setOnboardingStep(0);
     lsSetR(LS_USER,uname);setUser(uname);setAuthReady(true);
   };
 
@@ -13567,9 +13875,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // not mounted until Firebase auth initialization has already completed.
   useEffect(()=>{
     let active=true;
+    const redirectWasPending=Boolean(localStorage.getItem("lumora_social_redirect_pending"));
     fbGetSocialRedirectResult().then(result=>{
       if(!active)return;
-      if(result.noRedirect){setAuthReady(true);return;}
+      // On ordinary page loads, Firebase's auth observer is the reliable
+      // signal that persisted sign-in restoration is complete. Resolving a
+      // null redirect result can happen first and must not expose LoginScreen.
+      // If a social redirect was pending but produced no result, unblock the
+      // screen after that one exceptional path so it cannot remain on splash.
+      if(result.noRedirect){if(redirectWasPending&&!auth.currentUser)setAuthReady(true);return;}
       if(!result.ok){
         setRedirectAuthError(result.error);
         setOnboardingStep(0);
@@ -13621,11 +13935,16 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
   };
 
+  const navigateOnboarding=nextStep=>{
+    setOnboardingDirection(nextStep<onboardingStep?-1:1);
+    setOnboardingStep(nextStep);
+  };
   const handleReplayOnboarding=()=>{
     lsRemove(LS_ONBOARDING_COMPLETE);
     setOnboardingAnswers({educationStage:"",referralSource:"",studyHours:""});
     setShowMenu(false);
-    setOnboardingStep(1);
+    onboardingReplayRef.current=true;
+    navigateOnboarding(1);
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
@@ -13788,7 +14107,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setPrefsReady(false);
     (async()=>{
       try{
-      const prefs = await withTimeout(fbLoadPrefs(user),8000,"Account preferences lookup timed out.");
+      const prefetched=prefetchedPrefsRef.current;
+      prefetchedPrefsRef.current=null;
+      const prefsPromise=prefetched?.username===canonUsername(user)
+        ? prefetched.promise
+        : withTimeout(fbLoadPrefs(user),8000,"Account preferences lookup timed out.");
+      const prefs = await prefsPromise;
       if(prefs){
         if(Array.isArray(prefs.subjects) && prefs.subjects.length){
           const normalizedSubjects=prefs.subjects.map(item=>({...item,label:capitalizeSubjectLabel(item.label)}));
@@ -13970,6 +14294,23 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   useEffect(() => { if (user) loadHistory(); }, [user, loadHistory]);
 
+  const notificationCounts=useMemo(()=>{
+    if(!prefsReady||tasksLoading||!Array.isArray(history))return {tasks:0,exams:0,rewards:0,planner:0,achievements:0,friendRequests:0,total:0};
+    const today=assessmentDayNumber(assessmentDateKey(new Date()));
+    const openTasks=tasks.filter(task=>task&&!task.completed).length;
+    const upcomingExams=exams.filter(exam=>{
+      const examDay=assessmentDayNumber(exam?.date);
+      return exam&&!exam.completed&&Number.isFinite(examDay)&&examDay>=today;
+    }).length;
+    const totalHours=history.reduce((sum,session)=>sum+(Number(session.secs)||0),0)/3600;
+    const unclaimedRewards=MILESTONE_STAGES.filter((stage,index)=>
+      totalHours>=stage.max&&!claimedMilestoneRewards.includes(index)
+    ).length;
+    const planner=openTasks+upcomingExams;
+    const friendRequests=friendNetwork.incoming.length;
+    return {tasks:openTasks,exams:upcomingExams,rewards:unclaimedRewards,planner,achievements:unclaimedRewards,friendRequests,total:planner+unclaimedRewards+friendRequests};
+  },[prefsReady,tasksLoading,tasks,exams,history,claimedMilestoneRewards,friendNetwork.incoming]);
+
   // This-week focus seconds per subject (for weekly targets)
   const weekSubjSecs = (()=>{
     const out = {};
@@ -14011,11 +14352,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   },[user, history, studyWeekKey]);
 
   if(!authReady)return (
-    <div className="sg-shell" style={appBackgroundStyle}>
+    <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
-        <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}>🧑‍🎓 Lumora</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:24,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:28,height:28,flexShrink:0,overflow:"hidden",borderRadius:6,background:"var(--sg-theme-accent)"}}><img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:28,height:28,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</div>
       </div>
     </div>
   );
@@ -14023,24 +14364,27 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   if(onboardingStep)return (
     <>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
-      {onboardingStep===1
-        ? <OnboardingWelcome onNext={()=>setOnboardingStep(2)}/>
+      <div key={onboardingStep} className={`lumora-onboarding-slide${onboardingDirection<0?" is-back":""}`}>
+        {onboardingStep===1
+        ? <OnboardingWelcome onNext={()=>navigateOnboarding(2)}/>
         : onboardingStep===2
-        ? <OnboardingEducation initialValue={onboardingAnswers.educationStage} onBack={()=>setOnboardingStep(1)} onNext={educationStage=>{
+        ? <OnboardingEducation initialValue={onboardingAnswers.educationStage} onBack={()=>navigateOnboarding(1)} onNext={educationStage=>{
             setOnboardingAnswers(current=>({...current,educationStage}));
-            setOnboardingStep(3);
+            navigateOnboarding(3);
           }}/>
         : onboardingStep===3
-        ? <OnboardingReferral initialValue={onboardingAnswers.referralSource} onBack={()=>setOnboardingStep(2)} onNext={referralSource=>{
+        ? <OnboardingReferral initialValue={onboardingAnswers.referralSource} onBack={()=>navigateOnboarding(2)} onNext={referralSource=>{
             setOnboardingAnswers(current=>({...current,referralSource}));
-            setOnboardingStep(4);
+            navigateOnboarding(4);
           }}/>
-        : <OnboardingStudyHours initialValue={onboardingAnswers.studyHours} onBack={()=>setOnboardingStep(3)} onNext={studyHours=>{
+        : <OnboardingStudyHours initialValue={onboardingAnswers.studyHours} onBack={()=>navigateOnboarding(3)} onNext={studyHours=>{
             setOnboardingAnswers(current=>({...current,studyHours}));
             lsSetR(LS_ONBOARDING_COMPLETE,"1");
+            onboardingReplayRef.current=false;
             setOnboardingStep(0);
           }}/>
-      }
+        }
+      </div>
     </>
   );
 
@@ -14061,7 +14405,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
         <div style={{width:"100%",maxWidth:300,textAlign:"center"}}>
-          <div style={{fontSize:18,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",marginBottom:18}}>🧑‍🎓 Lumora</div>
+          <div role="status" style={{fontSize:14,fontWeight:700,color:"var(--sg-theme-muted,#788177)",marginBottom:18}}>Loading your saved workspace…</div>
           <div className="sg-skeleton" style={{height:14,width:"42%",margin:"0 auto 10px"}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%",marginBottom:8}}/>
           <div className="sg-skeleton" style={{height:54,width:"100%"}}/>
@@ -14149,11 +14493,22 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           )}
 
           <header className="sg-main-header" style={S.header}>
-            <span className="sg-keepcolor" style={S.logo}>🧑‍🎓 Lumora</span>
+            <span className="sg-keepcolor" style={S.logo}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:21,height:21,overflow:"hidden",borderRadius:5,background:"var(--sg-theme-accent)",verticalAlign:"-4px",marginRight:5}}><img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:21,height:21,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
-              <button className="sg-main-menu-button" onClick={()=>setShowMenu(true)} style={S.menuBtn} title="Menu">
-                <span style={S.menuBars}>☰</span>
+              <button
+                className="sg-main-menu-button"
+                onClick={()=>setShowMenu(true)}
+                style={S.menuBtn}
+                title={notificationCounts.total?`${notificationCounts.total} notification${notificationCounts.total===1?"":"s"}`:"Menu"}
+                aria-label={notificationCounts.total
+                  ? `Menu, ${notificationCounts.total} notification${notificationCounts.total===1?"":"s"}`
+                  : "Menu"}
+              >
+                <span style={S.menuBars} aria-hidden="true">☰</span>
+                {notificationCounts.total>0&&<span className="sg-notification-count" aria-hidden="true">
+                  {notificationCounts.total>9?"9+":notificationCounts.total}
+                </span>}
               </button>
             </div>
           </header>
@@ -14162,6 +14517,17 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             <HeaderMenu
               user={user} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
+              plannerNotificationCount={notificationCounts.planner}
+              achievementsNotificationCount={notificationCounts.achievements}
+              friendRequestsNotificationCount={notificationCounts.friendRequests}
+              activeView={tab}
+              onNavigate={id=>{
+                setShowMenu(false);
+                setTab(id);
+                if(id==="leaderboard")loadLB();
+              }}
+              themeStyle={appBackgroundStyle}
+              backgroundId={renderedBackgroundId}
               animationMode={animationMode}
               onAnimationModeChange={changeAnimationMode}
               onTreeShop={()=>{setShowMenu(false);setCameFromMenu(true);setShowShop(true);}}
@@ -14181,29 +14547,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             />
           )}
 
-          <nav className="sg-main-nav" style={S.nav}>
-            {[["timer","⏱ Focus"],["leaderboard","🏆 Board"],["planner","▦ Planner"],["stats","📊 Stats"]].map(([id,lbl])=>(
-              <button key={id} className={`sg-main-nav-button${tab===id?" is-active":""}`} style={{...S.navBtn,...(tab===id?S.navBtnActive:{})}}
-                onClick={()=>{setTab(id);if(id==="leaderboard")loadLB();}}>{lbl}</button>
-            ))}
-          </nav>
-
           {tab==="timer"&&(
             <div style={S.timerView} className={`sg-view-anim lumora-focus-view${timerStyle==="standard"&&mode==="stopwatch"?" lumora-focus-stopwatch":""}`} key="view-timer">
               {/* Studying now — passive accountability */}
               <StudyingNow presence={presence} currentUser={user}/>
 
-              <div className="sg-timer-style" role="group" aria-label="Focus timer style">
-                <button type="button" aria-pressed={timerStyle==="standard"}
-                  onClick={()=>chooseTimerStyle("standard")}>Standard Focus</button>
-                <button type="button" aria-pressed={timerStyle==="pomodoro"}
-                  onClick={()=>chooseTimerStyle("pomodoro")}>Pomodoro</button>
-              </div>
-
-              {/* Single mode button → opens Timer/Stopwatch chooser */}
-              {timerStyle==="standard"&&<div className="lumora-mode-picker" style={{position:"relative",marginBottom:12}}>
+              {/* Standard focus is implicit; Timer, Stopwatch and Pomodoro share one chooser. */}
+              <div className="lumora-mode-picker" style={{position:"relative",marginBottom:16}}>
                 <button style={S.modePickBtn} onClick={()=>{ if(!running) setModePickerOpen(o=>!o); }}>
-                  <span>{mode==="timer"?"⏳ Timer":"⏱ Stopwatch"}</span>
+                  <span>{timerStyle==="pomodoro"?"🍅 Pomodoro":mode==="timer"?"⏳ Timer":"⏱ Stopwatch"}</span>
                   <span className="sg-centered-chevron" style={{...S.modeChev,transform:modePickerOpen?"rotate(180deg)":"none"}}>▾</span>
                 </button>
                 {modePickerOpen && (
@@ -14211,22 +14563,29 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                     <div style={S.modeBackdrop} onClick={()=>setModePickerOpen(false)}/>
                     <div style={S.modePop} className="sg-pop-anim">
                       {[["timer","⏳","Timer","Count down and plant when done"],
-                        ["stopwatch","⏱","Stopwatch","Count up freely, plant anytime"]].map(([m,ic,lbl,desc])=>(
+                        ["stopwatch","⏱","Stopwatch","Count up freely, plant anytime"],
+                        ["pomodoro","🍅","Pomodoro","Focus in timed rounds with short breaks"]].map(([m,ic,lbl,desc])=>{
+                        const selected=m==="pomodoro"?timerStyle==="pomodoro":timerStyle==="standard"&&mode===m;
+                        return (
                         <button key={m}
-                          style={{...S.modeOpt,...(mode===m?{background:subjectObj.color+"14"}:{})}}
-                          onClick={()=>{switchMode(m);setModePickerOpen(false);}}>
+                          style={{...S.modeOpt,...(selected?{background:subjectObj.color+"14"}:{})}}
+                          onClick={()=>{
+                            if(m==="pomodoro")chooseTimerStyle("pomodoro");
+                            else{chooseTimerStyle("standard");switchMode(m);}
+                            setModePickerOpen(false);
+                          }}>
                           <span style={{fontSize:20}}>{ic}</span>
                           <span style={{flex:1,textAlign:"left"}}>
-                            <span style={{...S.modeOptLbl,color:mode===m?subjectObj.color:"#1a1a2e"}}>{lbl}</span>
+                            <span style={{...S.modeOptLbl,color:selected?subjectObj.color:"#1a1a2e"}}>{lbl}</span>
                             <span style={S.modeOptDesc}>{desc}</span>
                           </span>
-                          {mode===m && <span style={{color:subjectObj.color,fontWeight:800}}>✓</span>}
+                          {selected && <span style={{color:subjectObj.color,fontWeight:800}}>✓</span>}
                         </button>
-                      ))}
+                      )})}
                     </div>
                   </>
                 )}
-              </div>}
+              </div>
 
               {timerStyle==="pomodoro"&&<section style={S.pomodoroSetup} aria-label="Pomodoro settings">
                 <div className="sg-pomodoro-presets" role="group" aria-label="Pomodoro preset">
@@ -14288,8 +14647,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                           style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"18",color:s.color,fontWeight:700}:{})}}
                           onClick={()=>changeSubject(s.id)}>
                           <span style={{...S.subjDot,background:s.color}}/>
-                          <span style={{fontSize:14}}>{s.emoji}</span>
-                          <span style={{fontSize:13}}>{s.label}</span>
+                          <span style={{fontSize:15}}>{s.emoji}</span>
+                          <span style={{fontSize:14}}>{s.label}</span>
                         </button>
                         {editMode&&subjects.length>1&&<button style={S.removeBadge} onClick={()=>removeSubject(s.id)}>✕</button>}
                       </div>
@@ -14333,13 +14692,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                 </div>
 
-                <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
-                  {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
-                </div>
-                <div style={S.timerLabel}>
-                  {timerStyle==="pomodoro"
-                    ? `${pomodoro.plannedRounds} focus ${pomodoro.plannedRounds===1?"round":"rounds"} · ${pomodoro.breakLengthMinutes} min breaks`
-                    : mode==="timer"?"Set a duration and grow your learner":"Tap start — stopwatch counts up"}
+                <div style={S.timerCopy} className="lumora-timer-copy">
+                  <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
+                    {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
+                  </div>
+                  <div style={S.timerLabel}>
+                    {timerStyle==="pomodoro"
+                      ? `${pomodoro.plannedRounds} focus ${pomodoro.plannedRounds===1?"round":"rounds"} · ${pomodoro.breakLengthMinutes} min breaks`
+                      : mode==="timer"?"Set a duration and grow your learner":"Tap start — stopwatch counts up"}
+                  </div>
                 </div>
                 {timerStyle==="standard"&&mode==="timer"&&(
                   <div style={S.durationSliderWrap} className="lumora-duration-control">
@@ -14381,7 +14742,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           {tab==="leaderboard"&&(
             <div style={S.boardView} className="sg-view-anim" key="view-board">
               <StudyingNow presence={presence} currentUser={user}/>
-              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}/>
+              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}
+                onRetryNetwork={()=>setFriendNetworkAttempt(attempt=>attempt+1)}/>
             </div>
           )}
 
@@ -14416,18 +14778,18 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 // ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
   app:{minHeight:"100vh",background:"var(--sg-shell-surface,#F5F7F2)",fontFamily:"'Noto Color Emoji','Inter','Segoe UI',sans-serif",maxWidth:440,margin:"0 auto",position:"relative",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderLeft:"1px solid rgba(255,255,255,.32)",borderRight:"1px solid rgba(255,255,255,.32)",boxShadow:"0 0 34px rgba(24,45,31,.08)"},
-  header:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 16px 0"},
-  logo:{fontSize:17,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.3px"},
+  header:{display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:64,padding:"14px 18px 12px"},
+  logo:{fontSize:20,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",letterSpacing:"-0.3px"},
   userChip:{fontSize:11,color:"#555",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 9px"},
-  coinChip:{fontSize:11.5,color:"#B8860B",background:"linear-gradient(180deg,#FFFBEF,#FFF4D6)",border:"1px solid #F0D875",borderRadius:20,padding:"5px 11px",fontWeight:700,boxShadow:"0 1px 2px rgba(184,134,11,0.12)"},
-  menuBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:32,height:32,background:"transparent",border:"none",borderRadius:0,padding:0,cursor:"pointer",boxShadow:"none"},
+  coinChip:{fontSize:13,color:"#B8860B",background:"linear-gradient(180deg,#FFFBEF,#FFF4D6)",border:"1px solid #F0D875",borderRadius:22,padding:"7px 13px",fontWeight:700,boxShadow:"0 1px 2px rgba(184,134,11,0.12)"},
+  menuBtn:{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:38,height:38,background:"transparent",border:"none",borderRadius:0,padding:0,cursor:"pointer",boxShadow:"none"},
   menuAvatar:{width:22,height:22,borderRadius:"50%",background:"var(--sg-theme-accent-strong,#2D6A4F)",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  menuBars:{fontSize:19,color:"var(--sg-theme-muted,#888)",lineHeight:1},
+  menuBars:{fontSize:23,color:"#000",lineHeight:1},
   logoutBtn:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #e0e0e0",borderRadius:20,padding:"4px 8px",fontSize:12,cursor:"pointer",color:"#888",lineHeight:1},
   nav:{display:"flex",gap:4,padding:"10px 12px 8px",borderBottom:"1px dotted #C6D4C3"},
   navBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:10,fontSize:12,fontWeight:500,color:"#888",cursor:"pointer"},
   navBtnActive:{background:"var(--sg-theme-panel-solid,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,boxShadow:"0 3px 12px var(--sg-theme-shadow,rgba(0,0,0,.08))"},
-  timerView:{padding:"10px 16px 40px"},
+  timerView:{minHeight:"calc(100dvh - 64px)",boxSizing:"border-box",display:"flex",flexDirection:"column",padding:"10px 16px 12px"},
   modeRow:{display:"flex",gap:8,marginBottom:12},
   modeBtn:{flex:1,padding:"8px 0",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:20,fontSize:13,fontWeight:500,color:"#888",cursor:"pointer"},
   modeBtnActive:{fontWeight:700},
@@ -14435,13 +14797,13 @@ const S = {
   subjLabelRow:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   subjLabelTitle:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.5px"},
   subjActionBtn:{fontSize:11,fontWeight:600,color:"#888",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DC",borderRadius:16,padding:"4px 10px",cursor:"pointer"},
-  subjScrollWrap:{position:"relative",marginBottom:12},
-  subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 8px",WebkitOverflowScrolling:"touch",scrollBehavior:"smooth",cursor:"grab"},
+  subjScrollWrap:{position:"relative",marginBottom:14},
+  subjScroll:{display:"flex",gap:8,overflowX:"auto",padding:"0 2px 7px",WebkitOverflowScrolling:"touch",scrollBehavior:"smooth",cursor:"grab"},
   subjFadeL:{position:"absolute",left:0,top:0,bottom:6,width:24,background:"linear-gradient(to right,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
   subjFadeR:{position:"absolute",right:0,top:0,bottom:6,width:24,background:"linear-gradient(to left,#F5F7F2,rgba(245,247,242,0))",pointerEvents:"none"},
-  subjPill:{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
+  subjPill:{display:"flex",alignItems:"center",gap:7,padding:"12px 16px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:24,cursor:"pointer",color:"#666",fontWeight:500,whiteSpace:"nowrap",transition:"all 0.15s"},
   subjDot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
-  subjAddPill:{display:"flex",alignItems:"center",padding:"9px 14px",border:"1.5px dashed #C8D8C4",background:"transparent",borderRadius:22,cursor:"pointer",color:"#7AA56B",fontWeight:600,whiteSpace:"nowrap",flexShrink:0},
+  subjAddPill:{display:"flex",alignItems:"center",padding:"12px 16px",border:"1.5px dashed var(--sg-theme-border,#C8D8C4)",background:"transparent",borderRadius:24,cursor:"pointer",color:"var(--sg-theme-accent-strong,#7AA56B)",fontWeight:600,whiteSpace:"nowrap",flexShrink:0},
   targetCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
   targetTop:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
   targetLabel:{fontSize:12,fontWeight:600,color:"#888"},
@@ -14452,26 +14814,27 @@ const S = {
   subjectBtnActive:{fontWeight:600},
   removeBadge:{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",background:"#E07B54",color:"#fff",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0},
   addSubjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 4px",border:"1.5px dashed #C8D8C4",background:"var(--sg-theme-neutral,#f9fbf8)",borderRadius:12,cursor:"pointer",fontSize:20,color:"#888",minHeight:56},
-  plantStage:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",margin:"46px 0 2px",minHeight:216},
-  plantHalo:{position:"absolute",top:-4,left:"50%",transform:"translateX(-50%)",width:232,height:232,borderRadius:"50%",pointerEvents:"none"},
-  plantMound:{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:150,height:40,borderRadius:"50%",pointerEvents:"none"},
+  plantStage:{position:"relative",zIndex:1,flex:"1 1 auto",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",margin:"8px 0 2px",minHeight:272},
+  plantHalo:{position:"absolute",top:24,left:"50%",transform:"translateX(-50%)",width:240,height:240,borderRadius:"50%",pointerEvents:"none"},
+  plantMound:{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:165,height:43,borderRadius:"50%",pointerEvents:"none"},
   treeWrap:{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",transform:"scale(1.22)",transformOrigin:"bottom center"},
-  loginStageImage:{width:188,height:236,objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 11px 13px rgba(29,49,35,.18))"},
+  loginStageImage:{width:182,height:228,objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 11px 13px rgba(29,49,35,.18))"},
   todayWrap:{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",marginBottom:2},
   todayLabel:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:"1.6px",textTransform:"uppercase"},
   todayTime:{fontSize:26,fontWeight:800,letterSpacing:"-0.5px",transition:"color 0.3s"},
   streakChip:{fontSize:12.5,fontWeight:800,color:"#B0B8B0",background:"#F5F7F2",border:"1.5px solid #E8ECE6",borderRadius:14,padding:"3px 9px",letterSpacing:"-0.2px",transition:"all 0.3s"},
   streakChipLit:{color:"#B8741A",background:"linear-gradient(180deg,#FFF4E0,#FFE9C4)",borderColor:"#F4C04B"},
+  timerCopy:{flexShrink:0},
   timerDisplay:{textAlign:"center",fontSize:48,fontWeight:800,letterSpacing:"-2px",margin:"0 0 4px"},
-  timerLabel:{textAlign:"center",fontSize:13,color:"#888",marginBottom:12},
+  timerLabel:{textAlign:"center",fontSize:13,color:"#888",marginBottom:0},
   durationSliderWrap:{width:"min(100%,330px)",margin:"0 auto 18px",padding:"4px 3px 6px"},
   durationScale:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,fontSize:10.5,color:"#A3AAA1",marginBottom:11},
-  plantBtn:{display:"block",width:"100%",padding:"16px 0",border:"none",borderRadius:16,fontSize:17,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.15)",letterSpacing:"-0.3px"},
+  plantBtn:{display:"block",width:"100%",marginTop:8,padding:"16px 0",border:"none",borderRadius:16,fontSize:17,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.15)",letterSpacing:"-0.3px"},
   otherTabBanner:{textAlign:"center",fontSize:12.5,fontWeight:600,color:"#8A6D2F",background:"#FFF6E0",border:"1px solid #F0DFA0",borderRadius:12,padding:"9px 12px",marginBottom:10},
   // ── Calm Focus layout ──
   segWrap:{display:"flex",gap:3,background:"var(--sg-theme-control-track,#EAF0E8)",borderRadius:22,padding:3,marginBottom:12},
   segBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:20,fontSize:13,fontWeight:700,color:"#8A968A",cursor:"pointer",transition:"all 0.2s"},
-  modePickBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"11px 0",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",background:"var(--sg-theme-panel-solid,#fff)",borderRadius:22,fontSize:14,fontWeight:700,color:"var(--sg-theme-text,#444)",cursor:"pointer"},
+  modePickBtn:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"14px 0",border:"1.5px solid var(--sg-theme-border,#E0E8DC)",background:"var(--sg-theme-panel-solid,#fff)",borderRadius:24,fontSize:15,fontWeight:700,color:"var(--sg-theme-text,#444)",cursor:"pointer"},
   modeChev:{fontSize:14,color:"#aaa",transition:"transform 0.2s",lineHeight:1},
   modeBackdrop:{position:"fixed",inset:0,zIndex:40},
   modePop:{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:"var(--sg-theme-neutral,#fff)",borderRadius:16,padding:6,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",border:"1px solid #EEF2EC",zIndex:50},
@@ -14481,8 +14844,8 @@ const S = {
   pomodoroSetup:{background:"rgba(255,255,255,.72)",border:"1px solid #E1E9DE",borderRadius:14,padding:"9px 10px 10px",marginBottom:12},
   pomodoroOptions:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginTop:9},
   pomodoroOption:{display:"inline-flex",alignItems:"center",gap:6,minHeight:32,fontSize:10.5,fontWeight:650,color:"#68736A",cursor:"pointer"},
-  subjIconBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:38,padding:"9px 0",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:22,cursor:"pointer",color:"#888",fontSize:15,flexShrink:0},
-  focusCore:{marginTop:8},
+  subjIconBtn:{display:"flex",alignItems:"center",justifyContent:"center",width:44,padding:"12px 0",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:24,cursor:"pointer",color:"#888",fontSize:16,flexShrink:0},
+  focusCore:{flex:1,display:"flex",flexDirection:"column",marginTop:2,minHeight:0},
   focusMeta:{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginTop:14,flexWrap:"wrap"},
   focusMetaItem:{display:"flex",alignItems:"center",gap:7,fontSize:12.5,color:"#999",fontWeight:600},
   metaTrack:{width:54,height:5,background:"#EEF2EC",borderRadius:6,overflow:"hidden"},
@@ -14512,46 +14875,46 @@ const S = {
   toggleBtn:{flex:1,padding:"8px 0",border:"none",background:"transparent",borderRadius:9,fontSize:13,fontWeight:600,color:"var(--sg-theme-muted,#8A968A)",cursor:"pointer",transition:"all 0.2s"},
   toggleBtnActive:{background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.10)"},
   boardRow:{display:"flex",alignItems:"center",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
-  boardRowMe:{border:"2px solid #56B68B",background:"var(--sg-theme-accent-wash,#F0FBF6)"},
+  boardRowMe:{border:"2px solid var(--sg-theme-accent,#56B68B)",background:"var(--sg-theme-accent-wash,#F0FBF6)"},
   boardRank:{width:32,fontSize:18,textAlign:"center"},
   empty:{textAlign:"center",color:"#aaa",fontSize:14,marginTop:40},
-  onboardingWelcome:{minHeight:"100dvh",background:"#fff",color:"#17251C",display:"flex",justifyContent:"center",fontFamily:"inherit"},
+  onboardingWelcome:{minHeight:"100dvh",background:"#fff",color:"#2B1D2F",display:"flex",justifyContent:"center",fontFamily:"inherit"},
   onboardingWelcomeInner:{width:"100%",maxWidth:520,minHeight:"100dvh",boxSizing:"border-box",padding:"clamp(42px,8vh,76px) 24px max(24px,env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center",overflow:"hidden"},
   onboardingWelcomeCopy:{width:"100%",maxWidth:410,textAlign:"center",position:"relative",zIndex:1},
-  onboardingEyebrow:{display:"block",fontSize:12,fontWeight:800,letterSpacing:"0.18em",color:"#69A884",marginBottom:10},
-  onboardingTitle:{fontSize:"clamp(42px,11vw,58px)",lineHeight:.98,fontWeight:850,letterSpacing:"-0.055em",color:"#244F39",margin:"0 0 20px"},
-  onboardingBody:{fontSize:"clamp(14px,3.7vw,16px)",lineHeight:1.55,fontWeight:500,color:"#5F6E65",margin:0},
+  onboardingEyebrow:{display:"block",fontSize:12,fontWeight:800,letterSpacing:"0.18em",color:"#9A5CAF",marginBottom:10},
+  onboardingTitle:{fontSize:"clamp(42px,11vw,58px)",lineHeight:.98,fontWeight:850,letterSpacing:"-0.055em",color:"#3B0A4A",margin:"0 0 20px"},
+  onboardingBody:{fontSize:"clamp(14px,3.7vw,16px)",lineHeight:1.55,fontWeight:500,color:"#75677A",margin:0},
   onboardingMascotWrap:{flex:"1 1 260px",minHeight:220,width:"min(100%,410px)",display:"flex",alignItems:"flex-end",justifyContent:"center",margin:"18px 0 8px",overflow:"hidden"},
   onboardingMascot:{display:"block",width:"min(100%,390px)",height:"100%",maxHeight:390,objectFit:"contain",objectPosition:"center bottom",mixBlendMode:"multiply"},
-  onboardingNextButton:{flex:"0 0 auto",width:"100%",maxWidth:410,minHeight:56,padding:"0 21px",border:0,borderRadius:16,background:"linear-gradient(135deg,#2D6A4F,#418264)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontSize:17,fontWeight:800,letterSpacing:"0.01em",cursor:"pointer",boxShadow:"0 10px 24px rgba(45,106,79,.2)",WebkitTapHighlightColor:"transparent"},
-  onboardingNextButtonDisabled:{background:"#DCE6E0",color:"#91A098",cursor:"not-allowed",boxShadow:"none"},
+  onboardingNextButton:{flex:"0 0 auto",width:"100%",maxWidth:410,minHeight:56,padding:"0 21px",border:0,borderRadius:16,background:"linear-gradient(135deg,#5B1B6B,#7C3E8E)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontSize:17,fontWeight:800,letterSpacing:"0.01em",cursor:"pointer",boxShadow:"0 10px 24px rgba(91,27,107,.2)",WebkitTapHighlightColor:"transparent"},
+  onboardingNextButtonDisabled:{background:"#E8DEE9",color:"#9A8D9D",cursor:"not-allowed",boxShadow:"none"},
   onboardingNextArrow:{fontSize:22,lineHeight:1,marginTop:-1},
   onboardingActions:{width:"100%",maxWidth:410,display:"flex",alignItems:"stretch",gap:10,marginTop:16},
-  onboardingBackButton:{flex:"0 0 116px",minHeight:56,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"0 16px",border:"1.5px solid #C9DBD0",borderRadius:16,background:"#fff",color:"#37684E",fontSize:15,fontWeight:800,cursor:"pointer",WebkitTapHighlightColor:"transparent"},
+  onboardingBackButton:{flex:"0 0 116px",minHeight:56,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"0 16px",border:"1.5px solid #D9C7DE",borderRadius:16,background:"#fff",color:"#5B1B6B",fontSize:15,fontWeight:800,cursor:"pointer",WebkitTapHighlightColor:"transparent"},
   onboardingBackArrow:{fontSize:21,lineHeight:1,marginTop:-2},
   onboardingQuestionInner:{width:"100%",maxWidth:520,minHeight:"100dvh",boxSizing:"border-box",padding:"clamp(30px,5vh,52px) 24px max(24px,env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center"},
   onboardingQuestionCopy:{width:"100%",maxWidth:410,textAlign:"center"},
-  onboardingQuestionTitle:{fontSize:"clamp(24px,5.8vw,29px)",lineHeight:1.18,fontWeight:850,letterSpacing:"-0.03em",color:"#244F39",margin:0},
+  onboardingQuestionTitle:{fontSize:"clamp(24px,5.8vw,29px)",lineHeight:1.18,fontWeight:850,letterSpacing:"-0.03em",color:"#3B0A4A",margin:0},
   onboardingQuestionMascotWrap:{width:"100%",height:320,display:"flex",alignItems:"flex-end",justifyContent:"center",margin:"12px 0 14px",overflow:"hidden"},
   onboardingQuestionMascot:{display:"block",width:"min(100%,320px)",height:"100%",objectFit:"contain",objectPosition:"center bottom",mixBlendMode:"multiply"},
   onboardingOptions:{width:"100%",maxWidth:410,display:"flex",flexDirection:"column",gap:9},
-  onboardingOption:{width:"100%",minHeight:50,padding:"10px 14px 10px 17px",border:"1.5px solid #DDE8E1",borderRadius:14,background:"#fff",color:"#34443A",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,fontSize:15,fontWeight:700,textAlign:"left",cursor:"pointer",boxShadow:"0 2px 8px rgba(39,73,54,.035)",WebkitTapHighlightColor:"transparent"},
-  onboardingOptionSelected:{borderColor:"#3B7D5D",background:"#F0F8F3",color:"#24573D",boxShadow:"0 0 0 2px rgba(59,125,93,.08)"},
-  onboardingRadio:{width:22,height:22,borderRadius:"50%",border:"1.5px solid #B8C9BF",display:"grid",placeItems:"center",flex:"0 0 auto",fontSize:13,fontWeight:900,color:"#fff"},
-  onboardingRadioSelected:{borderColor:"#3B7D5D",background:"#3B7D5D"},
-  onboardingOtherInput:{width:"100%",maxWidth:410,boxSizing:"border-box",marginTop:9,padding:"13px 15px",border:"1.5px solid #3B7D5D",borderRadius:13,background:"#fff",color:"#26372D",fontSize:15,outline:"none",boxShadow:"0 0 0 3px rgba(59,125,93,.08)"},
-  loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(160deg,#D8F0E0 0%,#F5F7F2 60%)",padding:20},
-  loginCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(45,106,79,0.12)",textAlign:"center"},
-  loginTitle:{fontSize:28,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)",margin:"0 0 6px",letterSpacing:"-0.5px"},
+  onboardingOption:{width:"100%",minHeight:50,padding:"10px 14px 10px 17px",border:"1.5px solid #E5D8E9",borderRadius:14,background:"#fff",color:"#3D3041",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,fontSize:15,fontWeight:700,textAlign:"left",cursor:"pointer",boxShadow:"0 2px 8px rgba(59,10,74,.045)",WebkitTapHighlightColor:"transparent"},
+  onboardingOptionSelected:{borderColor:"#7A3B8C",background:"#F7F0F9",color:"#3B0A4A",boxShadow:"0 0 0 2px rgba(91,27,107,.1)"},
+  onboardingRadio:{width:22,height:22,borderRadius:"50%",border:"1.5px solid #CCB8D1",display:"grid",placeItems:"center",flex:"0 0 auto",fontSize:13,fontWeight:900,color:"#fff"},
+  onboardingRadioSelected:{borderColor:"#5B1B6B",background:"#5B1B6B"},
+  onboardingOtherInput:{width:"100%",maxWidth:410,boxSizing:"border-box",marginTop:9,padding:"13px 15px",border:"1.5px solid #7A3B8C",borderRadius:13,background:"#fff",color:"#342738",fontSize:15,outline:"none",boxShadow:"0 0 0 3px rgba(91,27,107,.1)"},
+  loginWrap:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(160deg,#EFE1F3 0%,#FBF8FC 60%)",padding:20},
+  loginCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:24,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(91,27,107,0.12)",textAlign:"center"},
+  loginTitle:{fontSize:28,fontWeight:800,color:"#3B0A4A",margin:"0 0 6px",letterSpacing:"-0.5px"},
   loginSub:{fontSize:14,color:"#888",margin:"0 0 24px"},
   loginHint:{fontSize:11,color:"#bbb",margin:"6px 0 16px",lineHeight:1.6,textAlign:"center"},
-  input:{display:"block",width:"100%",padding:"12px 14px",border:"1.5px solid #E0E8DC",borderRadius:12,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:8},
+  input:{display:"block",width:"100%",padding:"12px 14px",border:"1.5px solid #E8DDEB",borderRadius:12,fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:8},
   inputErr:{borderColor:"#E07B54"},
   errText:{color:"#E07B54",fontSize:12,margin:"0 0 8px",textAlign:"left"},
-  primaryBtn:{display:"block",width:"100%",padding:"14px 0",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8},
-  linkBtn:{display:"block",width:"100%",background:"none",border:"none",color:"#56B68B",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12,padding:"4px 0"},
-  recBox:{background:"#F6FAF5",border:"1px solid #E0E8DC",borderRadius:12,padding:"12px",margin:"4px 0 8px",textAlign:"left"},
+  primaryBtn:{display:"block",width:"100%",padding:"14px 0",background:"#5B1B6B",color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8},
+  linkBtn:{display:"block",width:"100%",background:"none",border:"none",color:"#9A5CAF",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12,padding:"4px 0"},
+  recBox:{background:"#FBF7FC",border:"1px solid #E8DDEB",borderRadius:12,padding:"12px",margin:"4px 0 8px",textAlign:"left"},
   recHint:{fontSize:11,color:"#888",margin:"0 0 8px",lineHeight:1.5},
-  recSelect:{width:"100%",padding:"10px",border:"1.5px solid #E0E8DC",borderRadius:10,fontSize:13,marginBottom:8,outline:"none",background:"var(--sg-theme-neutral,#fff)",color:"#333"},
+  recSelect:{width:"100%",padding:"10px",border:"1.5px solid #E8DDEB",borderRadius:10,fontSize:13,marginBottom:8,outline:"none",background:"var(--sg-theme-neutral,#fff)",color:"#333"},
   toast:{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#1a1a2e",color:"#fff",padding:"10px 20px",borderRadius:24,fontSize:13,fontWeight:500,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",zIndex:400,whiteSpace:"nowrap"},
 };

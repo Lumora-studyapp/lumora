@@ -4,6 +4,33 @@ export function normalizeFriendUsername(value) {
   return String(value || "").trim().normalize("NFC").toLowerCase().slice(0, FRIEND_USERNAME_MAX_LENGTH);
 }
 
+export function filterFriendUsernameSuggestions(usernames, prefix, currentUsername, network) {
+  const normalizedPrefix = normalizeFriendUsername(prefix);
+  if (normalizedPrefix.length < 2) return [];
+  const excluded = new Set([
+    normalizeFriendUsername(currentUsername),
+    ...(Array.isArray(network?.friends) ? network.friends.map(item => item?.username) : []),
+    ...(Array.isArray(network?.incoming) ? network.incoming.map(item => item?.username) : []),
+    ...(Array.isArray(network?.outgoing) ? network.outgoing.map(item => item?.username) : []),
+  ].map(normalizeFriendUsername).filter(Boolean));
+  return [...new Set((Array.isArray(usernames) ? usernames : [])
+    .map(normalizeFriendUsername)
+    .filter(username => username.startsWith(normalizedPrefix) && !excluded.has(username)))]
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 8);
+}
+
+export function friendNetworkErrorMessage(error) {
+  const code = String(error?.code || "").replace(/^firestore\//, "");
+  if (code === "permission-denied") {
+    return "Firebase blocked the friend-list request. The current firestore.rules must be published to the Firebase project (firebase deploy --only firestore:rules).";
+  }
+  if (code === "unavailable" || code === "deadline-exceeded") {
+    return "Could not reach Firebase. Check the connection and retry.";
+  }
+  return `Friends could not be loaded${code ? ` (${code})` : ""}. Retry, then check the browser console if it continues.`;
+}
+
 export function friendConnectionId(firstUid, secondUid) {
   const ids = [String(firstUid || "").trim(), String(secondUid || "").trim()].filter(Boolean).sort();
   return ids.length === 2 && ids[0] !== ids[1] ? ids.join("__") : "";

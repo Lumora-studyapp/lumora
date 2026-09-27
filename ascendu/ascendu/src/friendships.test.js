@@ -2,11 +2,34 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterBoardForFriends,
+  filterFriendUsernameSuggestions,
   friendConnectionId,
+  friendNetworkErrorMessage,
   friendNetworkFromConnections,
   normalizeFriendUsername,
   normalizePresenceRecord,
 } from "./friendships.js";
+
+test("friend username suggestions match prefixes and exclude related accounts", () => {
+  const suggestions = filterFriendUsernameSuggestions(
+    ["abcde", "Abcdefg", "abc-two", "abigail", "abcdefg"],
+    "abc",
+    "abc-self",
+    {
+      friends: [{ username: "abcde" }],
+      incoming: [{ username: "abc-two" }],
+      outgoing: [{ username: "abigail" }],
+    },
+  );
+  assert.deepEqual(suggestions, ["abcdefg"]);
+  assert.deepEqual(filterFriendUsernameSuggestions(["abc"], "a", "me", {}), []);
+});
+
+test("friend network permission errors explain how to enable the feature", () => {
+  const message = friendNetworkErrorMessage({ code: "firestore/permission-denied" });
+  assert.match(message, /firestore\.rules/);
+  assert.match(friendNetworkErrorMessage({ code: "unavailable" }), /connection/);
+});
 
 test("friend identities and connection IDs are canonical and stable", () => {
   assert.equal(normalizeFriendUsername("  RAPH  "), "raph");

@@ -63,10 +63,10 @@ body { margin: 0; }
 }
 .sg-shell .lumora-focus-core .lumora-today-wrap { transform: translateY(-4px); margin-bottom: 0 !important; }
 .sg-shell .lumora-focus-core .lumora-today-time { line-height: .9; margin-top: -8px !important; margin-bottom: 0 !important; }
-.sg-shell .lumora-learner-art > img,
+.sg-shell .lumora-learner-art > img { transform: none; margin-top: 4px; }
 .sg-shell .lumora-learner-art > svg { transform: translateY(18px) scale(1.16); transform-origin: center bottom; }
 .sg-shell .lumora-learner-art { height: 100%; transform: none !important; }
-.sg-shell .lumora-learner-art > img,
+.sg-shell .lumora-learner-art > img { height: calc(100% - 4px) !important; width: auto !important; max-width: 100%; object-fit: contain; }
 .sg-shell .lumora-learner-art > svg {
   height: 100% !important; width: auto !important; max-width: 100%; object-fit: contain;
 }

@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { parse } from '@babel/parser'
+import { fileURLToPath } from 'node:url'
 
 const LOCAL_HTTPS_KEY_URL = new URL('./.cert/localhost-key.pem', import.meta.url)
 const LOCAL_HTTPS_CERT_URL = new URL('./.cert/localhost-cert.pem', import.meta.url)
@@ -230,8 +233,124 @@ function studyGroveSourcePatches() {
   }
 }
 
+const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url))
+const EMOJI_SOURCE_PATTERN = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}]/u
+const EMOJI_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' })
+const EMOJI_UI_SYMBOLS = new Set(['〰', '↔', '↩', '⏸', '▶', '☀', '✉'])
+const NON_IMAGE_TEXT_TAGS = new Set(['svg', 'option', 'textarea', 'script', 'style'])
+
+function emojiAssetFilename(glyph) {
+  const slug = Array.from(glyph)
+    .map(character => character.codePointAt(0).toString(16).toUpperCase())
+    .filter(codepoint => codepoint !== 'FE0E' && codepoint !== 'FE0F')
+    .join('-')
+  return `${slug}.${EMOJI_UI_SYMBOLS.has(glyph) ? 'svg' : 'png'}`
+}
+
+function listSourceEmoji(code) {
+  const glyphs = new Set()
+  for (const { segment } of EMOJI_SEGMENTER.segment(code)) {
+    if (EMOJI_SOURCE_PATTERN.test(segment) || segment.includes('\u20e3')) glyphs.add(segment)
+  }
+  return [...glyphs]
+}
+
+function normalizedJsxText(value) {
+  const lines = value.split(/\r\n|\n|\r/)
+  let lastNonEmptyLine = lines.length - 1
+  while (lastNonEmptyLine >= 0 && !lines[lastNonEmptyLine].trim()) lastNonEmptyLine -= 1
+
+  let normalized = ''
+  for (let index = 0; index < lines.length; index += 1) {
+    let line = lines[index]
+    if (index > 0) line = line.replace(/^\s+/, '')
+    if (index < lastNonEmptyLine) line = line.replace(/\s+$/, '')
+    if (line) normalized += `${index > 0 ? ' ' : ''}${line}`
+  }
+  return normalized
+}
+
+function renderEmojiSourcePlugin() {
+  return {
+    name: 'lumora-emoji-image-assets',
+    enforce: 'pre',
+    transform(code, id) {
+      const cleanId = id.split('?')[0]
+      if (!/[\\/]src[\\/].+\.jsx?$/i.test(cleanId)) return null
+      if (/\.test\.jsx?$/i.test(cleanId) || /\.bak$/i.test(cleanId) || path.resolve(cleanId) === path.join(PROJECT_ROOT, 'src', 'EmojiText.jsx')) return null
+
+      const foundEmoji = listSourceEmoji(code)
+      const missingAssets = foundEmoji.filter(glyph =>
+        !existsSync(path.join(PROJECT_ROOT, 'public', 'Emojis', emojiAssetFilename(glyph))),
+      )
+      if (missingAssets.length) {
+        const missing = missingAssets.map(glyph => `${glyph} → ${emojiAssetFilename(glyph)}`).join(', ')
+        throw new Error(`Lumora emoji artwork is missing from public/Emojis: ${missing}. Add each local image before using it.`)
+      }
+
+      if (!/\.jsx$/i.test(cleanId)) return null
+
+      const ast = parse(code, { sourceType: 'module', plugins: ['jsx'] })
+      const edits = []
+      const isExcludedContext = tags => tags.some(tag => NON_IMAGE_TEXT_TAGS.has(tag))
+
+      function visit(node, ancestorTags = [], parent = null) {
+        if (!node || typeof node !== 'object') return
+        if (Array.isArray(node)) {
+          for (const child of node) visit(child, ancestorTags, parent)
+          return
+        }
+
+        let tags = ancestorTags
+        if (node.type === 'JSXElement') {
+          const name = node.openingElement.name
+          if (name.type === 'JSXIdentifier') tags = [...ancestorTags, name.name.toLowerCase()]
+        }
+
+        if (node.type === 'JSXText' && listSourceEmoji(node.value).length && !isExcludedContext(tags)) {
+          const text = normalizedJsxText(node.value)
+          edits.push({
+            start: node.start,
+            end: node.end,
+            content: `{renderEmojiText(${JSON.stringify(text)})}`,
+          })
+        }
+
+        const isChildExpression = node.type === 'JSXExpressionContainer' &&
+          (parent?.type === 'JSXElement' || parent?.type === 'JSXFragment') &&
+          node.expression.type !== 'JSXEmptyExpression' && !isExcludedContext(tags)
+        if (isChildExpression) {
+          edits.push({ start: node.expression.start, end: node.expression.start, content: 'renderEmojiText(' })
+          edits.push({ start: node.expression.end, end: node.expression.end, content: ')' })
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+          if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra' || key === 'errors' || key === 'tokens') continue
+          visit(value, tags, node)
+        }
+      }
+
+      visit(ast)
+      if (!edits.length) return null
+
+      let nextCode = code
+      edits.sort((left, right) => right.start - left.start || right.end - left.end)
+      for (const edit of edits) {
+        nextCode = `${nextCode.slice(0, edit.start)}${edit.content}${nextCode.slice(edit.end)}`
+      }
+
+      const helperPath = path.relative(path.dirname(cleanId), path.join(PROJECT_ROOT, 'src', 'EmojiText.jsx')).replace(/\\/g, '/')
+      const helperImport = helperPath.startsWith('.') ? helperPath : `./${helperPath}`
+      return {
+        code: `import { renderEmojiText, emojiAssetUrl } from ${JSON.stringify(helperImport)};\n${nextCode}`,
+        map: null,
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [studyGroveSourcePatches(), react()],
+  plugins: [studyGroveSourcePatches(), renderEmojiSourcePlugin(), react()],
   server: {
     port: 5173,
     strictPort: true,
