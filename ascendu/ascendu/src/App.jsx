@@ -263,6 +263,12 @@ export const APP_CSS = `
   font-size:12px;
   line-height:1.35;
 }
+.lumora-auth-link-notice {
+  margin:6px 0 10px;
+  color:#63546b;
+  font-size:11px;
+  line-height:1.35;
+}
 .lumora-auth-fields { display:grid;gap:8px; }
 .lumora-auth-input {
   width:100%;
@@ -343,6 +349,16 @@ export const APP_CSS = `
   font-weight:600;
   cursor:pointer;
 }
+.lumora-auth-footer-link.is-auth-primary-link {
+  min-height:34px;
+  margin-top:11px;
+  border-radius:11px;
+  background:rgba(91,27,107,.08);
+  color:#5b1b6b;
+  font-size:12px;
+  font-weight:800;
+}
+.lumora-auth-footer-link:disabled { opacity:.55;cursor:default; }
 .lumora-auth-message { margin:8px 0 0;color:#735384;font-size:11px;line-height:1.35; }
 .lumora-auth-message.is-error { color:#a53f5a; }
 @media (max-height:760px) {
@@ -3365,7 +3381,7 @@ async function fbCreateEmailAccount(email,password){
     return {ok:true,needsUsername:true,user:credential.user};
   }catch(error){
     if(String(error?.code||"").includes("email-already-in-use")){
-      return {ok:false,error:"An account with this email already exists. Use Continue with email to sign in."};
+      return {ok:false,error:"An account with this email already exists. Choose ‘I already have an account’ to sign in."};
     }
     return {ok:false,error:directAuthError(error)};
   }
@@ -10334,14 +10350,16 @@ function OnboardingStudyGoals({ onNext, onBack, initialValue=[] }) {
   );
 }
 
-function OnboardingFinish({ onNext, onBack }) {
+function OnboardingFinish({ onNext, onBack, isReplay=false }) {
   return (
     <main style={S.onboardingWelcome}>
       <section style={S.onboardingWelcomeInner} aria-labelledby="onboarding-finish-title">
         <div style={S.onboardingWelcomeCopy}>
           <span style={S.onboardingEyebrow}>YOU'RE READY</span>
           <h1 id="onboarding-finish-title" style={S.onboardingQuestionTitle}>Ready to reach your goals?</h1>
-          <p style={S.onboardingBody}>Create your account to save your progress and start learning.</p>
+          <p style={S.onboardingBody}>{isReplay
+            ? "Your account is already set up. Review its sign-in methods or continue to Lumora."
+            : "Create your account to save your progress and start learning."}</p>
         </div>
 
         <div style={S.onboardingMascotWrap} aria-hidden="true">
@@ -10351,7 +10369,7 @@ function OnboardingFinish({ onNext, onBack }) {
         <div style={S.onboardingActions}>
           <OnboardingBackButton onBack={onBack}/>
           <button type="button" style={{...S.onboardingNextButton,flex:1}} onClick={onNext}>
-            <span>Continue to sign up</span>
+            <span>{isReplay?"Review sign-in methods":"Continue to sign up"}</span>
             <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
           </button>
         </div>
@@ -10360,7 +10378,7 @@ function OnboardingFinish({ onNext, onBack }) {
   );
 }
 
-function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="create", onBack }) {
+function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="create", onBack, onDone, onSwitchAccount }) {
   const isLinkFlow=flow==="link";
   const [name,setName]=useState(()=>isLinkFlow?auth.currentUser?.email||"":"");
   const [pass,setPass]=useState("");
@@ -10568,9 +10586,9 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="c
         <div className="lumora-auth-brand"><ImageAsset src={LUMORA_LOGO_IMAGE} alt="" fetchPriority="high"/><span>Lumora</span></div>
         <p className="lumora-auth-eyebrow">{isLinkFlow?"MORE WAYS TO SIGN IN":emailSignup?"ONE LAST STEP":"WELCOME BACK"}</p>
         <h1 id="lumora-auth-title" className="lumora-auth-title">{isLinkFlow?"Link your account":emailSignup?"Create your account":"Sign in to Lumora"}</h1>
-        <p className="lumora-auth-subtitle">{isLinkFlow
-          ? "Add another way to access this same Lumora account."
-          : emailSignup?"Save your progress and start learning.":"Continue your focus journey."}</p>
+        {isLinkFlow
+          ? <p className="lumora-auth-link-notice">You’re signed in. Methods marked as linked are ready; choose an unlinked method below.</p>
+          : <p className="lumora-auth-subtitle">{emailSignup?"Save your progress and start learning.":"Continue your focus journey."}</p>}
 
         <div className="lumora-auth-fields">
           <input className="lumora-auth-input" type={isLinkFlow||emailSignup?"email":"text"}
@@ -10580,11 +10598,11 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="c
             disabled={providerLinked("password")}
             value={name} onChange={e=>{setName(e.target.value);setErr("");setLinkMessage("");}}
             onKeyDown={e=>e.key==="Enter"&&go()} maxLength={254}/>
-          <input className="lumora-auth-input" placeholder={isLinkFlow?"Create a password":"Password"}
+          {(!isLinkFlow||!providerLinked("password"))&&<input className="lumora-auth-input" placeholder={isLinkFlow?"Create a password":"Password"}
             aria-label="Password" type="password" autoComplete={isLinkFlow||emailSignup?"new-password":"current-password"}
             disabled={providerLinked("password")}
             value={pass} onChange={e=>{setPass(e.target.value);setErr("");setLinkMessage("");}}
-            onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>
+            onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>}
         </div>
 
         {/* Recovery questions require the optional callable-functions backend. */}
@@ -10617,7 +10635,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="c
         </button>
         <button type="button" className="lumora-auth-provider is-apple" onClick={()=>socialSignIn("apple")}
           disabled={loading||providerLinked("apple.com")}>
-          <span aria-hidden="true"></span><span>{isLinkFlow
+          <span>{isLinkFlow
             ? providerLinked("apple.com")?"Apple linked":busyProvider==="apple"?"Linking Apple…":"Link Apple account"
             : "Continue with Apple"}</span>
         </button>
@@ -10627,6 +10645,10 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="c
         </button>}
         {!isLinkFlow&&!emailSignup&&AUTH_FUNCTIONS_ENABLED&&<button type="button" className="lumora-auth-footer-link"
           onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
+        {isLinkFlow&&onDone&&<button type="button" className="lumora-auth-footer-link is-auth-primary-link"
+          onClick={onDone} disabled={loading}>Done — continue to Lumora</button>}
+        {isLinkFlow&&onSwitchAccount&&<button type="button" className="lumora-auth-footer-link"
+          onClick={onSwitchAccount} disabled={loading}>Sign out to create a separate account</button>}
       </section>
     </main>
   );
@@ -14750,8 +14772,18 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             setOnboardingStep(0);
           }}/>
         : onboardingStep===6
-        ? <OnboardingFinish onBack={()=>navigateOnboarding(5)} onNext={()=>navigateOnboarding(7)}/>
-        : <LoginScreen flow="link" onBack={()=>navigateOnboarding(6)}/>
+        ? <OnboardingFinish isReplay={onboardingReplayRef.current} onBack={()=>navigateOnboarding(5)} onNext={()=>navigateOnboarding(7)}/>
+        : <LoginScreen flow="link" onBack={()=>navigateOnboarding(6)}
+            onDone={()=>{
+              onboardingReplayRef.current=false;
+              lsSetR(LS_ONBOARDING_COMPLETE,"1");
+              setOnboardingStep(0);
+            }}
+            onSwitchAccount={()=>{
+              onboardingReplayRef.current=false;
+              handleLogout();
+              setOnboardingStep(0);
+            }}/>
         }
       </div>
     </>
