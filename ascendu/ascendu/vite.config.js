@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { parse } from '@babel/parser'
 import { fileURLToPath } from 'node:url'
@@ -234,10 +234,55 @@ function studyGroveSourcePatches() {
 }
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url))
+const PUBLIC_ROOT = path.join(PROJECT_ROOT, 'public')
 const EMOJI_SOURCE_PATTERN = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}]/u
 const EMOJI_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' })
 const EMOJI_UI_SYMBOLS = new Set(['〰', '↔', '↩', '⏸', '▶', '☀', '✉'])
 const NON_IMAGE_TEXT_TAGS = new Set(['svg', 'option', 'textarea', 'script', 'style'])
+const PUBLIC_IMAGE_REFERENCE_PATTERN = /\/[^"'`)\r\n]+?\.(?:png|webp|jpe?g|gif|svg|avif)(?:[?#][^"'`)\r\n]*)?/gi
+
+function collectSourceFiles(directory, files = []) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const absolutePath = path.join(directory, entry.name)
+    if (entry.isDirectory()) collectSourceFiles(absolutePath, files)
+    else if (/\.(?:[cm]?[jt]sx?|css|html)$/i.test(entry.name) && !/\.bak$/i.test(entry.name)) files.push(absolutePath)
+  }
+  return files
+}
+
+function publicImageIntegrityPlugin() {
+  return {
+    name: 'lumora-public-image-integrity',
+    enforce: 'pre',
+    buildStart() {
+      const issues = new Set()
+      for (const sourcePath of collectSourceFiles(path.join(PROJECT_ROOT, 'src'))) {
+        const source = readFileSync(sourcePath, 'utf8')
+        for (const match of source.matchAll(PUBLIC_IMAGE_REFERENCE_PATTERN)) {
+          const reference = match[0].split(/[?#]/, 1)[0]
+          if (reference.includes('${')) continue
+          let relativePath
+          try {
+            relativePath = decodeURIComponent(reference.replace(/^\/+/, ''))
+          } catch {
+            issues.add(`${path.relative(PROJECT_ROOT, sourcePath)} → invalid image URL ${reference}`)
+            continue
+          }
+          const assetPath = path.resolve(PUBLIC_ROOT, relativePath)
+          if (assetPath !== PUBLIC_ROOT && !assetPath.startsWith(`${PUBLIC_ROOT}${path.sep}`)) continue
+          if (!existsSync(assetPath)) {
+            issues.add(`${path.relative(PROJECT_ROOT, sourcePath)} → missing ${reference}`)
+          } else if (!statSync(assetPath).isFile() || statSync(assetPath).size === 0) {
+            issues.add(`${path.relative(PROJECT_ROOT, sourcePath)} → empty or invalid ${reference}`)
+          }
+        }
+      }
+      if (issues.size) {
+        this.error(`Lumora image assets failed validation:\n${[...issues].map(issue => `- ${issue}`).join('\n')}`)
+      }
+    },
+  }
+}
 
 function emojiAssetFilename(glyph) {
   const slug = Array.from(glyph)
@@ -280,9 +325,10 @@ function renderEmojiSourcePlugin() {
       if (/\.test\.jsx?$/i.test(cleanId) || /\.bak$/i.test(cleanId) || path.resolve(cleanId) === path.join(PROJECT_ROOT, 'src', 'EmojiText.jsx')) return null
 
       const foundEmoji = listSourceEmoji(code)
-      const missingAssets = foundEmoji.filter(glyph =>
-        !existsSync(path.join(PROJECT_ROOT, 'public', 'Emojis', emojiAssetFilename(glyph))),
-      )
+      const missingAssets = foundEmoji.filter(glyph => {
+        const assetPath = path.join(PUBLIC_ROOT, 'Emojis', emojiAssetFilename(glyph))
+        return !existsSync(assetPath) || statSync(assetPath).size === 0
+      })
       if (missingAssets.length) {
         const missing = missingAssets.map(glyph => `${glyph} → ${emojiAssetFilename(glyph)}`).join(', ')
         throw new Error(`Lumora emoji artwork is missing from public/Emojis: ${missing}. Add each local image before using it.`)
@@ -350,7 +396,7 @@ function renderEmojiSourcePlugin() {
 }
 
 export default defineConfig({
-  plugins: [studyGroveSourcePatches(), renderEmojiSourcePlugin(), react()],
+  plugins: [studyGroveSourcePatches(), publicImageIntegrityPlugin(), renderEmojiSourcePlugin(), react()],
   server: {
     port: 5173,
     strictPort: true,

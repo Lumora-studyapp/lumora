@@ -1,6 +1,7 @@
 // STUDYGROVE PREMIUM SKINS BUILD: Moon Tree, Dragon Tree, King's Oak, Diamond Tree, Lion Tree
 import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
+import ImageAsset from "./ImageAsset.jsx";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
 import SubjectColourPicker from "./SubjectColourPicker.jsx";
 import {attachClassroomGestures} from "./classroomGestures.js";
@@ -92,6 +93,9 @@ const ONBOARDING_WELCOME_IMAGE = "/mascot/lumora-gorilla-3d-waving-no-background
 const ONBOARDING_EDUCATION_IMAGE = "/mascot/lumora-gorilla-3d-uni-no-background.png";
 const ONBOARDING_REFERRAL_IMAGE = "/mascot/lumora-gorilla-3d-point-no-background.png";
 const ONBOARDING_PROGRESS_IMAGE = "/mascot/lumora-gorilla-3d-progress-no-background.png";
+const ONBOARDING_GOALS_IMAGE = "/mascot/lumora-gorilla-3d-head-scratch-no-background.png";
+const ONBOARDING_FINISH_IMAGE = "/mascot/lumora-gorilla-3d-finish-line-front.png";
+const ONBOARDING_ACCOUNT_IMAGE = "/mascot/lumora-gorilla-3d-purple-atom-superhero-exertion-no-background.png";
 const LUMORA_LOGO_IMAGE = "/Logo/Lumora%20default%20logo";
 const EDUCATION_OPTIONS = [
   "Primary school student",
@@ -106,6 +110,13 @@ const STUDY_HOUR_OPTIONS = [
   "15–25 hours",
   "25–40 hours",
   "40+ hours",
+];
+const STUDY_GOAL_OPTIONS = [
+  "Increase study duration",
+  "Increase motivation",
+  "Decrease procrastination",
+  "Improve focus and concentration",
+  "Build a consistent study routine",
 ];
 const REFERRAL_OPTIONS = [
   "Instagram",
@@ -129,6 +140,234 @@ export const APP_CSS = `
 .lumora-onboarding-slide.is-back { animation-name: lumoraOnboardingBack; }
 @media (prefers-reduced-motion: reduce) {
   .lumora-onboarding-slide { animation-duration: 1ms; }
+}
+.lumora-auth-stage {
+  position:relative;
+  isolation:isolate;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  width:100%;
+  height:100dvh;
+  box-sizing:border-box;
+  overflow:hidden;
+  padding:max(17px,env(safe-area-inset-top)) 13px max(12px,env(safe-area-inset-bottom));
+  background:radial-gradient(ellipse at 50% 48%,#f6e8ff 0%,#fbf6ff 45%,#fff 78%);
+  color:#342038;
+}
+.lumora-auth-stage::before {
+  content:"";
+  position:absolute;
+  z-index:0;
+  width:min(800px,125vw);
+  aspect-ratio:1;
+  left:50%;
+  top:4%;
+  transform:translateX(-50%);
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(192,98,251,.27) 0%,rgba(198,113,249,.12) 38%,transparent 69%);
+  pointer-events:none;
+}
+.lumora-auth-stage::after {
+  content:"";
+  position:absolute;
+  z-index:1;
+  inset:-12%;
+  background:
+    linear-gradient(108deg,transparent 42%,rgba(190,105,255,.30) 42.25%,rgba(234,196,255,.66) 42.5%,transparent 42.9%),
+    linear-gradient(72deg,transparent 53%,rgba(168,71,255,.34) 53.2%,rgba(230,191,255,.72) 53.45%,transparent 53.8%),
+    repeating-conic-gradient(from 2deg at 50% 40%,transparent 0deg 14deg,rgba(183,86,255,.32) 14.2deg 14.7deg,transparent 15deg 26deg);
+  -webkit-mask-image:radial-gradient(ellipse at 50% 40%,transparent 0 20%,#000 34% 67%,transparent 89%);
+  mask-image:radial-gradient(ellipse at 50% 40%,transparent 0 20%,#000 34% 67%,transparent 89%);
+  opacity:.74;
+  pointer-events:none;
+  animation:lumora-auth-zap 5s ease-in-out infinite alternate;
+}
+.lumora-auth-art {
+  position:absolute;
+  z-index:0;
+  left:50%;
+  top:auto;
+  bottom:0;
+  width:min(100vw,51dvh,680px);
+  max-width:none;
+  height:auto;
+  transform:translateX(-50%);
+  pointer-events:none;
+  user-select:none;
+  filter:drop-shadow(0 12px 20px rgba(82,25,135,.2));
+}
+@keyframes lumora-auth-zap { from { opacity:.48; } to { opacity:.9; } }
+@media (prefers-reduced-motion:reduce) { .lumora-auth-stage::after { animation:none; } }
+.lumora-auth-back {
+  position:absolute;
+  z-index:3;
+  top:max(17px,env(safe-area-inset-top));
+  left:max(17px,env(safe-area-inset-left));
+  width:42px;
+  height:42px;
+  border:1px solid #dfcbe9;
+  border-radius:14px;
+  background:rgba(255,255,255,.87);
+  color:#5b1b6b;
+  font-size:23px;
+  line-height:1;
+  cursor:pointer;
+}
+.lumora-auth-panel {
+  position:relative;
+  z-index:2;
+  width:min(100%,380px);
+  max-height:calc(100dvh - max(29px,env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+  box-sizing:border-box;
+  margin-top:clamp(5px,2.2dvh,25px);
+  padding:clamp(15px,2.3dvh,23px) clamp(16px,3.5vw,25px);
+  border:1.5px solid rgba(181,113,218,.66);
+  border-radius:27px;
+  background:linear-gradient(160deg,rgba(255,255,255,.985),rgba(251,245,255,.96));
+  box-shadow:0 0 0 6px rgba(204,116,250,.13),0 0 37px 12px rgba(185,66,255,.18),0 14px 38px rgba(57,13,84,.14);
+  text-align:center;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.lumora-auth-brand {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:#48145e;
+  font-size:18px;
+  font-weight:850;
+  letter-spacing:-.035em;
+}
+.lumora-auth-brand img { width:32px;height:32px;object-fit:contain; }
+.lumora-auth-eyebrow {
+  margin:10px 0 2px;
+  color:#9253af;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+.lumora-auth-title {
+  margin:0;
+  color:#3b0a4a;
+  font-size:clamp(23px,4.5vw,28px);
+  font-weight:850;
+  letter-spacing:-.04em;
+  line-height:1.1;
+}
+.lumora-auth-subtitle {
+  margin:6px 0 13px;
+  color:#75677a;
+  font-size:12px;
+  line-height:1.35;
+}
+.lumora-auth-fields { display:grid;gap:8px; }
+.lumora-auth-input {
+  width:100%;
+  height:45px;
+  box-sizing:border-box;
+  padding:0 13px;
+  border:1.5px solid #e4d4eb;
+  border-radius:13px;
+  outline:none;
+  background:rgba(255,255,255,.9);
+  color:#342738;
+  font:inherit;
+  font-size:14px;
+}
+.lumora-auth-input:focus-visible { border-color:#8d50ad;box-shadow:0 0 0 3px rgba(157,93,190,.16); }
+.lumora-auth-input:disabled { color:#877c8a;background:#f4edf7; }
+.lumora-auth-action {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  min-height:46px;
+  margin-top:9px;
+  padding:8px 12px;
+  border:0;
+  border-radius:14px;
+  background:linear-gradient(135deg,#5b1b6b,#7c3e8e);
+  color:#fff;
+  font:inherit;
+  font-size:15px;
+  font-weight:800;
+  cursor:pointer;
+  box-shadow:0 7px 17px rgba(91,27,107,.16);
+}
+.lumora-auth-action:disabled { opacity:.58;cursor:default;box-shadow:none; }
+.lumora-auth-divider {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:12px 0 9px;
+  color:#9b8e9e;
+  font-size:11px;
+  white-space:nowrap;
+}
+.lumora-auth-divider::before,.lumora-auth-divider::after {content:"";height:1px;flex:1;background:#e7dceb;}
+.lumora-auth-provider {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  min-height:43px;
+  padding:7px 12px;
+  border:1px solid #e3d5e7;
+  border-radius:13px;
+  background:rgba(255,255,255,.91);
+  color:#342738;
+  font:inherit;
+  font-size:14px;
+  font-weight:750;
+  cursor:pointer;
+}
+.lumora-auth-provider + .lumora-auth-provider { margin-top:7px; }
+.lumora-auth-provider.is-apple { background:#242629;border-color:#242629;color:#fff; }
+.lumora-auth-provider:disabled { opacity:.58;cursor:default; }
+.lumora-auth-footer-link {
+  display:block;
+  width:100%;
+  min-height:27px;
+  margin-top:9px;
+  padding:4px 0;
+  border:0;
+  background:transparent;
+  color:#88818d;
+  font:inherit;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+}
+.lumora-auth-message { margin:8px 0 0;color:#735384;font-size:11px;line-height:1.35; }
+.lumora-auth-message.is-error { color:#a53f5a; }
+@media (max-height:760px) {
+  .lumora-auth-panel { margin-top:2px;padding:9px 15px;border-radius:23px; }
+  .lumora-auth-brand img { width:24px;height:24px; }
+  .lumora-auth-brand { font-size:15px; }
+  .lumora-auth-eyebrow,.lumora-auth-subtitle { display:none; }
+  .lumora-auth-title { font-size:21px;margin:3px 0 7px; }
+  .lumora-auth-fields { gap:5px; }
+  .lumora-auth-input { height:38px; }
+  .lumora-auth-action { min-height:39px;margin-top:5px;font-size:14px; }
+  .lumora-auth-divider { margin:6px 0 5px; }
+  .lumora-auth-provider { min-height:36px;font-size:13px; }
+  .lumora-auth-provider + .lumora-auth-provider { margin-top:5px; }
+  .lumora-auth-footer-link { min-height:23px;margin-top:3px;font-size:10px; }
+}
+@media (max-height:560px) {
+  .lumora-auth-panel { padding:9px 13px; }
+  .lumora-auth-eyebrow,.lumora-auth-subtitle { display:none; }
+  .lumora-auth-title { font-size:21px;margin:3px 0 8px; }
+  .lumora-auth-fields { gap:5px; }
+  .lumora-auth-input { height:38px; }
+  .lumora-auth-action { min-height:39px;margin-top:5px; }
+  .lumora-auth-provider { min-height:38px; }
+  .lumora-auth-divider { margin:5px 0; }
 }
 @keyframes sgpulse {
   0%   { box-shadow: 0 0 0 0 rgba(52,199,89,0.5); }
@@ -6183,11 +6422,11 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
           imageScale={equippedSkin.characterImageScale||1} onPlaybackChange={onStagePlaybackChange}/>}
         {showProgression
           ? <div style={fs.finalEvolutionWrap}>
-              <img src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} style={{...fs.progressionImage,opacity:stageTransitionPlaying?0:paused?.5:1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+              <ImageAsset src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} fetchPriority="high" style={{...fs.progressionImage,opacity:stageTransitionPlaying?0:paused?.5:1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
             </div>
           : showFinalEvolution
           ? <div style={fs.finalEvolutionWrap}>
-              <img src={equippedSkin.characterImage} alt={`${equippedSkin.name} final evolution`} style={{...fs.finalEvolutionImage,opacity:paused ? .5 : 1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+              <ImageAsset src={equippedSkin.characterImage} alt={`${equippedSkin.name} final evolution`} fetchPriority="high" style={{...fs.finalEvolutionImage,opacity:paused ? .5 : 1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
               <div style={fs.finalEvolutionLabel}>✨ Final evolution · {equippedSkin.name}</div>
             </div>
           : <TreeSVG progress={isBreak?1:progress} color={subject.color} paused={paused||isBreak} large skin={skin} enhance={enhance}/>
@@ -6607,7 +6846,7 @@ const am = {
 // avoids mobile WebKit dropping a re-created skin while its sheet is scrolling.
 function LazyShopTree({ skin, enhance=0, scrolling=false }) {
   if(skin.characterImage)return <div style={{height:220,width:"100%",position:"relative",overflow:"hidden",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-    <img src={skin.characterImage} alt="" loading="lazy" style={{maxWidth:"100%",height:"218px",objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 7px 9px rgba(35,43,36,.16))",transform:`scale(${skin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+    <ImageAsset src={skin.characterImage} alt="" loading="lazy" fetchPriority="low" style={{maxWidth:"100%",height:"218px",objectFit:"contain",objectPosition:"center bottom",filter:"drop-shadow(0 7px 9px rgba(35,43,36,.16))",transform:`scale(${skin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
   </div>;
   const hostRef=useRef(null);
   const [nearViewport,setNearViewport]=useState(false);
@@ -6666,7 +6905,7 @@ function SkinProgressionPreview({ skin, onClose }) {
       <div style={sp.artWrap}>
         {isBlank
           ? <div style={sp.blankArt} aria-label={`${skin.name} progression ${stageIndex+1} is blank`}/>
-          : <img key={imageSrc} src={imageSrc} alt={`${skin.name} progression ${stageIndex+1}: ${stageName}`} style={sp.art}/>
+          : <ImageAsset key={imageSrc} src={imageSrc} alt={`${skin.name} progression ${stageIndex+1}: ${stageName}`} fetchPriority="high" style={sp.art}/>
         }
       </div>
       <div style={sp.stageLabel}>
@@ -8516,7 +8755,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
   const boringItems = [
     { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
     { icon:"◇", label:"Privacy & Data", sub:"Read the Lumora privacy policy", onClick:onPrivacyData },
-    { icon:"👋", label:"Replay onboarding", sub:"View the welcome questions again", onClick:onReplayOnboarding },
+    { icon:"👋", label:"Replay onboarding", sub:"Replay the full welcome flow", onClick:onReplayOnboarding },
   ];
   return createPortal((
     <div className="sg-shell" style={{...themeStyle,display:"contents"}} data-background={backgroundId}>
@@ -9869,7 +10108,7 @@ function OnboardingWelcome({ onNext }) {
         </div>
 
         <div style={S.onboardingMascotWrap} aria-hidden="true">
-          <img src={ONBOARDING_WELCOME_IMAGE} alt="" style={S.onboardingMascot}/>
+          <ImageAsset src={ONBOARDING_WELCOME_IMAGE} alt="" fetchPriority="high" style={S.onboardingMascot}/>
         </div>
 
         <button type="button" style={S.onboardingNextButton} onClick={onNext}>
@@ -9912,7 +10151,7 @@ function OnboardingEducation({ onNext, onBack, initialValue="" }) {
         </div>
 
         <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
-          <img src={ONBOARDING_EDUCATION_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+          <ImageAsset src={ONBOARDING_EDUCATION_IMAGE} alt="" fetchPriority="high" style={S.onboardingQuestionMascot}/>
         </div>
 
         <div role="radiogroup" aria-label="Education stage" style={S.onboardingOptions}>
@@ -9968,7 +10207,7 @@ function OnboardingReferral({ onNext, onBack, initialValue="" }) {
         </div>
 
         <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
-          <img src={ONBOARDING_REFERRAL_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+          <ImageAsset src={ONBOARDING_REFERRAL_IMAGE} alt="" fetchPriority="high" style={S.onboardingQuestionMascot}/>
         </div>
 
         <div role="radiogroup" aria-label="How you heard about Lumora" style={S.onboardingOptions}>
@@ -10014,7 +10253,7 @@ function OnboardingStudyHours({ onNext, onBack, initialValue="" }) {
         </div>
 
         <div style={S.onboardingQuestionMascotWrap} aria-hidden="true">
-          <img src={ONBOARDING_PROGRESS_IMAGE} alt="" style={S.onboardingQuestionMascot}/>
+          <ImageAsset src={ONBOARDING_PROGRESS_IMAGE} alt="" fetchPriority="high" style={S.onboardingQuestionMascot}/>
         </div>
 
         <div role="radiogroup" aria-label="Study hours goal" style={S.onboardingOptions}>
@@ -10046,11 +10285,90 @@ function OnboardingStudyHours({ onNext, onBack, initialValue="" }) {
   );
 }
 
-function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
-  const [name,setName]=useState("");
+function OnboardingStudyGoals({ onNext, onBack, initialValue=[] }) {
+  const [selection,setSelection]=useState(Array.isArray(initialValue)?initialValue:[]);
+
+  const toggleGoal=goal=>setSelection(current=>
+    current.includes(goal)?current.filter(item=>item!==goal):[...current,goal]
+  );
+
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={{...S.onboardingQuestionInner,padding:"clamp(24px,4vh,38px) 24px max(24px,env(safe-area-inset-bottom))"}} aria-labelledby="onboarding-goals-title">
+        <div style={S.onboardingQuestionCopy}>
+          <span style={S.onboardingEyebrow}>YOUR GOALS</span>
+          <h1 id="onboarding-goals-title" style={S.onboardingQuestionTitle}>What are your study goals?</h1>
+          <p style={{...S.onboardingBody,marginTop:8}}>Select all that apply.</p>
+        </div>
+
+        <div style={{...S.onboardingQuestionMascotWrap,height:170,margin:"8px 0 10px"}} aria-hidden="true">
+          <ImageAsset src={ONBOARDING_GOALS_IMAGE} alt="" fetchPriority="high" style={{...S.onboardingQuestionMascot,width:"min(100%,220px)"}}/>
+        </div>
+
+        <div role="group" aria-label="Study goals" style={{...S.onboardingOptions,gap:7}}>
+          {STUDY_GOAL_OPTIONS.map(goal=>{
+            const selected=selection.includes(goal);
+            return (
+              <button key={goal} type="button" role="checkbox" aria-checked={selected}
+                style={{...S.onboardingOption,minHeight:44,padding:"8px 12px 8px 14px",fontSize:14,...(selected?S.onboardingOptionSelected:{})}}
+                onClick={()=>toggleGoal(goal)}>
+                <span>{goal}</span>
+                <span aria-hidden="true" style={{...S.onboardingRadio,borderRadius:7,...(selected?S.onboardingRadioSelected:{})}}>
+                  {selected?"✓":""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={S.onboardingActions}>
+          <OnboardingBackButton onBack={onBack}/>
+          <button type="button" disabled={!selection.length} onClick={()=>selection.length&&onNext(selection)}
+            style={{...S.onboardingNextButton,flex:1,...(!selection.length?S.onboardingNextButtonDisabled:{})}}>
+            <span>Next</span>
+            <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function OnboardingFinish({ onNext, onBack }) {
+  return (
+    <main style={S.onboardingWelcome}>
+      <section style={S.onboardingWelcomeInner} aria-labelledby="onboarding-finish-title">
+        <div style={S.onboardingWelcomeCopy}>
+          <span style={S.onboardingEyebrow}>YOU'RE READY</span>
+          <h1 id="onboarding-finish-title" style={S.onboardingQuestionTitle}>Ready to reach your goals?</h1>
+          <p style={S.onboardingBody}>Create your account to save your progress and start learning.</p>
+        </div>
+
+        <div style={S.onboardingMascotWrap} aria-hidden="true">
+          <ImageAsset src={ONBOARDING_FINISH_IMAGE} alt="" fetchPriority="high" style={S.onboardingMascot}/>
+        </div>
+
+        <div style={S.onboardingActions}>
+          <OnboardingBackButton onBack={onBack}/>
+          <button type="button" style={{...S.onboardingNextButton,flex:1}} onClick={onNext}>
+            <span>Continue to sign up</span>
+            <span aria-hidden="true" style={S.onboardingNextArrow}>→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginScreen({ onLogin, initialSocialUser=null, initialError="", flow="create", onBack }) {
+  const isLinkFlow=flow==="link";
+  const [name,setName]=useState(()=>isLinkFlow?auth.currentUser?.email||"":"");
   const [pass,setPass]=useState("");
   const [err,setErr]=useState(initialError);
   const [loading,setLoading]=useState(false);
+  const [busyProvider,setBusyProvider]=useState("");
+  const [linkMessage,setLinkMessage]=useState("");
+  const [linkedProviders,setLinkedProviders]=useState(()=>auth.currentUser?.providerData?.map(provider=>provider.providerId)||[]);
   // Optional recovery setup (used only when creating a new account)
   const [showRecovery,setShowRecovery]=useState(false);
   const [recQ,setRecQ]=useState(RECOVERY_QUESTIONS[0]);
@@ -10063,7 +10381,8 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   const [fpNewPass,setFpNewPass]=useState("");
   const [socialUser,setSocialUser]=useState(initialSocialUser);
   const [socialUsername,setSocialUsername]=useState(()=>(initialSocialUser?.displayName||initialSocialUser?.email?.split("@")[0]||"").replace(/\s+/g,"_").slice(0,20));
-  const [emailSignup,setEmailSignup]=useState(false);
+  const [emailSignup,setEmailSignup]=useState(true);
+  const providerLinked=providerId=>isLinkFlow&&linkedProviders.includes(providerId);
 
   // Firebase's redirect result and its auth-state notification can resolve in
   // either order. If the notification finishes second, this screen is already
@@ -10081,9 +10400,20 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   },[initialError]);
 
   const go=async()=>{
+    if(isLinkFlow){
+      if(providerLinked("password"))return;
+      setLoading(true);setErr("");setLinkMessage("");
+      const result=await fbLinkEmailProvider(name,pass);
+      setLoading(false);
+      if(!result.ok){setErr(result.error);return;}
+      setLinkedProviders(current=>[...new Set([...current,...(auth.currentUser?.providerData?.map(provider=>provider.providerId)||[]),"password"])]);
+      setPass("");
+      setLinkMessage(result.alreadyLinked?"Email sign-in is already linked.":"Email sign-in linked. You can now use it to sign in.");
+      return;
+    }
     const t=name.trim();
     const emailLogin=isEmailLogin(t);
-    if(!t){setErr("Enter a username or email");return;}
+    if(!t){setErr(emailSignup?"Enter an email address":"Enter a username or email");return;}
     if(!emailLogin&&t.length>20){setErr("Username can be at most 20 characters");return;}
     if(emailLogin&&t.length>254){setErr("Email address is too long");return;}
     if(!pass){setErr("Enter a password");return;}
@@ -10107,6 +10437,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
 
   // Step 1 of forgot: look up the user's recovery question
   const fpLookup=async()=>{
+    if(isLinkFlow)return;
     const t=name.trim();
     if(!t){setErr("Enter your username");return;}
     setLoading(true); setErr("");
@@ -10118,6 +10449,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
 
   // Step 2 of forgot: verify answer + set new password
   const fpReset=async()=>{
+    if(isLinkFlow)return;
     if(!fpAnswer.trim()){setErr("Enter your answer");return;}
     if(!fpNewPass||fpNewPass.length<6){setErr("New password must be at least 6 characters");return;}
     setLoading(true); setErr("");
@@ -10131,6 +10463,18 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   const backToLogin=()=>{ setMode("login");setFpStep(1);setErr("");setFpAnswer("");setFpNewPass("");setFpQuestion(""); };
 
   const socialSignIn=async kind=>{
+    if(isLinkFlow){
+      const providerId=kind==="google"?"google.com":"apple.com";
+      if(providerLinked(providerId))return;
+      setLoading(true);setBusyProvider(kind);setErr("");setLinkMessage("");
+      const result=await fbLinkSocialProvider(kind);
+      setLoading(false);setBusyProvider("");
+      if(!result.ok){setErr(result.error);return;}
+      setLinkedProviders(current=>[...new Set([...current,...(auth.currentUser?.providerData?.map(provider=>provider.providerId)||[]),providerId])]);
+      const providerName=kind==="google"?"Google":"Apple";
+      setLinkMessage(result.alreadyLinked?`${providerName} sign-in is already linked.`:`${providerName} sign-in linked. You can now use it to sign in.`);
+      return;
+    }
     setLoading(true);setErr("");
     const result=await fbSignInWithSocialProvider(kind);
     setLoading(false);
@@ -10145,6 +10489,7 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   };
 
   const finishSocialSignIn=async()=>{
+    if(isLinkFlow)return;
     if(!socialUser)return;
     setLoading(true);setErr("");
     const result=await fbClaimSocialUsername(socialUser,socialUsername);
@@ -10216,28 +10561,36 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
   }
 
   return (
-    <div style={S.loginWrap}>
-      <div style={S.loginCard}>
-        <img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:60,height:60,objectFit:"contain",margin:"0 auto 8px"}}/>
-        <h1 style={S.loginTitle}>Lumora</h1>
-        <p style={S.loginSub}>Grow your focus. Build your future.</p>
-        <input style={{...S.input,...(err&&!pass?S.inputErr:{})}}
-          placeholder={emailSignup?"Email address":"Username or email"}
-          aria-label="Username or email"
-          autoCapitalize="none" autoComplete="username"
-          value={name} onChange={e=>{setName(e.target.value);setErr("");}}
-          onKeyDown={e=>e.key==="Enter"&&go()} maxLength={254} autoFocus/>
-        <input style={{...S.input,...(err&&pass?S.inputErr:{})}}
-          placeholder="Password"
-          type="password"
-          autoComplete="current-password"
-          value={pass} onChange={e=>{setPass(e.target.value);setErr("");}}
-          onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>
+    <main className="lumora-auth-stage">
+      <ImageAsset className="lumora-auth-art" src={ONBOARDING_ACCOUNT_IMAGE} alt="" fetchPriority="high" aria-hidden="true"/>
+      {isLinkFlow&&onBack&&<button type="button" className="lumora-auth-back" onClick={onBack} aria-label="Back to the previous onboarding slide">←</button>}
+      <section className="lumora-auth-panel" aria-labelledby="lumora-auth-title">
+        <div className="lumora-auth-brand"><ImageAsset src={LUMORA_LOGO_IMAGE} alt="" fetchPriority="high"/><span>Lumora</span></div>
+        <p className="lumora-auth-eyebrow">{isLinkFlow?"MORE WAYS TO SIGN IN":emailSignup?"ONE LAST STEP":"WELCOME BACK"}</p>
+        <h1 id="lumora-auth-title" className="lumora-auth-title">{isLinkFlow?"Link your account":emailSignup?"Create your account":"Sign in to Lumora"}</h1>
+        <p className="lumora-auth-subtitle">{isLinkFlow
+          ? "Add another way to access this same Lumora account."
+          : emailSignup?"Save your progress and start learning.":"Continue your focus journey."}</p>
+
+        <div className="lumora-auth-fields">
+          <input className="lumora-auth-input" type={isLinkFlow||emailSignup?"email":"text"}
+            placeholder={isLinkFlow||emailSignup?"Email address":"Username or email"}
+            aria-label={isLinkFlow||emailSignup?"Email address":"Username or email"}
+            autoCapitalize="none" autoComplete={isLinkFlow||emailSignup?"email":"username"}
+            disabled={providerLinked("password")}
+            value={name} onChange={e=>{setName(e.target.value);setErr("");setLinkMessage("");}}
+            onKeyDown={e=>e.key==="Enter"&&go()} maxLength={254}/>
+          <input className="lumora-auth-input" placeholder={isLinkFlow?"Create a password":"Password"}
+            aria-label="Password" type="password" autoComplete={isLinkFlow||emailSignup?"new-password":"current-password"}
+            disabled={providerLinked("password")}
+            value={pass} onChange={e=>{setPass(e.target.value);setErr("");setLinkMessage("");}}
+            onKeyDown={e=>e.key==="Enter"&&go()} maxLength={50}/>
+        </div>
 
         {/* Recovery questions require the optional callable-functions backend. */}
-        {AUTH_FUNCTIONS_ENABLED && (showRecovery ? (
+        {AUTH_FUNCTIONS_ENABLED&&!isLinkFlow&&emailSignup&&(showRecovery ? (
           <div style={S.recBox}>
-            <p style={S.recHint}>If you're making a new account, set this so you can reset your password later:</p>
+            <p style={S.recHint}>Set a recovery question so you can reset your password later:</p>
             <select style={S.recSelect} value={recQ} onChange={e=>setRecQ(e.target.value)}>
               {RECOVERY_QUESTIONS.map(q=><option key={q} value={q}>{q}</option>)}
             </select>
@@ -10245,31 +10598,37 @@ function LoginScreen({ onLogin, initialSocialUser=null, initialError="" }) {
               onChange={e=>{setRecA(e.target.value);setErr("");}} maxLength={60}/>
           </div>
         ) : (
-          <button style={S.linkBtn} onClick={()=>setShowRecovery(true)}>＋ Set a recovery question (new accounts)</button>
+          <button type="button" className="lumora-auth-footer-link" onClick={()=>setShowRecovery(true)}>＋ Set a recovery question</button>
         ))}
 
-        {err&&<p style={S.errText}>{err}</p>}
-        <p style={S.loginHint}>{emailSignup
-          ? "Create your Lumora account with an email and password."
-          : "New user? Pick a username and password. Returning? Log in with your username or connected email."}</p>
-        <button style={{...S.primaryBtn,opacity:loading?0.6:1}} onClick={go} disabled={loading}>
-          {loading?(emailSignup?"Creating...":"Checking..."):(emailSignup?"Create email account":"Continue with email")}
+        {err&&<p className="lumora-auth-message is-error" role="alert">{err}</p>}
+        {linkMessage&&<p className="lumora-auth-message" role="status">{linkMessage}</p>}
+        <button type="button" className="lumora-auth-action" onClick={go} disabled={loading||providerLinked("password")}>
+          {isLinkFlow
+            ? providerLinked("password")?"Email sign-in linked":loading?"Linking email…":"Link email account"
+            : loading?emailSignup?"Creating…":"Checking…":emailSignup?"Create email account":"Continue with email"}
         </button>
-        <button style={S.linkBtn} onClick={()=>{setEmailSignup(v=>!v);setErr("");}} disabled={loading}>
+        <div className="lumora-auth-divider">{isLinkFlow?"or link with":"or continue with"}</div>
+        <button type="button" className="lumora-auth-provider" onClick={()=>socialSignIn("google")}
+          disabled={loading||providerLinked("google.com")}>
+          <span aria-hidden="true">G</span><span>{isLinkFlow
+            ? providerLinked("google.com")?"Google linked":busyProvider==="google"?"Linking Google…":"Link Google account"
+            : "Continue with Google"}</span>
+        </button>
+        <button type="button" className="lumora-auth-provider is-apple" onClick={()=>socialSignIn("apple")}
+          disabled={loading||providerLinked("apple.com")}>
+          <span aria-hidden="true"></span><span>{isLinkFlow
+            ? providerLinked("apple.com")?"Apple linked":busyProvider==="apple"?"Linking Apple…":"Link Apple account"
+            : "Continue with Apple"}</span>
+        </button>
+        {!isLinkFlow&&<button type="button" className="lumora-auth-footer-link"
+          onClick={()=>{setEmailSignup(current=>!current);setErr("");setShowRecovery(false);}} disabled={loading}>
           {emailSignup?"← I already have an account":"New with email? Create an account"}
-        </button>
-        <div style={{display:"flex",alignItems:"center",gap:9,width:"100%",margin:"14px 0 9px",color:"#8B978C",fontSize:11}}>
-          <span style={{height:1,background:"#DFE7DF",flex:1}} />
-          <span>or continue with</span>
-          <span style={{height:1,background:"#DFE7DF",flex:1}} />
-        </div>
-        <button style={{...S.primaryBtn,background:"var(--sg-theme-neutral,#fff)",color:"#342738",border:"1px solid #E3D5E7",boxShadow:"none",opacity:loading?0.6:1}}
-          onClick={()=>socialSignIn("google")} disabled={loading}>G&nbsp;&nbsp;Continue with Google</button>
-        <button style={{...S.primaryBtn,background:"#1F2421",marginTop:8,opacity:loading?0.6:1}}
-          onClick={()=>socialSignIn("apple")} disabled={loading}>&nbsp;&nbsp;Continue with Apple</button>
-        {AUTH_FUNCTIONS_ENABLED && <button style={S.linkBtn} onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
-      </div>
-    </div>
+        </button>}
+        {!isLinkFlow&&!emailSignup&&AUTH_FUNCTIONS_ENABLED&&<button type="button" className="lumora-auth-footer-link"
+          onClick={()=>{setMode("forgot");setErr("");}}>Forgot password?</button>}
+      </section>
+    </main>
   );
 }
 
@@ -11712,7 +12071,7 @@ function GardenEditor({ sessions, subjects, decorations, layout, range, enhancem
               aria-label={`Move ${skinDef.name} growth marker`}
               onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseOrMove(e,item,key);}}}>
               <span style={{...ge.treeThumb,background:`linear-gradient(160deg,${subj.color}20,#F7FBF5)`}}>
-                {characterImage&&<img src={characterImage} alt="" style={{width:"100%",height:"100%",objectFit:"contain",objectPosition:"center bottom"}}/>}
+                {characterImage&&<ImageAsset src={characterImage} alt="" loading="lazy" fetchPriority="low" style={{width:"100%",height:"100%",objectFit:"contain",objectPosition:"center bottom"}}/>}
               </span>
               <span style={ge.itemSub}>{subj.emoji}</span>
             </div>}
@@ -12780,7 +13139,7 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
 
         <div key={`art-${carouselIndex}`} className={transitionDirection==="next"?"sg-milestone-art-next":"sg-milestone-art-prev"} style={mp.artColumn}>
           <div style={mp.artPanel}>
-            <img className="sg-keepcolor" src={selectedStage.image} alt={selectedStage.name}
+            <ImageAsset className="sg-keepcolor" src={selectedStage.image} alt={selectedStage.name} fetchPriority="high"
               style={{...mp.stageImage, transform:`translate(${selectedStage.displayOffsetX||0}px, ${selectedStage.displayOffsetY||0}px) scale(${selectedStage.displayScale||1})`, filter:`var(--sg-counter-filter) ${stageColourFilter}`, ...(!selectedCompleted ? mp.stageImageLocked : {})}} />
           </div>
           <div style={{...mp.rewardPanel, filter:stageColourFilter}}>
@@ -12823,7 +13182,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     !lsRaw(LS_USER,lsRaw("ascendu_username",""))&&lsRaw(LS_ONBOARDING_COMPLETE,"")!=="1"?1:0
   );
   const [onboardingDirection,setOnboardingDirection]=useState(1);
-  const [onboardingAnswers,setOnboardingAnswers]=useState({educationStage:"",referralSource:"",studyHours:""});
+  const [onboardingAnswers,setOnboardingAnswers]=useState({educationStage:"",referralSource:"",studyHours:"",studyGoals:[]});
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS).map(item=>({...item,label:capitalizeSubjectLabel(item.label)})));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
   const [mode,setMode]=useState(()=>lsRaw(LS_MODE,"stopwatch"));
@@ -13941,7 +14300,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   };
   const handleReplayOnboarding=()=>{
     lsRemove(LS_ONBOARDING_COMPLETE);
-    setOnboardingAnswers({educationStage:"",referralSource:"",studyHours:""});
+    setOnboardingAnswers({educationStage:"",referralSource:"",studyHours:"",studyGoals:[]});
     setShowMenu(false);
     onboardingReplayRef.current=true;
     navigateOnboarding(1);
@@ -14356,7 +14715,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
-        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:24,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:28,height:28,flexShrink:0,overflow:"hidden",borderRadius:6,background:"var(--sg-theme-accent)"}}><img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:28,height:28,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:24,fontWeight:800,color:"var(--sg-theme-accent-strong,#2D6A4F)"}}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:28,height:28,flexShrink:0,overflow:"hidden",borderRadius:6,background:"var(--sg-theme-accent)"}}><ImageAsset src={LUMORA_LOGO_IMAGE} alt="" fetchPriority="high" style={{display:"block",width:28,height:28,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</div>
       </div>
     </div>
   );
@@ -14377,22 +14736,32 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             setOnboardingAnswers(current=>({...current,referralSource}));
             navigateOnboarding(4);
           }}/>
-        : <OnboardingStudyHours initialValue={onboardingAnswers.studyHours} onBack={()=>navigateOnboarding(3)} onNext={studyHours=>{
+        : onboardingStep===4
+        ? <OnboardingStudyHours initialValue={onboardingAnswers.studyHours} onBack={()=>navigateOnboarding(3)} onNext={studyHours=>{
             setOnboardingAnswers(current=>({...current,studyHours}));
+            navigateOnboarding(5);
+          }}/>
+        : onboardingStep===5
+        ? <OnboardingStudyGoals initialValue={onboardingAnswers.studyGoals} onBack={()=>navigateOnboarding(4)} onNext={studyGoals=>{
+            setOnboardingAnswers(current=>({...current,studyGoals}));
+            if(onboardingReplayRef.current){navigateOnboarding(6);return;}
             lsSetR(LS_ONBOARDING_COMPLETE,"1");
             onboardingReplayRef.current=false;
             setOnboardingStep(0);
           }}/>
+        : onboardingStep===6
+        ? <OnboardingFinish onBack={()=>navigateOnboarding(5)} onNext={()=>navigateOnboarding(7)}/>
+        : <LoginScreen flow="link" onBack={()=>navigateOnboarding(6)}/>
         }
       </div>
     </>
   );
 
   if(!user)return (
-    <div className="sg-shell">
+    <div className="sg-shell" style={{margin:"0 auto"}}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
-      <LoginScreen onLogin={handleLogin} initialSocialUser={redirectSocialUser} initialError={redirectAuthError}/>
+      <LoginScreen flow="create" onLogin={handleLogin} initialSocialUser={redirectSocialUser} initialError={redirectAuthError}/>
     </div>
   );
 
@@ -14493,7 +14862,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           )}
 
           <header className="sg-main-header" style={S.header}>
-            <span className="sg-keepcolor" style={S.logo}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:21,height:21,overflow:"hidden",borderRadius:5,background:"var(--sg-theme-accent)",verticalAlign:"-4px",marginRight:5}}><img src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:21,height:21,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</span>
+            <span className="sg-keepcolor" style={S.logo}><span aria-hidden="true" style={{display:"inline-grid",placeItems:"center",width:21,height:21,overflow:"hidden",borderRadius:5,background:"var(--sg-theme-accent)",verticalAlign:"-4px",marginRight:5}}><ImageAsset src={LUMORA_LOGO_IMAGE} alt="" style={{display:"block",width:21,height:21,objectFit:"cover",mixBlendMode:"luminosity"}}/></span>Lumora</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
               <button
@@ -14685,7 +15054,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
                   <div style={S.treeWrap} className="lumora-learner-art">
                     {loginStageImage
-                      ? <img src={loginStageImage} alt={`${loginSkin.name} stage 1`} style={S.loginStageImage}/>
+                      ? <ImageAsset src={loginStageImage} alt={`${loginSkin.name} stage 1`} fetchPriority="high" style={S.loginStageImage}/>
                       : <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
                     }
                   </div>

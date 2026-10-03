@@ -1,4 +1,5 @@
 import React, {useEffect, useId, useLayoutEffect, useRef, useState} from 'react';
+import ImageAsset from './ImageAsset.jsx';
 import {observeStage, STAGE_BURST_MS} from './focusStageTransition.js';
 import './focusStageBadge.css';
 
@@ -48,8 +49,8 @@ export default function FocusStageBadge({stage,event,disabled=false,color='#2D6A
       onAnimationEnd={e=>{if(e.animationName==='sg-stage-lifetime')setBurst(null);}}>
       <svg className="sg-stage-rings" viewBox="0 0 320 320"><g fill="none" stroke={stageColor} strokeWidth=".8">
         {[0,1,2].map(n=><circle key={n} className={`sg-stage-ring sg-stage-ring-${n}`} cx="160" cy="160" r={51+n*12}/>)}</g></svg>
-      {outgoingImage&&<span className="sg-stage-character sg-stage-character-old"><img src={outgoingImage} alt="" style={{transform:`scale(${imageScale})`}}/></span>}
-      {incomingImage&&<span className="sg-stage-character sg-stage-character-new"><img src={incomingImage} alt="" style={{transform:`scale(${imageScale})`}}/></span>}
+      {outgoingImage&&<span className="sg-stage-character sg-stage-character-old"><ImageAsset src={outgoingImage} alt="" fetchPriority="low" style={{transform:`scale(${imageScale})`}}/></span>}
+      {incomingImage&&<span className="sg-stage-character sg-stage-character-new"><ImageAsset src={incomingImage} alt="" fetchPriority="low" style={{transform:`scale(${imageScale})`}}/></span>}
       <svg className="sg-stage-front" viewBox="0 0 320 320">
         <defs>
           <linearGradient id={`${id}-shade`} x2="0" y2="1"><stop stopColor="#17251D" stopOpacity="0"/><stop offset="1" stopColor="#17251D" stopOpacity=".38"/></linearGradient>

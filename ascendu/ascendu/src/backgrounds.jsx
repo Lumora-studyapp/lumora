@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import ImageAsset, { preloadImageAsset } from "./ImageAsset.jsx";
 
 export const DEFAULT_BACKGROUND_ID = "classic-grove";
 
@@ -47,7 +48,7 @@ export const BACKGROUND_CATALOGUE = Object.freeze([
     tone: "dark",
     motion: "low",
     description: "A quiet blue study room made for late-night focus.",
-    imageSrc: "/backgrounds/midnight-study.webp",
+    imageSrc: "/backgrounds/midnight-study.jpg",
     imageSrcMobile: "/backgrounds/midnight-study-mobile.webp",
     imageOpacity: .64,
     imageOpacityMobile: .76,
@@ -765,6 +766,7 @@ export function BackgroundArtwork({
   paused = false,
   lowPower = false,
   animationMode = "device",
+  imagePriority = "auto",
   className = "",
 }) {
   const background = useMemo(
@@ -801,10 +803,11 @@ export function BackgroundArtwork({
     >
       {background.imageSrc && <picture className="sg-bg-photo">
         {background.imageSrcMobile && <source media="(max-width: 600px)" srcSet={background.imageSrcMobile}/>}
-        <img
+        <ImageAsset
           src={background.imageSrc}
           alt=""
-          decoding="async"
+          loading={compact ? "lazy" : "eager"}
+          fetchPriority={compact ? "low" : imagePriority}
           draggable="false"
         />
       </picture>}
@@ -837,6 +840,7 @@ export function BackgroundLayer({ backgroundId, theme = "light", focusMode = fal
     paused={hidden||animationMode==="off"}
     lowPower={animationMode==="device"&&lowPower}
     animationMode={animationMode}
+    imagePriority="high"
     className="sg-background-home"
   />;
   return typeof document!=="undefined"?createPortal(artwork,document.body):artwork;
@@ -879,7 +883,7 @@ function BackgroundPreview({
   onCancel,
 }) {
   return <div className="sg-background-preview" role="dialog" aria-modal="true" aria-labelledby="sg-background-preview-title" onClick={event=>event.stopPropagation()}>
-    <BackgroundArtwork backgroundId={background.id} theme={theme} paused/>
+    <BackgroundArtwork backgroundId={background.id} theme={theme} paused imagePriority="high"/>
     <div className="sg-background-preview-shade"/>
     <div className="sg-background-preview-badge">PREVIEW</div>
     <div className="sg-background-preview-panel">
@@ -937,6 +941,11 @@ export function BackgroundShop({
   };
 
   const openPreview = id => {
+    const background = getBackground(id);
+    if (background?.imageSrc) {
+      const mobile = window.matchMedia?.("(max-width: 600px)").matches;
+      preloadImageAsset(mobile && background.imageSrcMobile ? background.imageSrcMobile : background.imageSrc);
+    }
     setPreviewId(id);
     onPreview?.(id);
   };
@@ -1037,7 +1046,13 @@ export function BackgroundShop({
             className={`sg-background-card sg-card-anim${active ? " sg-background-card--active" : ""}`}
             style={{ animationDelay:`${Math.min(index * .035, .25)}s` }}
           >
-            <button type="button" className="sg-background-thumb" onClick={() => openPreview(background.id)} aria-label={`Preview ${background.name}`}>
+            <button type="button" className="sg-background-thumb" onClick={() => openPreview(background.id)} onPointerEnter={() => {
+              const mobile = window.matchMedia?.("(max-width: 600px)").matches;
+              preloadImageAsset(mobile && background.imageSrcMobile ? background.imageSrcMobile : background.imageSrc);
+            }} onFocus={() => {
+              const mobile = window.matchMedia?.("(max-width: 600px)").matches;
+              preloadImageAsset(mobile && background.imageSrcMobile ? background.imageSrcMobile : background.imageSrc);
+            }} aria-label={`Preview ${background.name}`}>
               <BackgroundArtwork backgroundId={background.id} theme={theme} compact paused/>
               <span>Preview</span>
             </button>

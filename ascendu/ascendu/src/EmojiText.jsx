@@ -1,4 +1,5 @@
 import React from 'react'
+import ImageAsset from './ImageAsset.jsx'
 
 const UI_SYMBOLS = new Set(['〰', '↔', '↩', '⏸', '▶', '☀', '✉'])
 const EMOJI_SEQUENCE = /(?:[#*0-9]\uFE0F?\u20E3|\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*)/gu
@@ -26,7 +27,7 @@ function renderTextWithEmoji(value) {
     const start = match.index
     if (start > cursor) parts.push(value.slice(cursor, start))
     parts.push(
-      <img
+      <ImageAsset
         key={`${start}-${emojiSlug(glyph)}`}
         className="lumora-emoji-image"
         src={emojiAssetUrl(glyph)}
