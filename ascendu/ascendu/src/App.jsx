@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import ImageAsset from "./ImageAsset.jsx";
+import StudyProfile, {ProfileAvatar} from "./StudyProfile.jsx";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
 import SubjectColourPicker from "./SubjectColourPicker.jsx";
 import {attachClassroomGestures} from "./classroomGestures.js";
@@ -793,24 +794,25 @@ export const APP_CSS = `
 
 /* Entrance animations */
 @keyframes sgFadeIn   { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sgSheetUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
-@keyframes sgPopIn    { from { opacity: 0; transform: scale(0.9) translateY(8px); }
-                        to   { opacity: 1; transform: scale(1)   translateY(0); } }
+@keyframes sgSheetUp  { from { opacity: 0; transform: translate3d(0,56px,0); } to { opacity: 1; transform: translate3d(0,0,0); } }
+@keyframes sgPopIn    { from { opacity: 0; transform: translate3d(0,10px,0) scale(.975); }
+                        to   { opacity: 1; transform: translate3d(0,0,0) scale(1); } }
 @keyframes sgSlideUp  { from { opacity: 0; transform: translateY(10px); }
                         to   { opacity: 1; transform: translateY(0); } }
 @keyframes sgGrowIn   { from { opacity: 0; transform: scale(0.96); }
                         to   { opacity: 1; transform: scale(1); } }
 
 /* Overlays fade their dim background in */
-.sg-overlay-anim { animation: sgFadeIn 0.22s ease both; }
-/* Bottom sheets spring up from the bottom */
-.sg-sheet-anim   { animation: sgSheetUp 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
-/* Centered modals pop in with a slight overshoot */
-.sg-pop-anim     { animation: sgPopIn 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+.sg-overlay-anim { animation: sgFadeIn 160ms ease-out both; will-change:opacity; }
+/* Keep sheets close to their resting position. Starting a whole viewport away
+   makes the browser rasterise the full panel while it moves over rich scenes. */
+.sg-sheet-anim   { animation: sgSheetUp 240ms cubic-bezier(.22,1,.36,1) both; will-change:transform,opacity; transform:translateZ(0); backface-visibility:hidden; }
+/* Centered dialogs use a small settle instead of a large elastic overshoot. */
+.sg-pop-anim     { animation: sgPopIn 210ms cubic-bezier(.22,1,.36,1) both; will-change:transform,opacity; transform:translateZ(0); backface-visibility:hidden; }
 /* Tab content eases up when switching screens */
-.sg-view-anim    { animation: sgSlideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sg-view-anim    { animation: sgSlideUp 220ms cubic-bezier(.22,1,.36,1) both; will-change:transform,opacity; }
 /* Grid cards grow in, lightly staggered via inline animation-delay */
-.sg-card-anim    { animation: sgGrowIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sg-card-anim    { animation: sgGrowIn 200ms cubic-bezier(.22,1,.36,1) both; will-change:transform,opacity; }
 
 /* Shop/menu cards lift slightly on hover (desktop) and press in on tap */
 .sg-tap-card { transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease; }
@@ -1512,6 +1514,8 @@ const SKIN_COLLECTIONS = [
 // Every character skin supplies five source stages for its preview and for
 // minute-by-minute progression on the Focus screen.
 const CHARACTER_PROGRESSION_STAGES = {
+  "lumora-scholar-man":["First Day","Finding Focus","Researcher","Thesis Complete","Lumora Graduate"],
+  "lumora-scholar-woman":["First Day","Finding Focus","Researcher","Thesis Complete","Lumora Graduate"],
   "cristiano-ronaldo":["Madeira Football Child","Madeira Broom Teen","Real Madrid Champion","Ballon d'Or Winner","Portugal Euros Champion"],
   "einstein":["Compass-Curious Child","Aarau Light-Beam Student","Bern Patent Clerk","Relativity Physicist","Scientific Genius"],
   "davinci":["Vinci Nature Sketcher","Florentine Workshop Apprentice","Anatomy Notebook Scholar","Flying Machine Visionary","Renaissance Master"],
@@ -1534,6 +1538,8 @@ const CHARACTER_PROGRESSION_STAGES = {
   "bill-gates":["Lakeside Computer Student","Programming Hustler","PC Software Cofounder","Graphical Computing CEO","Computing and Philanthropy Legacy"],
 };
 const FOCUS_STAGE_RANGES = ["0–1 min","1–2 min","2–3 min","3–4 min","4–5 min"];
+const STARTER_SKIN_IDS = ["lumora-scholar-man","lumora-scholar-woman"];
+const DEFAULT_STARTER_SKIN = STARTER_SKIN_IDS[0];
 const SKIN_TAGS = Object.freeze({
   "lebron-james":["Sport"],
   "lionel-messi":["Sport"],
@@ -1568,6 +1574,8 @@ const TREE_SKINS = [
   // Internal fallback for legacy sessions. It is intentionally not displayed
   // or purchasable in the Skins page.
   { id:"default", name:"Oak", cost:0, shape:"round", trunk:"#8B6340", canopy:null, desc:"", collection:"legacy", hidden:true },
+  { id:"lumora-scholar-man", name:"Lumora Scholar Man", cost:0, shape:"round", trunk:"#63317D", canopy:"#8E4CB0", desc:"Free Lumora student · grow into a graduate", collection:"characters", characterImage:"/Images/Lumora Scholar Man (5) - Lumora Graduate.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lumora-scholar-man"], finalEvolution:true, alwaysShowCharacter:true },
+  { id:"lumora-scholar-woman", name:"Lumora Scholar Woman", cost:0, shape:"round", trunk:"#63317D", canopy:"#8E4CB0", desc:"Free Lumora student · grow into a graduate", collection:"characters", characterImage:"/Images/Lumora Scholar Woman (5) - Lumora Graduate.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lumora-scholar-woman"], finalEvolution:true, alwaysShowCharacter:true },
   { id:"einstein", name:"Albert Einstein", cost:1600, shape:"round", trunk:"#6B4A36", canopy:"#B98253", desc:"The Genius · relativity icon", collection:"characters", characterImage:"/Images/Albert Einstein (5) - Scientific Genius.png", progressionStages:CHARACTER_PROGRESSION_STAGES.einstein, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
   { id:"gallileo", name:"Galileo Galilei", cost:1700, shape:"round", trunk:"#5F402A", canopy:"#A97A40", desc:"The Visionary · observational astronomy", collection:"characters", characterImage:"/Images/Galileo Galilei (5) - Heliocentric Visionary.png", characterImageScale:1.1, progressionStages:CHARACTER_PROGRESSION_STAGES.gallileo, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
   { id:"davinci", name:"Leonardo da Vinci", cost:1800, shape:"round", trunk:"#6C5137", canopy:"#9A6A32", desc:"The Renaissance Master · art and invention", collection:"characters", characterImage:"/Images/Leonardo da Vinci (5) - Renaissance Master.png", progressionStages:CHARACTER_PROGRESSION_STAGES.davinci, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
@@ -7362,7 +7370,7 @@ const gs = {
 };
 
 // ── Badges / Achievements Modal ───────────────────────────────────────────────
-function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onClose, onBack }) {
+function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onAddToProfile, onClose, onBack }) {
   const earned = BADGES.filter(b=>unlocked.includes(b.id)).length;
   return (
     <div style={bg.overlay} className="sg-overlay-anim" onClick={onClose}>
@@ -7375,6 +7383,7 @@ function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onClose
           <span style={bg.count}>{earned}/{BADGES.length}</span>
         </div>
         <p style={bg.sub}>Earn coins as you build your study habit.</p>
+        <button style={bg.addToProfileBtn} onClick={onAddToProfile}>＋ Add achievements to profile</button>
         <div style={bg.milestonePath}>
           <MilestonePath history={history} claimedRewards={claimedRewards} onClaimReward={onClaimReward}/>
         </div>
@@ -7405,6 +7414,7 @@ const bg = {
   backBtn:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,lineHeight:1},
   title:{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0},
   sub:{fontSize:12,color:"#aaa",margin:"4px 0 0"},
+  addToProfileBtn:{width:"100%",marginTop:14,padding:"11px 14px",border:"1px solid var(--sg-theme-accent,#2D6A4F)",borderRadius:12,background:"var(--sg-theme-accent-wash,#EEF8F1)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:12,fontWeight:800,cursor:"pointer"},
   milestonePath:{margin:"16px 0 20px"},
   count:{fontSize:14,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)",borderRadius:20,padding:"4px 12px"},
   grid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:14},
@@ -8752,7 +8762,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const viewItems = [
     { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
@@ -8761,6 +8771,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
     { id:"stats", icon:"📊", label:"Stats", sub:"Progress and history" },
   ];
   const items = [
+    { icon:"👥", label:"Study Profile", sub:"Photo, records and achievement showcase", onClick:onProfile },
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, notificationCount:achievementsNotificationCount, notificationLabel:"unclaimed achievement rewards", onClick:onBadges },
@@ -8778,8 +8789,8 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
       <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
         <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
         <div style={hm.grabber}/>
-        <button style={hm.profile} className="sg-tap-card" onClick={onAccount}>
-          <span style={hm.avatar}>{user.slice(0,1).toUpperCase()}</span>
+        <button style={hm.profile} className="sg-tap-card" onClick={onProfile}>
+          <ProfileAvatar username={user} allow size={42}/>
           <div style={{flex:1,textAlign:"left"}}>
             <div style={hm.name}>{user}</div>
             <div style={hm.meta}><AnimatedNumber value={coins} prefix="🪙 "/> · 🔥 {streak} day{streak!==1?"s":""}</div>
@@ -12350,7 +12361,7 @@ function weekKeyForOffset(offset, now=new Date()){
 // Clash-of-Clans style: tap anyone on the leaderboard to walk through their
 // grove. Loads their sessions + prefs (their subjects colour their trees, their
 // skins render, their decorations show). Read-only, smooth sheet.
-function VisitGarden({ username, viewerSubjects, onClose }) {
+function VisitGarden({ username, viewerSubjects, onClose, onProfile }) {
   const [load,setLoad]=useState({status:"loading",data:null,error:""});
   const [attempt,setAttempt]=useState(0);
   useEffect(()=>{
@@ -12405,6 +12416,7 @@ function VisitGarden({ username, viewerSubjects, onClose }) {
           </div>
           <button style={sd.x} onClick={onClose} aria-label="Close friend's classroom">✕</button>
         </div>
+        {onProfile&&<button style={{...sd.doneBtn,width:"auto",margin:"0 0 14px"}} onClick={onProfile}>👥 View Study Profile</button>}
         {load.status==="loading" ? (
           <div style={{textAlign:"center",padding:"30px 0"}} aria-live="polite">
             <div className="sg-skeleton" style={{height:180,width:"100%",borderRadius:18,marginBottom:12}}/>
@@ -12449,7 +12461,7 @@ function LeaderboardRows({entries,currentUser,subjects,onVisit,loading=false,emp
     return <div key={entry.username} style={{...gl.boardRow,...(i<3?podiumStyles[i]:{}),...(isMe?gl.boardRowMe:{}),cursor:"pointer"}}
       className="sg-tap-card" onClick={()=>onVisit?.(entry.username)} title={`Visit ${entry.username}'s classroom`}>
       <div style={{...gl.rankBadge,...(i<3?gl.rankBadgePodium:{})}}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
-      <div style={{...gl.avatar,background:isMe?"var(--sg-theme-accent,#4F9D73)":"var(--sg-theme-accent-wash,#E6EEE7)",color:isMe?"#fff":"var(--sg-theme-muted,#506258)"}}>{entry.username.slice(0,1).toUpperCase()}</div>
+      <ProfileAvatar username={entry.username} allow size={34}/>
       <div style={gl.boardIdentity}>
         <div style={{...gl.boardUsername,color:isMe?"var(--sg-theme-accent-strong,#2D6A4F)":"#1A2E22"}}>{entry.username}{isMe&&<span style={gl.youTag}>you</span>}</div>
         <div style={gl.boardMeta}>{entry.sessions} session{entry.sessions!==1?"s":""}{topSubj&&<span> · {topSubj.emoji} {topSubj.label}</span>}</div>
@@ -12590,7 +12602,7 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
         </div>}
         {network.friends.length>0&&<div style={fr.friendList}>
           {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}>
-            <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><span style={fr.friendDot}/>{friend.username}</button>
+            <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><ProfileAvatar username={friend.username} allow size={22}/>{friend.username}</button>
             <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
           </div>)}
         </div>}
@@ -13234,12 +13246,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [exams,setExams]=useState(()=>lsGet(LS_EXAMS,[]));
   const [activeSkin,setActiveSkin]=useState(()=>{
     const savedSkin=lsRaw(LS_SKIN,"default");
-    return TREE_SKINS.some(skin=>skin.id===savedSkin)?savedSkin:"default";
+    return savedSkin!=="default"&&TREE_SKINS.some(skin=>skin.id===savedSkin)?savedSkin:DEFAULT_STARTER_SKIN;
   });
   const [ownedSkins,setOwnedSkins]=useState(()=>{
-    const savedSkins=lsGet("studygrove_owned_skins",["default"]);
+    const savedSkins=lsGet("studygrove_owned_skins",["default",...STARTER_SKIN_IDS]);
     const available=savedSkins.filter(id=>TREE_SKINS.some(skin=>skin.id===id));
-    return [...new Set(["default",...available])];
+    return [...new Set(["default",...STARTER_SKIN_IDS,...available])];
   });
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
   const theme="light";
@@ -13303,6 +13315,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showSessions,setShowSessions]=useState(false); // my-sessions self-edit panel
   const [showRecap,setShowRecap]=useState(false);     // weekly recap card
   const [showAccount,setShowAccount]=useState(false); // account panel
+  const [profileUser,setProfileUser]=useState(null);
+  const [profileAchievementGallery,setProfileAchievementGallery]=useState(false);
   const [showPrivacyData,setShowPrivacyData]=useState(false);
   const [privacyFromMenu,setPrivacyFromMenu]=useState(false);
   const [privacyPrefs,setPrivacyPrefs]=useState({sharePresence:true});
@@ -14305,7 +14319,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setPrefsReady(false);setUser(null);setRunning(false);setPaused(false);setElapsed(0);setDuration(25*60);
     setTimerStyle("standard");const freshPomo=createPomodoroState({});setPomodoro(freshPomo);pomodoroRef.current=freshPomo;
     setSubjects(DEFAULT_SUBJECTS);setSubject("math");setCoins(0);setClaimedMilestoneRewards([]);setExams([]);setTargets({});
-    setOwnedSkins(["default"]);setActiveSkin("default");setEnhancements({});
+    setOwnedSkins(["default",...STARTER_SKIN_IDS]);setActiveSkin(DEFAULT_STARTER_SKIN);setEnhancements({});
     setAnimationMode("device");setAdminRoleVerified(false);
     setPrivacyPrefs({sharePresence:true});
     setOwnedBackgrounds([DEFAULT_BACKGROUND_ID]);setActiveBackground(DEFAULT_BACKGROUND_ID);setPreviewBackgroundId(null);
@@ -14313,7 +14327,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
-    setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setShowMenu(false);
+    setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
   };
 
   const navigateOnboarding=nextStep=>{
@@ -14526,11 +14540,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           setClaimedMilestoneRewards(prefs.claimedMilestoneRewards.filter(index=>Number.isInteger(index)&&index>=0&&index<MILESTONE_STAGES.length));
         }
         if(Array.isArray(prefs.ownedSkins) && prefs.ownedSkins.length){
-          const availableSkins=[...new Set(["default",...prefs.ownedSkins.filter(id=>TREE_SKINS.some(skin=>skin.id===id))])];
+          const availableSkins=[...new Set(["default",...STARTER_SKIN_IDS,...prefs.ownedSkins.filter(id=>TREE_SKINS.some(skin=>skin.id===id))])];
           setOwnedSkins(availableSkins); lsSet("studygrove_owned_skins", availableSkins);
         }
         if(typeof prefs.activeSkin==="string" && TREE_SKINS.find(s=>s.id===prefs.activeSkin)){
-          setActiveSkin(prefs.activeSkin); lsSetR(LS_SKIN, prefs.activeSkin);
+          const migratedSkin=prefs.activeSkin==="default"?DEFAULT_STARTER_SKIN:prefs.activeSkin;
+          setActiveSkin(migratedSkin); lsSetR(LS_SKIN, migratedSkin);
+          if(migratedSkin!==prefs.activeSkin) await fbSavePrefs(user,{activeSkin:migratedSkin,ownedSkins:[...new Set(["default",...STARTER_SKIN_IDS,...(Array.isArray(prefs.ownedSkins)?prefs.ownedSkins:[])])]});
         }
         if(prefs.enhancements && typeof prefs.enhancements==="object" && !Array.isArray(prefs.enhancements)){
           setEnhancements(prefs.enhancements); lsSet("studygrove_enhancements", prefs.enhancements);
@@ -14844,12 +14860,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         onOpenDecorations={()=>{setPreviewBackgroundId(null);setShowBackgroundShop(false);setShowGardenShop(true);}}
         onBack={cameFromMenu?()=>{setPreviewBackgroundId(null);setShowBackgroundShop(false);setShowMenu(true);}:null}
       />}
-      {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onClose={()=>setShowBadges(false)}
+      {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onAddToProfile={()=>{setShowBadges(false);setProfileAchievementGallery(true);setProfileUser(user);}} onClose={()=>setShowBadges(false)}
         onBack={()=>{setShowBadges(false);setShowMenu(true);}}/>}
       {showRecap&&<SmartDashboard history={history} subjects={subjects} streak={streak} targets={targets} coins={walletCoins}
         onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
         onBack={recapFromMenu?()=>{setShowRecap(false);setRecapFromMenu(false);setShowMenu(true);}:null}/>}
-      {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)}/>}
+      {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)} onProfile={()=>{setProfileAchievementGallery(false);setProfileUser(visiting);}}/>}
+      {profileUser&&<StudyProfile username={profileUser} currentUser={user} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}
@@ -14936,6 +14953,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onBadges={()=>{setShowMenu(false);setShowBadges(true);}}
               onRecap={()=>{setShowMenu(false);setRecapFromMenu(true);setShowRecap(true);}}
               onSessions={()=>{setShowMenu(false);setSessionsFromMenu(true);setShowSessions(true);}}
+              onProfile={()=>{setShowMenu(false);setProfileAchievementGallery(false);setProfileUser(user);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
               onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
               onReplayOnboarding={handleReplayOnboarding}

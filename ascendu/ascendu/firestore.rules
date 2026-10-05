@@ -114,6 +114,26 @@ service cloud.firestore {
       allow delete: if ownsUsername(username) || isAdmin();
     }
 
+    match /study_profiles/{username} {
+      allow get: if ownsUsername(username)
+        || (signedIn() && exists(/databases/$(database)/documents/friend_access/$(username)/viewers/$(request.auth.uid)));
+      allow list: if false;
+      allow create, update: if ownsUsername(username)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ownerUid','bio','accent','background','text','title','pinned','sections','photo','banner','updatedAt'])
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160
+        && request.resource.data.accent.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.background.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.text.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.pinned is list && request.resource.data.pinned.size() <= 5
+        && request.resource.data.pinned.hasOnly(get(/databases/$(database)/documents/prefs/$(username)).data.get('badges', []))
+        && (request.resource.data.title == '' || request.resource.data.title in get(/databases/$(database)/documents/prefs/$(username)).data.get('badges', []))
+        && request.resource.data.sections is list && request.resource.data.sections.size() == 3
+        && request.resource.data.sections.hasAll(['highlights','records','badges'])
+        && request.resource.data.photo is bool && request.resource.data.banner is bool;
+      allow delete: if ownsUsername(username);
+    }
+
     match /history/{username} {
       allow read: if signedIn();
       allow write: if ownsUsername(username) || isAdmin();

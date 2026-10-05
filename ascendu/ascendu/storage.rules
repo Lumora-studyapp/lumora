@@ -1,0 +1,22 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /study_profiles/{username}/{fileName} {
+      function ownsProfile() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/usernames/$(username)).data.uid == request.auth.uid;
+      }
+      function acceptedFriend() {
+        return request.auth != null
+          && firestore.exists(/databases/(default)/documents/friend_access/$(username)/viewers/$(request.auth.uid));
+      }
+      function validFile() {
+        return fileName in ['photo.webp','banner.webp'];
+      }
+      allow read: if validFile() && (ownsProfile() || acceptedFriend());
+      allow write: if validFile() && ownsProfile()
+        && (request.resource == null || (request.resource.size <= 2 * 1024 * 1024
+          && request.resource.contentType == 'image/webp'));
+    }
+  }
+}

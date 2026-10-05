@@ -18,7 +18,7 @@ export function preloadImageAsset(src) {
   return preload;
 }
 
-export default function ImageAsset({ onError, ...props }) {
+export default function ImageAsset({ onError, fetchPriority, ...props }) {
   const handleError = event => {
     onError?.(event);
     if (event.defaultPrevented) return;
@@ -27,5 +27,5 @@ export default function ImageAsset({ onError, ...props }) {
     image.dataset.lumoraImageError = "true";
   };
 
-  return <img {...props} decoding={props.decoding || "async"} onError={handleError}/>;
+  return <img {...props} fetchpriority={fetchPriority} decoding={props.decoding || "async"} onError={handleError}/>;
 }
