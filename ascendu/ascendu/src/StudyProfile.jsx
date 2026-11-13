@@ -3,6 +3,7 @@ import {auth,db,storage} from "./firebase.js";
 import {doc,getDoc,getDocFromServer,setDoc} from "firebase/firestore";
 import {ref,uploadBytesResumable,deleteObject,getBlob} from "firebase/storage";
 import {studyRecords} from "./studyProfileRecords.js";
+import {CharacterAvatar} from "./CharacterAvatar.jsx";
 
 const SECTIONS=["highlights","records","badges"];
 const DEFAULT_PROFILE={bio:"",accent:"#63317D",background:"#F8F3FC",text:"#271535",title:"",pinned:[],sections:SECTIONS,photo:false,banner:false};
@@ -49,7 +50,7 @@ async function imageObjectUrl(username,kind){
   return URL.createObjectURL(blob);
 }
 
-export function ProfileAvatar({username,allow=false,size=38,style={}}){
+export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null}){
   const [url,setUrl]=useState("");
   useEffect(()=>{
     if(!allow||!username){setUrl("");return;}
@@ -65,7 +66,7 @@ export function ProfileAvatar({username,allow=false,size=38,style={}}){
     return()=>{alive=false;window.removeEventListener("lumora-profile-updated",onUpdate);if(objectUrl)URL.revokeObjectURL(objectUrl);};
   },[username,allow]);
   return <span style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:"#63317D",color:"#fff",fontWeight:800,...style}}>
-    {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:String(username||"?").slice(0,1).toUpperCase()}
+    {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar?<CharacterAvatar value={avatar} size={size}/>:String(username||"?").slice(0,1).toUpperCase()}
   </span>;
 }
 
@@ -172,7 +173,7 @@ function CropEditor({kind,file,crop,onChange,onClose}){
   </div>;
 }
 
-export default function StudyProfile({username,currentUser,badges=[],badgeCatalog=[],history=[],openAchievementGallery=false,onClose}){
+export default function StudyProfile({username,currentUser,avatar=null,badges=[],badgeCatalog=[],history=[],openAchievementGallery=false,onClose}){
   const owner=safeUser(username)===safeUser(currentUser);
   const [profile,setProfile]=useState(DEFAULT_PROFILE);
   const [earned,setEarned]=useState(badges);
@@ -315,7 +316,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
       </div>
       <div style={{padding:"0 22px 28px"}}>
         <div style={{marginTop:-42,position:"relative",width:82,height:82,border:"5px solid "+profile.background,borderRadius:"50%",overflow:"hidden",background:profile.accent,color:"#fff",display:"grid",placeItems:"center",fontSize:30,fontWeight:800,boxShadow:"0 5px 16px rgba(40,22,50,.18)"}}>
-          {(photoPreview||photoUrl)?<img src={photoPreview||photoUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:photoCrop.x+"% "+photoCrop.y+"%",transform:photoPreview?"scale("+photoCrop.zoom+")":undefined}}/>:username.slice(0,1).toUpperCase()}
+          {(photoPreview||photoUrl)?<img src={photoPreview||photoUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:photoCrop.x+"% "+photoCrop.y+"%",transform:photoPreview?"scale("+photoCrop.zoom+")":undefined}}/>:avatar?<CharacterAvatar value={avatar} size={82}/>:username.slice(0,1).toUpperCase()}
         </div>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,marginTop:13}}>
           <div style={{minWidth:0}}>

@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragmen
 import { createPortal } from "react-dom";
 import ImageAsset from "./ImageAsset.jsx";
 import SoundSettings from "./SoundSettings.jsx";
+import {CharacterAvatar,CharacterEditor,CharacterFullBody,DEFAULT_CHARACTER,normalizeCharacter} from "./CharacterAvatar.jsx";
+import {CHARACTER_STAGE_RANGES,CHARACTER_STAGE_ENDS,characterStageIndex} from "./characterStages.js";
 import {soundEffects,normalizeSoundPreferences} from "./soundEffects.js";
 import {resolveSignedInAccount} from "./authFlows.js";
 import StudyProfile, {ProfileAvatar} from "./StudyProfile.jsx";
@@ -1528,7 +1530,8 @@ const CHARACTER_PROGRESSION_STAGES = {
   "elon-musk":["Computer Dreamer","Zip2 Startup Worker","Online Payments Founder","Electric Car and Rocket CEO","Mars Technology Figure"],
   "bill-gates":["Lakeside Computer Student","Programming Hustler","PC Software Cofounder","Graphical Computing CEO","Computing and Philanthropy Legacy"],
 };
-const FOCUS_STAGE_RANGES = ["0–1 min","1–2 min","2–3 min","3–4 min","4–5 min"];
+const FOCUS_STAGE_RANGES = CHARACTER_STAGE_RANGES;
+const FOCUS_STAGE_ENDS = CHARACTER_STAGE_ENDS;
 const STARTER_SKIN_IDS = ["lumora-scholar-man","lumora-scholar-woman"];
 const DEFAULT_STARTER_SKIN = STARTER_SKIN_IDS[0];
 const SKIN_TAGS = Object.freeze({
@@ -1607,11 +1610,10 @@ const getCharacterProgressionImage = (skin, stageIndex=0) => {
   return `/Images/${skin.name} (${stageIndex+1}) - ${stageName}.png`;
 };
 
-// Focus stages advance once per completed minute, then remain on the final
-// evolution. Keeping this calculation in one place makes the Focus screen,
+// Focus stages advance at the shared character milestones. Keeping this
+// calculation in one place makes the Focus screen,
 // saved session and classroom snapshot agree exactly.
-const getCharacterStageIndexForSeconds = (seconds, stageCount=FOCUS_STAGE_RANGES.length) =>
-  Math.min(Math.max(0,stageCount-1),Math.max(0,Math.floor((Number(seconds)||0)/60)));
+const getCharacterStageIndexForSeconds = characterStageIndex;
 
 const getCompletedCharacterStageMeta = (skinId, focusSeconds) => {
   const skin=TREE_SKINS.find(entry=>entry.id===skinId);
@@ -6329,7 +6331,7 @@ function SubjectSessionAmbience({ subject, paused=false }) {
 
 export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elapsed, duration, paused, onPause, onEnd, coins, skin, enhance=0,
   presence, currentUser, timerStyle="standard", pomodoro=null, task=null, onSkipBreak, onStartNext,
-  sessionId, animationMode="device", animationsDisabled=false }) {
+  sessionId, animationMode="device", animationsDisabled=false, avatar=DEFAULT_CHARACTER }) {
   const isPomodoro=timerStyle==="pomodoro"&&pomodoro;
   const isBreak=!!isPomodoro&&pomodoro.phase==="break";
   const phaseDuration=isPomodoro?pomodoroPhaseSeconds(pomodoro):duration;
@@ -6346,15 +6348,12 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
   const focusSeconds=isPomodoro
     ? (pomodoro.completedFocusSeconds+(isBreak?0:elapsed))
     : elapsed;
-  // Short development milestones make it quick to verify every growth stage.
-  const focusStages=[
-    {label:"0–1 min",end:1*60},{label:"1–2 min",end:2*60},
-    {label:"2–3 min",end:3*60},{label:"3–4 min",end:4*60},{label:"4–5 min",end:5*60},
-  ];
+  const focusStages=FOCUS_STAGE_RANGES.map((label,index)=>({label,end:FOCUS_STAGE_ENDS[index]}));
   const foundStageIndex=focusStages.findIndex(stage=>focusSeconds<stage.end);
   const stageIndex=foundStageIndex===-1?focusStages.length-1:foundStageIndex;
   const activeFocusStage=focusStages[stageIndex];
   const equippedSkin=TREE_SKINS.find(entry=>entry.id===skin)||TREE_SKINS[0];
+  const customScholar=STARTER_SKIN_IDS.includes(equippedSkin.id);
   const progressionImage=getCharacterProgressionImage(equippedSkin,stageIndex);
   const nextProgressionImage=getCharacterProgressionImage(equippedSkin,Math.min(stageIndex+1,focusStages.length-1));
   const progressionName=equippedSkin.progressionStages?.[stageIndex];
@@ -6363,7 +6362,7 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
   const showProgression=!isBreak&&!!progressionImage;
   const showFinalEvolution=!showProgression&&!isBreak&&!!equippedSkin.finalEvolution
     && stageIndex===focusStages.length-1;
-  const stagePercent=Math.min(100,Math.floor((focusSeconds/activeFocusStage.end)*100));
+  const stagePercent=Number.isFinite(activeFocusStage.end)?Math.min(100,Math.floor((focusSeconds/activeFocusStage.end)*100)):100;
   const lowPower=animationMode==="device"&&((Number(navigator.hardwareConcurrency)||8)<=4||(Number(navigator.deviceMemory)||8)<=4);
   const stageMotionDisabled=animationsDisabled||lowPower;
   const stageEvent=useFocusStageAdvancement({sessionId,stage:stageIndex,active:!paused&&!isBreak,enabled:!stageMotionDisabled});
@@ -6423,12 +6422,14 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
       {!isBreak&&presence&&<StudyingNow presence={presence} currentUser={currentUser} compact/>}
       {isPomodoro&&<div style={fs.roundLabel} aria-live="polite">Round {pomodoro.round} of {pomodoro.plannedRounds} · {isBreak?"Rest":"Focus"}</div>}
       <div className="sg-session-tree" style={fs.treeArea}>
-        {!isBreak&&<FocusStageBadge stage={stageIndex} event={stageEvent} disabled={stageMotionDisabled} color={subject.color}
+        {!isBreak&&!customScholar&&<FocusStageBadge stage={stageIndex} event={stageEvent} disabled={stageMotionDisabled} color={subject.color}
           outgoingImage={outgoingProgressionImage} incomingImage={progressionImage}
           imageScale={equippedSkin.characterImageScale||1} onPlaybackChange={onStagePlaybackChange}/>}
         {showProgression
           ? <div style={fs.finalEvolutionWrap}>
-              <ImageAsset src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} fetchPriority="high" style={{...fs.progressionImage,opacity:stageTransitionPlaying?0:paused?.5:1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
+              {customScholar
+                ? <CharacterFullBody value={{...avatar,model:equippedSkin.id.endsWith("woman")?"woman":"man"}} stage={stageIndex} style={{width:280,height:420,opacity:paused?.5:1,filter:fs.progressionImage.filter}}/>
+                : <ImageAsset src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} fetchPriority="high" style={{...fs.progressionImage,opacity:stageTransitionPlaying?0:paused?.5:1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>}
             </div>
           : showFinalEvolution
           ? <div style={fs.finalEvolutionWrap}>
@@ -6453,10 +6454,10 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
         <div style={fs.progressTrack}><div style={{...fs.progressFill,width:`${(isBreak?Math.min(progress,1)*100:stagePercent)}%`,background:overtime?"#E0A04B":subject.color}}/></div>
         {!isBreak&&focusStages.slice(0,stageIndex+1).map((stage,index)=>{
           const atEnd=index===stageIndex;
-          const position=`${(stage.end/activeFocusStage.end)*100}%`;
+          const position=`${Number.isFinite(stage.end)?Math.min(100,(stage.end/(Number.isFinite(activeFocusStage.end)?activeFocusStage.end:180*60))*100):100}%`;
           return <span key={stage.label} style={{...fs.timelinePoint,left:position,transform:"translateX(-50%)"}}>
             <i style={{...fs.timelineTick,background:subject.color,opacity:atEnd?1:.58}}/>
-            <small style={{...fs.timelineLabel,color:subject.color,opacity:atEnd?1:.72}}>Stage {index+1} · {stage.end/60}m</small>
+            <small style={{...fs.timelineLabel,color:subject.color,opacity:atEnd?1:.72}}>Stage {index+1} · {Number.isFinite(stage.end)?`${stage.end/60}m`:'180m+'}</small>
           </span>;
         })}
       </div>
@@ -6783,7 +6784,7 @@ const cs = {
 };
 
 // ── Add Subject Modal ─────────────────────────────────────────────────────────
-function AddSubjectModal({ onAdd, onClose, existing }) {
+function AddSubjectModal({ onAdd, onClose, existing, subject=null, onSave }) {
   useEffect(()=>{
     const elements=[document.documentElement,document.body];
     const previous=elements.map(el=>({overflow:el.style.overflow,overscrollBehavior:el.style.overscrollBehavior}));
@@ -6791,19 +6792,20 @@ function AddSubjectModal({ onAdd, onClose, existing }) {
     return()=>elements.forEach((el,index)=>Object.assign(el.style,previous[index]));
   },[]);
   const [customColourOpen,setCustomColourOpen]=useState(false);
-  const [label,setLabel]=useState(""); const [emoji,setEmoji]=useState("📝");
-  const [color,setColor]=useState("#00FF8E"); const [err,setErr]=useState("");
+  const [label,setLabel]=useState(subject?.label||""); const [emoji,setEmoji]=useState(subject?.emoji||"📝");
+  const [color,setColor]=useState(subject?.color||"#00FF8E"); const [err,setErr]=useState("");
   const handle=()=>{
     const t=capitalizeSubjectLabel(label);
     if(!t){setErr("Enter a name");return;}
     if(t.length>18){setErr("Max 18 chars");return;}
-    if(existing.some(s=>s.label.toLowerCase()===t.toLowerCase())){setErr("Already exists");return;}
-    onAdd({id:"custom_"+Date.now(),label:t,emoji,color});
+    if(existing.some(s=>s.id!==subject?.id&&s.label.toLowerCase()===t.toLowerCase())){setErr("Already exists");return;}
+    if(subject)onSave({...subject,label:t,emoji,color});
+    else onAdd({id:"custom_"+Date.now(),label:t,emoji,color});
   };
   return (
     <div style={am.overlay} className="sg-overlay-anim" onClick={onClose}>
       <div style={am.modal} className="sg-pop-anim sg-add-subject-modal" onClick={e=>e.stopPropagation()}>
-        <h3 style={am.title}>Add Subject</h3>
+        <h3 style={am.title}>{subject?"Edit subject":"Add subject"}</h3>
         <input style={{...am.input,...(err?am.inputErr:{})}} placeholder="e.g. Chemistry"
           value={label} onChange={e=>{setLabel(e.target.value);setErr("");}}
           onKeyDown={e=>e.key==="Enter"&&handle()} autoFocus maxLength={19}/>
@@ -6819,7 +6821,7 @@ function AddSubjectModal({ onAdd, onClose, existing }) {
         {customColourOpen&&<SubjectColourPicker color={color} onChange={setColor}/>}
         <div style={{display:"flex",gap:8,marginTop:20}}>
           <button style={am.cancelBtn} onClick={onClose}>Cancel</button>
-          <button style={{...am.addBtn,background:color}} onClick={handle}>Add</button>
+          <button style={{...am.addBtn,background:color}} onClick={handle}>{subject?"Save changes":"Add"}</button>
         </div>
       </div>
     </div>
@@ -8744,7 +8746,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, avatar, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const viewItems = [
     { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
@@ -8754,6 +8756,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
   ];
   const items = [
     { icon:"👥", label:"Study Profile", sub:"Photo, records and achievement showcase", onClick:onProfile },
+    { icon:"🎨", label:"Edit character", sub:"Hair, skin and eye colour", onClick:onCharacterEditor },
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, notificationCount:achievementsNotificationCount, notificationLabel:"unclaimed achievement rewards", onClick:onBadges },
@@ -8773,7 +8776,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
         <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
         <div style={hm.grabber}/>
         <button style={hm.profile} className="sg-tap-card" onClick={onProfile}>
-          <ProfileAvatar username={user} allow size={42}/>
+          <ProfileAvatar username={user} allow size={42} avatar={avatar}/>
           <div style={{flex:1,textAlign:"left"}}>
             <div style={hm.name}>{user}</div>
             <div style={hm.meta}><AnimatedNumber value={coins} prefix="🪙 "/> · 🔥 {streak} day{streak!==1?"s":""}</div>
@@ -13220,6 +13223,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showComplete,setShowComplete]=useState(null);
   const [showAddModal,setShowAddModal]=useState(false);
   const [editMode,setEditMode]=useState(false);
+  const [editingSubject,setEditingSubject]=useState(null);
+  const [pendingSubjectDelete,setPendingSubjectDelete]=useState(null);
   const [modePickerOpen,setModePickerOpen]=useState(false); // timer/stopwatch chooser popover
   const [subjScrollRef] = useHScroll(subjects.map(s=>`${s.id}:${s.label}`).join("|"));
   const [coins,setCoins]=useState(()=>lsGet(LS_COINS,0));
@@ -13302,6 +13307,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showRecap,setShowRecap]=useState(false);     // weekly recap card
   const [showAccount,setShowAccount]=useState(false); // account panel
   const [showSoundSettings,setShowSoundSettings]=useState(false);
+  const [showCharacterEditor,setShowCharacterEditor]=useState(false);
+  const [characterAvatar,setCharacterAvatar]=useState(()=>normalizeCharacter(lsGet("lumora_character_avatar_draft",DEFAULT_CHARACTER)));
   const [soundPreferences,setSoundPreferences]=useState(()=>normalizeSoundPreferences());
   useEffect(()=>{
     const next=normalizeSoundPreferences(user?lsGet(`lumora_sounds_${user}`,{}):{enabled:false});
@@ -13318,6 +13325,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setSoundPreferences(next);soundEffects.configure(next);lsSet(`lumora_sounds_${user}`,next);
     return await withTimeout(fbSavePrefs(user,{soundEffects:next}),10000,'Sound settings sync timed out.');
   };
+  const saveCharacterAvatar=async value=>{const next=normalizeCharacter(value),skinId=`lumora-scholar-${next.model}`;setCharacterAvatar(next);setActiveSkin(skinId);lsSetR(LS_SKIN,skinId);lsSet(`lumora_character_avatar_${user}`,next);setShowCharacterEditor(false);return fbSavePrefs(user,{characterAvatar:next,activeSkin:skinId});};
   const [profileUser,setProfileUser]=useState(null);
   const [profileAchievementGallery,setProfileAchievementGallery]=useState(false);
   const [showPrivacyData,setShowPrivacyData]=useState(false);
@@ -13612,7 +13620,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   const subjectObj=subjects.find(s=>s.id===subject)||subjects[0];
   const loginSkin=TREE_SKINS.find(entry=>entry.id===activeSkin)||TREE_SKINS[0];
-  const loginStageImage=getCharacterProgressionImage(loginSkin,0);
+  const durationStageIndex=getCharacterStageIndexForSeconds(duration);
+  const loginStageImage=getCharacterProgressionImage(loginSkin,durationStageIndex);
   const selectedTask=tasks.find(task=>task.id===selectedTaskId&&!task.completed)||null;
 
   const cacheTasks=useCallback((next,userKey=user)=>{
@@ -14310,7 +14319,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
-    setShowSoundSettings(false);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
+    setShowSoundSettings(false);setShowCharacterEditor(false);setCharacterAvatar(DEFAULT_CHARACTER);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
   };
 
   const navigateOnboarding=nextStep=>{
@@ -14330,6 +14339,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const u=[...subjects,normalized];setSubjects(u);lsSet(LS_SUBJECTS,u);
     fbSavePrefs(user,{subjects:u});
     setShowAddModal(false);showToast(`✅ ${normalized.emoji} ${normalized.label} added`);
+  };
+  const updateSubject=updated=>{
+    const next=subjects.map(item=>item.id===updated.id?updated:item);
+    setSubjects(next);lsSet(LS_SUBJECTS,next);
+    fbSavePrefs(user,{subjects:next});
+    setEditingSubject(null);showToast(`${updated.emoji} ${updated.label} updated`);
   };
   const removeSubject=id=>{
     if(subjects.length<=1){showToast("Need at least one subject");return;}
@@ -14562,12 +14577,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           setPrivacyPrefs({sharePresence:prefs.privacy.sharePresence!==false});
         }
         if(prefs.soundEffects){const next=normalizeSoundPreferences(prefs.soundEffects);setSoundPreferences(next);soundEffects.configure(next);lsSet(`lumora_sounds_${user}`,next);}
+        if(prefs.characterAvatar){const next=normalizeCharacter(prefs.characterAvatar);setCharacterAvatar(next);lsSet(`lumora_character_avatar_${user}`,next);}
+        else {const draft=lsGet("lumora_character_avatar_draft",null);if(draft){const next=normalizeCharacter(draft);setCharacterAvatar(next);lsSet(`lumora_character_avatar_${user}`,next);await fbSavePrefs(user,{characterAvatar:next});lsRemove("lumora_character_avatar_draft");}}
       } else {
         // No cloud prefs yet — seed from whatever this device has
         await withTimeout(fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
-          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,soundEffects:normalizeSoundPreferences(lsGet(`lumora_sounds_${user}`,{})),
+          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,soundEffects:normalizeSoundPreferences(lsGet(`lumora_sounds_${user}`,{})),characterAvatar:normalizeCharacter(lsGet("lumora_character_avatar_draft",DEFAULT_CHARACTER)),
           privacy:{sharePresence:true} }),8000,"Initial account preferences sync timed out.");
       }
       }catch(error){
@@ -14768,14 +14785,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         : onboardingStep===5
         ? <OnboardingStudyGoals initialValue={onboardingAnswers.studyGoals} onBack={()=>navigateOnboarding(4)} onNext={studyGoals=>{
             setOnboardingAnswers(current=>({...current,studyGoals}));
-            if(onboardingReplayRef.current){navigateOnboarding(6);return;}
-            lsSetR(LS_ONBOARDING_COMPLETE,"1");
-            onboardingReplayRef.current=false;
-            setOnboardingStep(0);
+            navigateOnboarding(6);
           }}/>
         : onboardingStep===6
-        ? <OnboardingFinish isReplay={onboardingReplayRef.current} onBack={()=>navigateOnboarding(5)} onNext={()=>navigateOnboarding(7)}/>
-        : <LoginScreen flow="link" onBack={()=>navigateOnboarding(6)}
+        ? <CharacterEditor initialValue={characterAvatar} onBack={()=>navigateOnboarding(5)} onSave={value=>{const next=normalizeCharacter(value);setCharacterAvatar(next);setActiveSkin(`lumora-scholar-${next.model}`);lsSetR(LS_SKIN,`lumora-scholar-${next.model}`);lsSet("lumora_character_avatar_draft",next);if(user)saveCharacterAvatar(next);if(onboardingReplayRef.current){navigateOnboarding(7);return;}lsSetR(LS_ONBOARDING_COMPLETE,"1");setOnboardingStep(0);}}/>
+        : onboardingStep===7
+        ? <OnboardingFinish isReplay={onboardingReplayRef.current} onBack={()=>navigateOnboarding(6)} onNext={()=>navigateOnboarding(8)}/>
+        : <LoginScreen flow="link" onBack={()=>navigateOnboarding(7)}
             onDone={()=>{
               onboardingReplayRef.current=false;
               lsSetR(LS_ONBOARDING_COMPLETE,"1");
@@ -14823,6 +14839,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
       {showAddModal&&<AddSubjectModal onAdd={addSubject} onClose={()=>setShowAddModal(false)} existing={subjects}/>}
+      {editingSubject&&<AddSubjectModal key={editingSubject.id} subject={editingSubject} onSave={updateSubject} onClose={()=>setEditingSubject(null)} existing={subjects}/>}
+      {pendingSubjectDelete&&<div style={am.overlay} role="presentation" onClick={()=>setPendingSubjectDelete(null)}><div role="alertdialog" aria-modal="true" aria-labelledby="delete-subject-title" style={{...am.modal,maxWidth:320}} onClick={event=>event.stopPropagation()}><h3 id="delete-subject-title" style={am.title}>Remove {pendingSubjectDelete.label}?</h3><p style={{fontSize:13,lineHeight:1.5,color:"#685B70"}}>This subject will be removed from your list.</p><div style={{display:"flex",gap:8,marginTop:18}}><button type="button" style={am.cancelBtn} onClick={()=>setPendingSubjectDelete(null)}>Cancel</button><button type="button" style={{...am.addBtn,background:"#A34D44"}} onClick={()=>{removeSubject(pendingSubjectDelete.id);setPendingSubjectDelete(null);}}>Remove subject</button></div></div></div>}
       {showShop&&<CoinShop coins={walletCoins} ownedSkins={ownedSkins} activeSkin={activeSkin} enhancements={enhancements}
         onBuy={handleBuySkin} onEquip={handleEquipSkin} onEnhance={handleEnhanceSkin} onClose={()=>setShowShop(false)}
         onOpenDecorations={()=>{setShowShop(false);setShowGardenShop(true);}}
@@ -14852,11 +14870,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
         onBack={recapFromMenu?()=>{setShowRecap(false);setRecapFromMenu(false);setShowMenu(true);}:null}/>}
       {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)} onProfile={()=>{setProfileAchievementGallery(false);setProfileUser(visiting);}}/>}
-      {profileUser&&<StudyProfile username={profileUser} currentUser={user} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
+      {profileUser&&<StudyProfile username={profileUser} currentUser={user} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}
       {showSoundSettings&&<SoundSettings initialPreferences={soundPreferences} onSave={saveSoundPreferences} onClose={()=>{setShowSoundSettings(false);setShowMenu(true);}}/>}
+      {showCharacterEditor&&<div style={{position:"fixed",inset:0,zIndex:440,overflowY:"auto"}}><CharacterEditor title="Edit your character" initialValue={characterAvatar} onBack={()=>{setShowCharacterEditor(false);setShowMenu(true);}} onSave={value=>{saveCharacterAvatar(value);setShowMenu(true);}}/></div>}
       {showAccount&&<AccountPanel user={user}
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
@@ -14876,7 +14895,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {running||paused ? (
         <FocusScreen subject={subjectObj} mode={mode} elapsed={elapsed} duration={duration}
           sessionId={sessionIdRef.current} animationMode={animationMode} animationsDisabled={animationsDisabled}
-          paused={paused} onPause={pauseSession} onEnd={endSession} coins={walletCoins} skin={activeSkin} enhance={enhancements[activeSkin]||0}
+          paused={paused} onPause={pauseSession} onEnd={endSession} coins={walletCoins} skin={activeSkin} avatar={characterAvatar} enhance={enhancements[activeSkin]||0}
           subjects={subjects} onChangeSubject={changeFocusSubject}
           presence={pomodoro.phase==="break"&&timerStyle==="pomodoro"?null:presence} currentUser={user}
           timerStyle={timerStyle} pomodoro={pomodoro} task={activeTaskRef.current}
@@ -14920,7 +14939,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
-              user={user} coins={walletCoins} streak={streak}
+              user={user} avatar={characterAvatar} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
               plannerNotificationCount={notificationCounts.planner}
               achievementsNotificationCount={notificationCounts.achievements}
@@ -14943,7 +14962,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onProfile={()=>{setShowMenu(false);setProfileAchievementGallery(false);setProfileUser(user);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
               onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
-              onSoundSettings={()=>{setShowMenu(false);setShowSoundSettings(true);}}
+              onSoundSettings={()=>{setShowMenu(false);setShowSoundSettings(true);}} onCharacterEditor={()=>{setShowMenu(false);setShowCharacterEditor(true);}}
               onReplayOnboarding={handleReplayOnboarding}
               isAdmin={isAdmin}
               canAddTestCoins={canAddTestCoins}
@@ -15049,7 +15068,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   {subjects.map(s=>{
                     const sel = subject===s.id;
                     return (
-                      <div key={s.id} style={{position:"relative",flexShrink:0}}>
+                      <div key={s.id} style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
                         <button
                           style={{...S.subjPill,...(sel?{borderColor:s.color,background:s.color+"18",color:s.color,fontWeight:700}:{})}}
                           onClick={()=>changeSubject(s.id)}>
@@ -15057,16 +15076,15 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                           <span style={{fontSize:15}}>{s.emoji}</span>
                           <span style={{fontSize:14}}>{s.label}</span>
                         </button>
-                        {editMode&&subjects.length>1&&<button style={S.removeBadge} onClick={()=>removeSubject(s.id)}>✕</button>}
+                        {editMode&&<button type="button" style={S.subjectEditAction} onClick={()=>setEditingSubject(s)} aria-label={`Edit ${s.label}`} title={`Edit ${s.label}`}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button>}
+                        {editMode&&subjects.length>1&&<button type="button" style={S.subjectRemoveAction} onClick={()=>setPendingSubjectDelete(s)} aria-label={`Remove ${s.label}`} title={`Remove ${s.label}`}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>}
                       </div>
                     );
                   })}
                   <button style={S.subjAddPill} onClick={()=>setShowAddModal(true)} title="Add subject">＋</button>
                   <button style={S.subjIconBtn} onClick={()=>setShowTargets(true)} title="Weekly targets">🎯</button>
-                  {subjects.length>1&&(
-                    <button style={{...S.subjIconBtn,...(editMode?{color:"#E07B54",borderColor:"#E07B54"}:{})}}
-                      onClick={()=>setEditMode(e=>!e)} title={editMode?"Done editing":"Edit subjects"}>{editMode?"✓":"✎"}</button>
-                  )}
+                  <button style={{...S.subjIconBtn,...(editMode?{color:"#E07B54",borderColor:"#E07B54"}:{})}}
+                    onClick={()=>setEditMode(e=>!e)} title={editMode?"Done editing":"Edit subjects"} aria-label={editMode?"Done editing subjects":"Edit subjects"}>{editMode?"✓":"✎"}</button>
                 </div>
               </div>
 
@@ -15092,13 +15110,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <div style={{...S.plantHalo,background:`radial-gradient(circle at 50% 42%, ${subjectObj.color}22, ${subjectObj.color}08 55%, transparent 72%)`}}/>
                   <div style={S.treeWrap} className="lumora-learner-art">
                     {loginStageImage
-                      ? <ImageAsset src={loginStageImage} alt={`${loginSkin.name} stage 1`} fetchPriority="high" style={S.loginStageImage}/>
+                      ? STARTER_SKIN_IDS.includes(loginSkin.id)?<CharacterFullBody value={{...characterAvatar,model:loginSkin.id.endsWith("woman")?"woman":"man"}} stage={durationStageIndex} style={S.loginStageImage}/>:<ImageAsset src={loginStageImage} alt={`${loginSkin.name} ${loginSkin.progressionStages?.[durationStageIndex]||"stage preview"}`} fetchPriority="high" style={S.loginStageImage}/>
                       : <TreeSVG progress={0.85} color={subjectObj.color} paused={false} large skin={activeSkin} enhance={enhancements[activeSkin]||0}/>
                     }
                   </div>
                   <div style={{...S.plantMound,background:`radial-gradient(ellipse at 50% 30%, ${subjectObj.color}26, ${subjectObj.color}12 60%, transparent 75%)`}}/>
                 </div>
 
+                {timerStyle==="standard"&&mode==="timer"&&loginStageImage&&<div role="status" aria-live="polite" style={{fontSize:11,textAlign:"center",color:"#706477",margin:"-2px 0 5px"}}>Stage {durationStageIndex+1} of 5 · {loginSkin.progressionStages?.[durationStageIndex]} <span style={{opacity:.75}}>· {FOCUS_STAGE_RANGES[durationStageIndex]}</span></div>}
                 <div style={S.timerCopy} className="lumora-timer-copy">
                   <div className="lumora-timer-value" style={{...S.timerDisplay,color:subjectObj.color}}>
                     {timerStyle==="pomodoro"?fmt(pomodoro.focusLengthMinutes*60):mode==="timer"?fmt(duration):"00:00"}
@@ -15219,7 +15238,8 @@ const S = {
   targetFill:{height:"100%",borderRadius:8,transition:"width 0.5s ease"},
   subjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",padding:"9px 4px",border:"1.5px solid #E0E8DC",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,cursor:"pointer"},
   subjectBtnActive:{fontWeight:600},
-  removeBadge:{position:"absolute",top:-5,right:-5,width:18,height:18,borderRadius:"50%",background:"#E07B54",color:"#fff",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0},
+  subjectEditAction:{width:30,height:30,border:0,borderRadius:9,background:"var(--sg-theme-accent-wash,#F0E7F5)",color:"var(--sg-theme-accent-strong,#63317D)",cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0},
+  subjectRemoveAction:{width:30,height:30,border:0,borderRadius:9,background:"#FAEBE8",color:"#A34D44",cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0},
   addSubjectBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"9px 4px",border:"1.5px dashed #C8D8C4",background:"var(--sg-theme-neutral,#f9fbf8)",borderRadius:12,cursor:"pointer",fontSize:20,color:"#888",minHeight:56},
   plantStage:{position:"relative",zIndex:1,flex:"1 1 auto",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",margin:"8px 0 2px",minHeight:272},
   plantHalo:{position:"absolute",top:24,left:"50%",transform:"translateX(-50%)",width:240,height:240,borderRadius:"50%",pointerEvents:"none"},
