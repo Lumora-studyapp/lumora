@@ -23,12 +23,12 @@ export function filterFriendUsernameSuggestions(usernames, prefix, currentUserna
 export function friendNetworkErrorMessage(error) {
   const code = String(error?.code || "").replace(/^firestore\//, "");
   if (code === "permission-denied") {
-    return "Firebase blocked the friend-list request. The current firestore.rules must be published to the Firebase project (firebase deploy --only firestore:rules).";
+    return "Your friends list is temporarily unavailable. Please try again later.";
   }
   if (code === "unavailable" || code === "deadline-exceeded") {
-    return "Could not reach Firebase. Check the connection and retry.";
+    return "Could not load your friends. Check your connection and retry.";
   }
-  return `Friends could not be loaded${code ? ` (${code})` : ""}. Retry, then check the browser console if it continues.`;
+  return "Friends could not be loaded. Please try again.";
 }
 
 export function friendConnectionId(firstUid, secondUid) {

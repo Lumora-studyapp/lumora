@@ -25,9 +25,10 @@ test("friend username suggestions match prefixes and exclude related accounts", 
   assert.deepEqual(filterFriendUsernameSuggestions(["abc"], "a", "me", {}), []);
 });
 
-test("friend network permission errors explain how to enable the feature", () => {
+test("friend network errors offer a readable recovery message", () => {
   const message = friendNetworkErrorMessage({ code: "firestore/permission-denied" });
-  assert.match(message, /firestore\.rules/);
+  assert.match(message, /temporarily unavailable/);
+  assert.doesNotMatch(message, /deploy|firestore|console/i);
   assert.match(friendNetworkErrorMessage({ code: "unavailable" }), /connection/);
 });
 

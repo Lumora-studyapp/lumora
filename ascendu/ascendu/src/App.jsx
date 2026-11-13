@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import ImageAsset from "./ImageAsset.jsx";
+import SoundSettings from "./SoundSettings.jsx";
+import {soundEffects,normalizeSoundPreferences} from "./soundEffects.js";
+import {resolveSignedInAccount} from "./authFlows.js";
 import StudyProfile, {ProfileAvatar} from "./StudyProfile.jsx";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
 import SubjectColourPicker from "./SubjectColourPicker.jsx";
@@ -45,7 +48,7 @@ import {
   createUserWithEmailAndPassword, deleteUser, EmailAuthProvider,
   getRedirectResult, GoogleAuthProvider, OAuthProvider,
   onAuthStateChanged, reauthenticateWithCredential,
-  signInWithEmailAndPassword, signInWithCustomToken, signInWithRedirect, linkWithCredential, linkWithPopup,
+  signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup, linkWithCredential, linkWithPopup,
   signOut as firebaseSignOut, updatePassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -96,7 +99,7 @@ const ONBOARDING_REFERRAL_IMAGE = "/mascot/lumora-gorilla-3d-point-no-background
 const ONBOARDING_PROGRESS_IMAGE = "/mascot/lumora-gorilla-3d-progress-no-background.png";
 const ONBOARDING_GOALS_IMAGE = "/mascot/lumora-gorilla-3d-head-scratch-no-background.png";
 const ONBOARDING_FINISH_IMAGE = "/mascot/lumora-gorilla-3d-finish-line-front.png";
-const ONBOARDING_ACCOUNT_IMAGE = "/mascot/lumora-gorilla-3d-purple-atom-superhero-exertion-no-background.png";
+const ONBOARDING_ACCOUNT_IMAGE = "/mascot/lumora-auth-superhero-plum-v2.png";
 const LUMORA_LOGO_IMAGE = "/Logo/Lumora%20default%20logo";
 const EDUCATION_OPTIONS = [
   "Primary school student",
@@ -153,7 +156,7 @@ export const APP_CSS = `
   box-sizing:border-box;
   overflow:hidden;
   padding:max(17px,env(safe-area-inset-top)) 13px max(12px,env(safe-area-inset-bottom));
-  background:radial-gradient(ellipse at 50% 48%,#f6e8ff 0%,#fbf6ff 45%,#fff 78%);
+  background:radial-gradient(ellipse at 58% 62%,#e8ddf0 0%,#f3edf7 44%,#faf7fc 100%);
   color:#342038;
 }
 .lumora-auth-stage::before {
@@ -166,23 +169,8 @@ export const APP_CSS = `
   top:4%;
   transform:translateX(-50%);
   border-radius:50%;
-  background:radial-gradient(circle,rgba(192,98,251,.27) 0%,rgba(198,113,249,.12) 38%,transparent 69%);
+  background:radial-gradient(circle,rgba(119,78,147,.12) 0%,rgba(159,128,179,.06) 38%,transparent 69%);
   pointer-events:none;
-}
-.lumora-auth-stage::after {
-  content:"";
-  position:absolute;
-  z-index:1;
-  inset:-12%;
-  background:
-    linear-gradient(108deg,transparent 42%,rgba(190,105,255,.30) 42.25%,rgba(234,196,255,.66) 42.5%,transparent 42.9%),
-    linear-gradient(72deg,transparent 53%,rgba(168,71,255,.34) 53.2%,rgba(230,191,255,.72) 53.45%,transparent 53.8%),
-    repeating-conic-gradient(from 2deg at 50% 40%,transparent 0deg 14deg,rgba(183,86,255,.32) 14.2deg 14.7deg,transparent 15deg 26deg);
-  -webkit-mask-image:radial-gradient(ellipse at 50% 40%,transparent 0 20%,#000 34% 67%,transparent 89%);
-  mask-image:radial-gradient(ellipse at 50% 40%,transparent 0 20%,#000 34% 67%,transparent 89%);
-  opacity:.74;
-  pointer-events:none;
-  animation:lumora-auth-zap 5s ease-in-out infinite alternate;
 }
 .lumora-auth-art {
   position:absolute;
@@ -196,10 +184,8 @@ export const APP_CSS = `
   transform:translateX(-50%);
   pointer-events:none;
   user-select:none;
-  filter:drop-shadow(0 12px 20px rgba(82,25,135,.2));
+  filter:drop-shadow(0 12px 18px rgba(64,38,77,.12));
 }
-@keyframes lumora-auth-zap { from { opacity:.48; } to { opacity:.9; } }
-@media (prefers-reduced-motion:reduce) { .lumora-auth-stage::after { animation:none; } }
 .lumora-auth-back {
   position:absolute;
   z-index:3;
@@ -223,13 +209,18 @@ export const APP_CSS = `
   box-sizing:border-box;
   margin-top:clamp(5px,2.2dvh,25px);
   padding:clamp(15px,2.3dvh,23px) clamp(16px,3.5vw,25px);
-  border:1.5px solid rgba(181,113,218,.66);
+  border:1px solid rgba(105,73,123,.15);
   border-radius:27px;
-  background:linear-gradient(160deg,rgba(255,255,255,.985),rgba(251,245,255,.96));
-  box-shadow:0 0 0 6px rgba(204,116,250,.13),0 0 37px 12px rgba(185,66,255,.18),0 14px 38px rgba(57,13,84,.14);
+  background:rgba(255,253,255,.96);
+  box-shadow:0 20px 60px rgba(65,36,82,.10),0 3px 12px rgba(65,36,82,.04);
   text-align:center;
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
+}
+@media (min-width:900px) and (min-height:560px) {
+  .lumora-auth-stage { align-items:center; }
+  .lumora-auth-panel { margin-top:0; transform:translateX(-215px); }
+  .lumora-auth-art { left:calc(50% + 225px); bottom:10dvh; width:min(42vw,70dvh,540px); }
 }
 .lumora-auth-brand {
   display:flex;
@@ -1402,7 +1393,7 @@ const TAB_STALE_MS     = 12000; // beyond this with no heartbeat, treat the owne
 const canonUsername = (raw) => (raw||"").trim().normalize("NFC").toLowerCase();
 
 async function usernameForUid(uid){
-  const snap=await getDocs(query(collection(db,"usernames"),where("uid","==",uid),limit(1)));
+  const snap=await withTimeout(getDocs(query(collection(db,"usernames"),where("uid","==",uid),limit(1))),12000,"Signed in, but your Lumora profile could not be loaded. Check your connection and try again.");
   const match=snap.docs[0];
   return match?(match.data().displayName||match.id):null;
 }
@@ -3321,17 +3312,7 @@ async function authenticateEmailDirect(email,password){
     }
     return {ok:false,error:directAuthError(error)};
   }
-  try{
-    const username=await usernameForUid(credential.user.uid);
-    if(!username){
-      await firebaseSignOut(auth).catch(()=>{});
-      return {ok:false,error:"That Firebase account isn't connected to a Lumora username yet."};
-    }
-    return {ok:true,created:false,username};
-  }catch(error){
-    await firebaseSignOut(auth).catch(()=>{});
-    return {ok:false,error:"Signed in, but Lumora couldn't connect that email to its username data."};
-  }
+  return resolveSignedInAccount(credential.user,usernameForUid);
 }
 
 async function fbSavePassword(usernameOrEmail, password, recovery) {
@@ -3411,9 +3392,10 @@ async function fbSignInWithSocialProvider(kind) {
     provider.addScope("name");
   }
   try{
-    localStorage.setItem("lumora_social_redirect_pending",kind);
-    await signInWithRedirect(auth,provider);
-    return {ok:true,redirecting:true};
+    // Popups keep the app on its own origin and avoid losing the credential
+    // when browsers partition the Firebase redirect helper's storage.
+    const credential=await signInWithPopup(auth,provider);
+    return resolveSignedInAccount(credential.user,usernameForUid);
   }catch(error){
     localStorage.removeItem("lumora_social_redirect_pending");
     return {ok:false,error:socialAuthError(error)};
@@ -6853,7 +6835,7 @@ const am = {
   inputErr:{borderColor:"#E07B54"},
   err:{color:"#E07B54",fontSize:12,margin:"4px 0 0"},
   emojiGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(32px,1fr))",gap:4},
-  emojiBtn:{minWidth:0,minHeight:32,display:"grid",placeItems:"center",background:"#f5f5f5",border:"1.5px solid transparent",borderRadius:8,padding:"4px 2px",fontSize:16,cursor:"pointer"},
+  emojiBtn:{minWidth:0,minHeight:34,display:"grid",placeItems:"center",background:"#f5f5f5",border:"1.5px solid transparent",borderRadius:8,padding:"4px 2px",fontSize:18,lineHeight:1,fontFamily:'"Segoe UI Emoji","Apple Color Emoji",sans-serif',cursor:"pointer"},
   emojiOn:{border:"1.5px solid var(--sg-theme-accent,#2D6A4F)",background:"var(--sg-theme-accent-wash,#E8F5EE)"},
   colorRow:{display:"flex",flexWrap:"wrap",gap:8},
   swatch:{width:28,height:28,borderRadius:"50%",border:"2px solid transparent",cursor:"pointer"},
@@ -8762,7 +8744,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const viewItems = [
     { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
@@ -8780,6 +8762,7 @@ function HeaderMenu({ user, coins, streak, badgeCount, plannerNotificationCount,
     ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
   const boringItems = [
+    { icon:"♫", label:"Sound & Audio", sub:"Effects, volume and previews", onClick:onSoundSettings },
     { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
     { icon:"◇", label:"Privacy & Data", sub:"Read the Lumora privacy policy", onClick:onPrivacyData },
     { icon:"👋", label:"Replay onboarding", sub:"Replay the full welcome flow", onClick:onReplayOnboarding },
@@ -12515,6 +12498,9 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
   const [pastEntries,setPastEntries]=useState([]);
   const [pastLoading,setPastLoading]=useState(false);
   const [managing,setManaging]=useState(false);
+  const [peopleView,setPeopleView]=useState("friends");
+  const [sentNotice,setSentNotice]=useState("");
+  useEffect(()=>{if(!sentNotice)return;const timer=setTimeout(()=>setSentNotice(""),6000);return()=>clearTimeout(timer);},[sentNotice]);
   const [friendUsername,setFriendUsername]=useState("");
   const [chosenSuggestion,setChosenSuggestion]=useState("");
   const [usernameSuggestions,setUsernameSuggestions]=useState([]);
@@ -12542,7 +12528,7 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
       else{
         setUsernameSuggestions([]);
         setSuggestionsError(result.error?.code?.includes("permission-denied")
-          ? "Username search is blocked by Firebase rules. Publish the current firestore.rules file."
+          ? "Username search is unavailable. Try entering the full username."
           : "Username suggestions could not be loaded. You can still enter a username directly.");
       }
     },180);
@@ -12565,23 +12551,25 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
     if(busy)return false;
     setBusy(true);setError("");
     try{const result=await action();if(!result?.ok){setError(result?.error||"Something went wrong.");return false;}return true;}
+    catch{setError("Could not update your friends. Please try again.");return false;}
     finally{setBusy(false);}
   };
   const send=async()=>{
-    if(await run(()=>fbSendFriendRequest(currentUser,friendUsername))){setFriendUsername("");setChosenSuggestion("");setUsernameSuggestions([]);}
+    const recipient=normalizeFriendUsername(friendUsername);
+    if(await run(()=>fbSendFriendRequest(currentUser,recipient))){setSentNotice(`Friend request sent to ${recipient}.`);setFriendUsername("");setChosenSuggestion("");setUsernameSuggestions([]);setManaging(false);}
   };
   const respond=async(request,accept)=>{await run(()=>fbRespondFriendRequest(currentUser,request.id,accept));};
-  const cancel=async request=>{await run(()=>fbCancelFriendRequest(request.id));};
   const remove=async friend=>{
     if(!window.confirm(`Remove ${friend.username} from your friends?`))return;
     await run(()=>fbRemoveFriend(currentUser,friend));
   };
   return (
     <div>
-      <div style={fr.hero}>
-        <div><div style={fr.kicker}>YOUR STUDY CIRCLE</div><div style={fr.title}>Friends</div><div style={fr.subtitle}>Only accepted friends can see your status, subject and rankings.</div></div>
-        <button style={gl.manageBtn} onClick={()=>setManaging(value=>!value)}>{managing?"Done":"Friend settings"}</button>
+      <div style={{...fr.hero,background:"var(--sg-theme-neutral,#fff)",boxShadow:"none"}}>
+        <div><div style={fr.kicker}>YOUR STUDY CIRCLE</div><div style={fr.title}>Friends</div><div style={fr.subtitle}>Study together. Celebrate each other’s progress.</div></div>
+        <button style={{...gl.manageBtn,flexShrink:0,minHeight:36,background:"var(--sg-theme-accent-wash,#F0E7F5)"}} aria-expanded={managing} onClick={()=>setManaging(value=>!value)}>{managing?"Close":"＋ Add friend"}</button>
       </div>
+      {sentNotice&&<div role="status" style={fr.sentNotice}>✓ {sentNotice}</div>}
       {managing&&<div style={gl.manageCard}>
         <div style={fr.addRow}>
           <input style={gl.input} value={friendUsername} maxLength={20} onChange={event=>{setFriendUsername(event.target.value);setChosenSuggestion("");setError("");}}
@@ -12598,43 +12586,37 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
         </div>}
         {suggestionsError&&<div style={fr.suggestionStatus} role="status">{suggestionsError}</div>}
         {error&&<div style={/permission/i.test(error)?fr.notice:gl.error} role="status">
-          {/permission/i.test(error)?"Friend requests are blocked by Firebase rules. Publish the current firestore.rules file.":error}
-        </div>}
-        {network.friends.length>0&&<div style={fr.friendList}>
-          {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}>
-            <button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)} title={`Visit ${friend.username}'s classroom`}><ProfileAvatar username={friend.username} allow size={22}/>{friend.username}</button>
-            <button style={fr.removeFriend} onClick={()=>remove(friend)} aria-label={`Remove ${friend.username}`}>×</button>
-          </div>)}
+          {/permission/i.test(error)?"Friend requests are temporarily unavailable. Please try again later.":error}
         </div>}
       </div>}
 
-      <section style={fr.reviewCard} aria-label="Friend request review">
+      <div style={fr.peopleNav} role="group" aria-label="Friends view">
+        {[["friends",`Your friends · ${network.friends.length}`],["requests",`Requests${network.incoming.length?` · ${network.incoming.length}`:""}`]].map(([id,label])=><button key={id} type="button" aria-pressed={peopleView===id} onClick={()=>setPeopleView(id)} style={{...fr.peopleTab,...(peopleView===id?fr.peopleTabActive:{})}}>{label}</button>)}
+      </div>
+      {network.loading&&<div style={fr.reviewEmpty} role="status">Loading your study circle…</div>}
+      {peopleView==="friends"&&<div style={fr.friendList}>
+        {network.friends.map(friend=><div key={friend.id} style={fr.friendChip}><button style={fr.friendVisit} onClick={()=>onVisit?.(friend.username)}><ProfileAvatar username={friend.username} allow size={34}/><span>{friend.username}<small style={{display:"block",fontWeight:400,fontSize:11,color:"var(--sg-theme-muted,#817287)",marginTop:3}}>View classroom</small></span></button><button style={fr.removeFriend} onClick={()=>remove(friend)} disabled={busy} aria-label={`Remove ${friend.username}`} title="Remove friend">×</button></div>)}
+        {!network.friends.length&&!network.error&&!network.loading&&<div style={fr.reviewEmpty}>Your study circle starts here. Add someone by username.</div>}
+      </div>}
+      {peopleView==="requests"&&<section style={fr.reviewCard} aria-label="Friend requests">
         <div style={fr.reviewHeader}>
-          <strong style={fr.reviewTitle}>Review</strong>
+          <strong style={fr.reviewTitle}>Friend requests</strong>
           {network.incoming.length>0&&<span className="sg-notification-count" aria-label={`${network.incoming.length} incoming friend requests`}>
             {network.incoming.length>9?"9+":network.incoming.length}
           </span>}
         </div>
         <div style={fr.reviewGroup}>
-          <div style={fr.reviewLabel}>Incoming</div>
           {network.incoming.length>0?network.incoming.map(request=><div key={request.id} style={fr.requestRow}>
             <span style={fr.avatar}>{request.username.slice(0,1).toUpperCase()}</span>
             <strong style={fr.requestName}>{request.username}</strong>
             <button style={gl.acceptBtn} disabled={busy} onClick={()=>respond(request,true)}>Accept</button>
-            <button style={fr.rejectRequest} disabled={busy} onClick={()=>respond(request,false)} aria-label={`Reject ${request.username}`}>Reject</button>
-          </div>):<div style={fr.reviewEmpty}>No incoming requests.</div>}
+            <button style={fr.rejectRequest} disabled={busy} onClick={()=>respond(request,false)} aria-label={`Reject ${request.username}`}>Decline</button>
+          </div>):!network.loading&&!network.error?<div style={fr.reviewEmpty}>You’re all caught up. New requests will appear here.</div>:null}
         </div>
-        <div style={fr.reviewGroup}>
-          <div style={fr.reviewLabel}>Outgoing</div>
-          {network.outgoing.length>0?network.outgoing.map(request=><div key={request.id} style={fr.outgoingRow}>
-            <span>Request sent to <b>{request.username}</b></span>
-            <button type="button" style={fr.cancelRequest} onClick={()=>cancel(request)} disabled={busy}>Cancel</button>
-          </div>):<div style={fr.reviewEmpty}>No outgoing requests.</div>}
-        </div>
-      </section>
+      </section>}
 
       {error&&!managing&&<div style={/permission/i.test(error)?fr.networkError:gl.error} role="status">
-        {/permission/i.test(error)?"Friend request changes are blocked by Firebase rules. Publish the current firestore.rules file.":error}
+        {/permission/i.test(error)?"Friend requests are temporarily unavailable. Please try again later.":error}
       </div>}
       {network.error&&<div style={fr.networkError} role="status">
         <span>{friendNetworkErrorMessage(network.error)}</span>
@@ -12651,12 +12633,16 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
       <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(view==="past"?weekOffset:0).rangeLabel}</div>
       <LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showLoading}
         emptyTitle={network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}
-        emptyBody={network.friends.length?(view==="past"?"No accepted friends recorded study time in this week.":"Complete a session to appear in this ranking."):"Open Friend settings to send a username request."}/>
+        emptyBody={network.friends.length?(view==="past"?"No accepted friends recorded study time in this week.":"Complete a session to appear in this ranking."):"Choose Add friend to invite someone by username."}/>
     </div>
   );
 }
 
 const fr={
+  sentNotice:{padding:"12px 14px",marginBottom:10,borderRadius:12,background:"#EBF5EE",color:"#285D3D",fontSize:12,lineHeight:1.5},
+  peopleNav:{display:"flex",gap:6,padding:4,marginBottom:12,borderRadius:12,background:"var(--sg-theme-control-track,#EEE6F2)"},
+  peopleTab:{flex:1,minHeight:38,border:0,borderRadius:9,background:"transparent",color:"var(--sg-theme-muted,#817287)",fontSize:12,fontWeight:650,cursor:"pointer"},
+  peopleTabActive:{background:"var(--sg-theme-neutral,#fff)",color:"var(--sg-theme-accent-strong,#63317D)",boxShadow:"0 1px 4px #30223710"},
   friendTabLabel:{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6},
   suggestions:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid var(--sg-theme-border,#E4EAE1)",borderRadius:12,overflow:"hidden",margin:"-3px 0 9px"},
   suggestionRow:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,minHeight:38,padding:"4px 7px 4px 11px",borderBottom:"1px solid var(--sg-theme-border,#EDF1EB)"},
@@ -12675,7 +12661,7 @@ const fr={
   retryNetwork:{border:0,borderRadius:9,background:"#F3E4E0",color:"#8F5047",padding:"6px 9px",fontSize:10,fontWeight:750,flex:"0 0 auto",cursor:"pointer"},
   hero:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"var(--sg-theme-soft-gradient,linear-gradient(135deg,#EAF6EE,#F7F4FD))",border:"1px solid var(--sg-theme-border,#D9E8DD)",borderRadius:17,padding:"13px 14px",marginBottom:9},kicker:{fontSize:8.5,fontWeight:850,letterSpacing:1.1,color:"var(--sg-theme-accent-strong,#6E9D7E)"},title:{fontSize:18,fontWeight:850,color:"var(--sg-theme-text,#20372A)",marginTop:1},subtitle:{fontSize:10.5,color:"var(--sg-theme-muted,#7C8A81)",lineHeight:1.4,marginTop:2},count:{width:48,height:48,borderRadius:15,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--sg-theme-neutral,rgba(255,255,255,.82))",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontSize:17,fontWeight:850,boxShadow:"0 4px 12px var(--sg-theme-shadow,rgba(45,106,79,.08))"},
   addRow:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7,marginBottom:9},addBtn:{border:0,borderRadius:11,background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",padding:"0 15px",fontSize:11.5,fontWeight:750,cursor:"pointer"},requestCard:{background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:13,padding:10,marginBottom:9},requestRow:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) auto auto",gap:7,alignItems:"center",padding:"4px 0"},rejectRequest:{border:"1px solid #F0DAD8",borderRadius:10,background:"#FFF7F5",color:"#9A5A51",padding:"7px 9px",fontSize:10.5,fontWeight:750,cursor:"pointer"},avatar:{width:32,height:32,borderRadius:10,display:"grid",placeItems:"center",background:"var(--sg-theme-accent-wash,#EAF4EC)",color:"var(--sg-theme-accent-strong,#2D6A4F)",fontWeight:800},requestName:{fontSize:12,color:"#2B3D31",overflow:"hidden",textOverflow:"ellipsis"},
-  outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"flex",gap:6,overflowX:"auto",padding:"0 1px 10px"},friendChip:{display:"flex",alignItems:"center",flex:"0 0 auto",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",alignItems:"center",gap:6,border:0,background:"transparent",padding:"7px 5px 7px 9px",fontSize:10.5,fontWeight:700,color:"var(--sg-theme-accent-strong,#4E6255)",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
+  outgoing:{display:"flex",alignItems:"center",gap:5,overflowX:"auto",fontSize:9.5,color:"#8B958D",padding:"0 1px 9px"},pendingChip:{display:"inline-flex",alignItems:"center",gap:4,background:"#F1F4F0",borderRadius:12,padding:"4px 5px 4px 8px",fontWeight:700,color:"#647067",whiteSpace:"nowrap"},friendList:{display:"grid",gap:8,padding:"0 0 14px"},friendChip:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--sg-theme-neutral,#fff)",border:"1px solid #E0E8DE",borderRadius:15,overflow:"hidden"},friendVisit:{display:"flex",flex:1,textAlign:"left",alignItems:"center",gap:10,border:0,background:"transparent",padding:"12px",fontSize:13,fontWeight:700,color:"var(--sg-theme-accent-strong,#4E6255)",cursor:"pointer"},friendDot:{width:7,height:7,borderRadius:"50%",background:"#34C759"},removeFriend:{border:0,background:"transparent",color:"#A0A8A2",fontSize:15,padding:"5px 8px 6px 4px",cursor:"pointer"},periodNote:{fontSize:9.5,color:"#89938C",padding:"1px 2px 7px",textAlign:"center"},empty:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",background:"var(--sg-theme-neutral,#fff)",border:"1px dashed #CAD8C6",borderRadius:14,padding:"24px 16px",color:"#536158"},
   notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
 };
 
@@ -13315,6 +13301,23 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showSessions,setShowSessions]=useState(false); // my-sessions self-edit panel
   const [showRecap,setShowRecap]=useState(false);     // weekly recap card
   const [showAccount,setShowAccount]=useState(false); // account panel
+  const [showSoundSettings,setShowSoundSettings]=useState(false);
+  const [soundPreferences,setSoundPreferences]=useState(()=>normalizeSoundPreferences());
+  useEffect(()=>{
+    const next=normalizeSoundPreferences(user?lsGet(`lumora_sounds_${user}`,{}):{enabled:false});
+    setSoundPreferences(next);soundEffects.configure(next);
+    return()=>soundEffects.stop();
+  },[user]);
+  useEffect(()=>{
+    const unlock=()=>soundEffects.unlock();
+    window.addEventListener('pointerdown',unlock);window.addEventListener('keydown',unlock);
+    return()=>{window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);};
+  },[]);
+  const saveSoundPreferences=async value=>{
+    const next=normalizeSoundPreferences(value);
+    setSoundPreferences(next);soundEffects.configure(next);lsSet(`lumora_sounds_${user}`,next);
+    return await withTimeout(fbSavePrefs(user,{soundEffects:next}),10000,'Sound settings sync timed out.');
+  };
   const [profileUser,setProfileUser]=useState(null);
   const [profileAchievementGallery,setProfileAchievementGallery]=useState(false);
   const [showPrivacyData,setShowPrivacyData]=useState(false);
@@ -13341,7 +13344,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const subjectSegmentMarkersRef=useRef([]);
   const queuedToastRef=useRef("");
   const finishingSessionRef=useRef(false);
-  const intervalAudioRef=useRef(null);
+
   useEffect(()=>{pomodoroRef.current=pomodoro;},[pomodoro]);
   useEffect(()=>{
     // Let the new Melbourne week independently run its recap and podium-claim
@@ -13368,7 +13371,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // a fast hint, and is accepted after its username document matches the uid.
   useEffect(()=>{
     let active=true;
+    let authRevision=0;
     const unsubscribe=onAuthStateChanged(auth,async firebaseUser=>{
+      const revision=++authRevision;
       if(!active)return;
       if(!firebaseUser){
         // During a redirect Firebase briefly reports no current user before
@@ -13399,7 +13404,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           }
           return usernameForUid(firebaseUser.uid);
         })(),8000,"Account profile lookup timed out.");
-        if(!active)return;
+        if(!active||revision!==authRevision||auth.currentUser?.uid!==firebaseUser.uid)return;
         if(username){
           const canonical=canonUsername(username);
           const cached=canonUsername(lsRaw(LS_USER,lsRaw("ascendu_username","")));
@@ -13418,14 +13423,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         }
       }catch(error){
         console.error("Lumora account hydration error:",error);
-        if(active){
+        if(active&&revision===authRevision&&auth.currentUser?.uid===firebaseUser.uid){
           setUser(null);
-          setRedirectSocialUser(firebaseUser);
-          setRedirectAuthError("You're signed in. Please choose a username to finish setting up your account.");
+          setRedirectSocialUser(null);
+          setRedirectAuthError("Your sign-in succeeded, but Lumora couldn't load your account. Check your connection and try signing in again. Your account has not been changed.");
           setOnboardingStep(0);
         }
       }finally{
-        if(active)setAuthReady(true);
+        if(active&&revision===authRevision)setAuthReady(true);
       }
     });
     return ()=>{active=false;unsubscribe();};
@@ -13596,22 +13601,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // Play a gentle chime + (if allowed) a system notification when the timer
   // hits its goal — then the session keeps counting into overtime.
   const notifyGoalReached = useCallback(() => {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if(Ctx){
-        const ac = new Ctx();
-        [880, 1320].forEach((freq, i) => {
-          const osc = ac.createOscillator(), gain = ac.createGain();
-          osc.frequency.value = freq; osc.type = "sine";
-          osc.connect(gain); gain.connect(ac.destination);
-          const t = ac.currentTime + i*0.18;
-          gain.gain.setValueAtTime(0.0001, t);
-          gain.gain.exponentialRampToValueAtTime(0.25, t+0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, t+0.4);
-          osc.start(t); osc.stop(t+0.42);
-        });
-      }
-    } catch(e) {}
+    soundEffects.play('studyCompleted');
     try {
       if("Notification" in window && Notification.permission === "granted"){
         new Notification("Goal reached!", { icon: emojiAssetUrl("🌱"), body: "Your timer's done — still counting your overtime. End the session whenever you're ready." });
@@ -13680,6 +13670,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(optimistic.completed&&selectedTaskId===id)chooseTask("");
     try{
       const result=await fbUpdateTask(user,"",id,patch);
+      if(result.ok&&optimistic.completed&&!current.completed)soundEffects.play('taskCompleted');
       if(!result.ok){cacheTasks(before);if(selectedTaskId===id&&!current.completed)chooseTask(id);}
       return result;
     }catch(e){cacheTasks(before);if(selectedTaskId===id&&!current.completed)chooseTask(id);return {ok:false,error:e.message};}
@@ -13939,6 +13930,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setLoading(false);
     setShowComplete({secs,coinsEarned,subjectObj:subj,streak:fresh.streak,streakExtended:firstToday&&fresh.streak>0,
       timerMode:completedTimerMode,pomodoro:completedTimerMode==="pomodoro"?completedPomo:null,task:completedTask||null});
+    if(!saveResult.alreadySaved&&!goalChimedRef.current)soundEffects.play('studyCompleted');
+    if(!saveResult.alreadySaved){
+      const beforeHours=(history||[]).reduce((sum,entry)=>sum+(Number(entry.secs)||0),0)/3600;
+      if(MILESTONE_STAGES.some(stage=>Number.isFinite(stage.max)&&beforeHours<stage.max&&beforeHours+secs/3600>=stage.max))soundEffects.play('milestone');
+    }
     }catch(e){
       console.error("Session finalization failed:",e);
       const prefs=await fbLoadPrefs(user);
@@ -13953,16 +13949,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
   const cuePomodoroBoundary=useCallback((message)=>{
     if(pomodoroRef.current.intervalCues){
-      try{
-        const ac=intervalAudioRef.current;
-        if(ac&&ac.state!=="closed"){
-          ac.resume?.();
-          const osc=ac.createOscillator(),gain=ac.createGain(),now=ac.currentTime;
-          osc.type="sine";osc.frequency.value=740;osc.connect(gain);gain.connect(ac.destination);
-          gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.12,now+.02);
-          gain.gain.exponentialRampToValueAtTime(.0001,now+.32);osc.start(now);osc.stop(now+.34);
-        }
-      }catch{}
       try{navigator.vibrate?.(70);}catch{}
     }
     try{
@@ -13978,6 +13964,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     const previous=pomodoroRef.current;
     pomodoroRef.current=result.state;setPomodoro(result.state);
     if(result.finished){
+      soundEffects.play('studyCompleted');goalChimedRef.current=true;
       cuePomodoroBoundary("All focus rounds complete — your classroom has grown.");
       clearInterval(intervalRef.current);
       startTimeRef.current=null;baseElapsed.current=0;setElapsed(0);setRunning(false);setPaused(false);
@@ -13986,12 +13973,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     }
     const crossedFocus=previous.phase==="focus"||result.state.completedRounds>previous.completedRounds;
     if(result.state.awaitingNext){
+      soundEffects.play('breakEnded');
       cuePomodoroBoundary("Break complete — start the next round when you’re ready.");
       startTimeRef.current=null;baseElapsed.current=result.elapsed;setElapsed(result.elapsed);setPaused(true);
       localStorage.setItem(LS_ACTIVE,JSON.stringify(activeSnapshot({
         startTs:null,base:result.elapsed,paused:true,timerMode:"pomodoro",pomodoro:result.state,
       })));
     }else{
+      soundEffects.play(crossedFocus?'breakStarted':'breakEnded');
       cuePomodoroBoundary(crossedFocus?"Focus complete — take a short break.":"Break complete — the next focus round has started.");
       baseElapsed.current=result.elapsed;
       startTimeRef.current=Date.now();
@@ -14177,20 +14166,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(timerStyle==="pomodoro"){
       const fresh=createPomodoroState(pomodoroRef.current);
       pomodoroRef.current=fresh;setPomodoro(fresh);
-      if(fresh.intervalCues){
-        try{
-          const Ctx=window.AudioContext||window.webkitAudioContext;
-          if(Ctx&&!intervalAudioRef.current){
-            intervalAudioRef.current=new Ctx();
-            intervalAudioRef.current.resume?.();
-          }
-        }catch{}
-      }
     }
     setElapsed(0);
     setPaused(false);
     setRunning(true);
     // Ask once for notification permission so the goal alert can reach you in another tab
+    soundEffects.play('studyStarted');
     try {
       if((mode==="timer"||timerStyle==="pomodoro") && "Notification" in window && Notification.permission === "default"){
         Notification.requestPermission();
@@ -14200,9 +14181,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const pauseSession=()=>setPaused(p=>!p);
   const startNextPomodoro=()=>{
     if(timerStyle!=="pomodoro")return;
+    const endingBreak=pomodoroRef.current.phase==="break"&&!pomodoroRef.current.awaitingNext;
     const next=startNextPomodoroFocus(pomodoroRef.current);
     pomodoroRef.current=next;setPomodoro(next);
     baseElapsed.current=0;startTimeRef.current=null;setElapsed(0);setPaused(false);setRunning(true);
+    soundEffects.play(endingBreak?'breakEnded':'studyStarted');
   };
   const skipPomodoroBreak=()=>{
     if(timerStyle!=="pomodoro"||pomodoroRef.current.phase!=="break")return;
@@ -14278,7 +14261,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       // null redirect result can happen first and must not expose LoginScreen.
       // If a social redirect was pending but produced no result, unblock the
       // screen after that one exceptional path so it cannot remain on splash.
-      if(result.noRedirect){if(redirectWasPending&&!auth.currentUser)setAuthReady(true);return;}
+      if(result.noRedirect){if(redirectWasPending&&!auth.currentUser){setRedirectAuthError("Sign-in returned without a session. Please try signing in again and allow the sign-in window to open.");setOnboardingStep(0);setAuthReady(true);}return;}
       if(!result.ok){
         setRedirectAuthError(result.error);
         setOnboardingStep(0);
@@ -14327,7 +14310,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
-    setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
+    setShowSoundSettings(false);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
   };
 
   const navigateOnboarding=nextStep=>{
@@ -14469,6 +14452,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setBadges(result.badges);lsSet(LS_BADGES,result.badges);
     setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);
     if(!result.newlyEarned.length)return;
+    soundEffects.play('milestone');
     const first=result.newlyEarned[0];
     showToast(result.newlyEarned.length===1
       ? `${first.emoji} Badge unlocked: ${first.name} (+${result.reward} 🪙)`
@@ -14490,6 +14474,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(!result.ok){showToast(result.reason==="locked"?"Reach this stage to unlock its reward":"Couldn’t claim that reward yet");return false;}
     if(Array.isArray(result.claimed))setClaimedMilestoneRewards(result.claimed);
     if(typeof result.coinBalance==="number"){setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);}
+    if(!result.alreadyClaimed)soundEffects.play('milestone');
     showToast(result.alreadyClaimed?"This stage reward was already claimed":`🪙 ${result.reward.toLocaleString()} stage reward claimed`);
     return true;
   };
@@ -14576,12 +14561,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         if(prefs.privacy&&typeof prefs.privacy==="object"){
           setPrivacyPrefs({sharePresence:prefs.privacy.sharePresence!==false});
         }
+        if(prefs.soundEffects){const next=normalizeSoundPreferences(prefs.soundEffects);setSoundPreferences(next);soundEffects.configure(next);lsSet(`lumora_sounds_${user}`,next);}
       } else {
         // No cloud prefs yet — seed from whatever this device has
         await withTimeout(fbSavePrefs(user, { subjects, exams, targets, decorations, gardenLayout, badges, coins, claimedMilestoneRewards, ownedSkins, activeSkin, enhancements,
           ownedBackgrounds:normalizeOwnedBackgrounds(ownedBackgrounds),
           activeBackground:canEquipBackground(activeBackground,ownedBackgrounds)?activeBackground:DEFAULT_BACKGROUND_ID,
-          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,
+          timerStyle,pomodoroSettings:sanitizePomodoroConfig(pomodoroRef.current),selectedTaskId,animationMode,soundEffects:normalizeSoundPreferences(lsGet(`lumora_sounds_${user}`,{})),
           privacy:{sharePresence:true} }),8000,"Initial account preferences sync timed out.");
       }
       }catch(error){
@@ -14870,6 +14856,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}
+      {showSoundSettings&&<SoundSettings initialPreferences={soundPreferences} onSave={saveSoundPreferences} onClose={()=>{setShowSoundSettings(false);setShowMenu(true);}}/>}
       {showAccount&&<AccountPanel user={user}
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
@@ -14956,6 +14943,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onProfile={()=>{setShowMenu(false);setProfileAchievementGallery(false);setProfileUser(user);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
               onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
+              onSoundSettings={()=>{setShowMenu(false);setShowSoundSettings(true);}}
               onReplayOnboarding={handleReplayOnboarding}
               isAdmin={isAdmin}
               canAddTestCoins={canAddTestCoins}
@@ -15050,7 +15038,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                   <label style={S.pomodoroOption}>
                     <input type="checkbox" checked={pomodoro.intervalCues}
                       onChange={event=>setPomodoroConfig({intervalCues:event.target.checked})}/>
-                    Interval cues
+                    Vibrate at intervals
                   </label>
                 </div>
               </section>}
@@ -15123,7 +15111,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
                 </div>
                 {timerStyle==="standard"&&mode==="timer"&&(
                   <div style={S.durationSliderWrap} className="lumora-duration-control">
-                    <div style={S.durationScale}><span>5 min</span><strong style={{color:subjectObj.color}}>{Math.round(duration/60)} minutes</strong><span>3 hr</span></div>
+                    <div style={S.durationScale}><span>5 min</span><span>3 hr</span></div>
                     <input className="sg-duration-slider" type="range" min="5" max="180" step="5"
                       value={Math.round(duration/60)} aria-label="Study duration in minutes"
                       aria-valuetext={`${Math.round(duration/60)} minutes`}

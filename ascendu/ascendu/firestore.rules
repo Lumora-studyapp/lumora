@@ -166,7 +166,12 @@ service cloud.firestore {
     }
 
     match /friend_connections/{connectionId} {
-      allow get, list: if isFriendParticipant(resource.data);
+      // New requests read their deterministic ID before creating it. Missing
+      // records contain no private data; existing records stay participant-only.
+      allow get: if signedIn()
+        && (!exists(/databases/$(database)/documents/friend_connections/$(connectionId))
+          || isFriendParticipant(resource.data));
+      allow list: if isFriendParticipant(resource.data);
       allow create: if signedIn()
         && request.resource.data.status == 'pending'
         && request.resource.data.requesterUid == request.auth.uid

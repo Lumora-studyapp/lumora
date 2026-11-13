@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import {auth,db,storage} from "./firebase.js";
-import {doc,getDoc,setDoc} from "firebase/firestore";
-import {ref,uploadBytes,deleteObject,getBlob} from "firebase/storage";
+import {doc,getDoc,getDocFromServer,setDoc} from "firebase/firestore";
+import {ref,uploadBytesResumable,deleteObject,getBlob} from "firebase/storage";
 import {studyRecords} from "./studyProfileRecords.js";
 
 const SECTIONS=["highlights","records","badges"];
@@ -19,6 +19,25 @@ const imagePath=(username,kind)=>"study_profiles/"+username+"/"+kind+".webp";
 const safeUser=username=>String(username||"").trim().normalize("NFC").toLowerCase();
 const validHex=value=>/^#[0-9a-fA-F]{6}$/.test(value);
 const profileRef=username=>doc(db,"study_profiles",safeUser(username));
+const boundedRequest=(request,label)=>new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(new Error(label+" is taking too long. Check your connection and try again.")),15000);
+  Promise.resolve(request).then(resolve,reject).finally(()=>clearTimeout(timer));
+});
+const profileError=error=>error.code==="permission-denied"
+  ? "Firebase denied access to this profile. Lumora's profile rules or account permissions need updating. Your changes have not been confirmed saved."
+  : error.message||"Could not save profile. Please try again.";
+async function persistProfile(username,data){
+  await boundedRequest(setDoc(profileRef(username),data),"Saving your profile");
+  const saved=await boundedRequest(getDocFromServer(profileRef(username)),"Confirming your profile");
+  if(!saved.exists()||saved.data().updatedAt!==data.updatedAt)throw new Error("Could not confirm your profile was saved. Please try again.");
+}
+function uploadProfileImage(username,kind,blob){
+  return new Promise((resolve,reject)=>{
+    const task=uploadBytesResumable(ref(storage,imagePath(safeUser(username),kind)),blob,{contentType:"image/webp"});
+    const timer=setTimeout(()=>{task.cancel();reject(new Error("Your profile settings were saved, but the image upload could not finish. Lumora's image storage is unavailable. Please try again once storage is configured."));},15000);
+    task.then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(new Error("Your profile settings were saved, but the image could not be uploaded ("+error.code+"). Please check Lumora's image storage."));});
+  });
+}
 
 export async function loadStudyProfile(username){
   const snap=await getDoc(profileRef(username));
@@ -144,7 +163,7 @@ function CropEditor({kind,file,crop,onChange,onClose}){
     <div role="dialog" aria-modal="true" aria-label={photo?"Crop profile photo":"Crop profile banner"} className="sg-pop-anim" style={{width:"min(100%,410px)",maxHeight:"calc(100dvh - 28px)",overflowY:"auto",borderRadius:22,background:"#FCFAFD",boxShadow:"0 26px 80px rgba(18,7,31,.44)",padding:18}}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}><div><div style={{fontSize:10,fontWeight:850,letterSpacing:".1em",color:"#63317D"}}>IMAGE POSITION</div><h3 style={{margin:"4px 0 0",fontSize:19,color:"#34203D"}}>{photo?"Profile photo":"Profile banner"}</h3><p style={{margin:"5px 0 0",fontSize:11.5,lineHeight:1.45,color:"#706477"}}>Drag to align. Pinch with two fingers or use the controls to zoom.</p></div><button onClick={onClose} aria-label="Close crop editor" style={{...baseButton,width:34,height:34,padding:0,background:"#F0E5F7",color:"#63317D",fontSize:16}}>×</button></div>
       <div ref={frameRef} onPointerDown={startDrag} onPointerMove={moveImage} onPointerUp={endGesture} onPointerCancel={endGesture} onWheel={event=>{event.preventDefault();setZoom(crop.zoom+(event.deltaY<0 ? .08 : -.08));}} style={{position:"relative",width:"100%",aspectRatio:photo?"1 / 1":"3 / 1",marginTop:18,borderRadius:photo?"50%":14,overflow:"hidden",background:"#EAE1EF",touchAction:"none",userSelect:"none",cursor:"grab",boxShadow:"inset 0 0 0 2px rgba(255,255,255,.7),0 8px 22px rgba(42,22,52,.14)"}}>
-        {image.src&&<img src={image.src} alt="" draggable="false" onLoad={event=>setImage(current=>({...current,width:event.currentTarget.naturalWidth,height:event.currentTarget.naturalHeight}))} style={size?{position:"absolute",width:size.width,height:size.height,left:(frame.width-size.width)*(crop.x/100),top:(frame.height-size.height)*(crop.y/100),maxWidth:"none",pointerEvents:"none"}:{position:"absolute",width:"100%",height:"100%",objectFit:"cover",pointerEvents:"none"}}/>}
+        {image.src&&<img src={image.src} alt="" draggable="false" onLoad={event=>{const {naturalWidth:width,naturalHeight:height}=event.currentTarget;setImage(current=>({...current,width,height}));}} style={size?{position:"absolute",width:size.width,height:size.height,left:(frame.width-size.width)*(crop.x/100),top:(frame.height-size.height)*(crop.y/100),maxWidth:"none",pointerEvents:"none"}:{position:"absolute",width:"100%",height:"100%",objectFit:"cover",pointerEvents:"none"}}/>}
         {!photo&&<><div aria-hidden="true" style={{position:"absolute",inset:0,border:"2px solid rgba(255,255,255,.86)",borderRadius:14,pointerEvents:"none"}}/><span style={{position:"absolute",left:12,bottom:10,padding:"5px 8px",borderRadius:8,background:"rgba(24,10,35,.62)",color:"#fff",fontSize:10,fontWeight:750,pointerEvents:"none"}}>Profile banner preview</span></>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"40px 1fr 40px",alignItems:"center",gap:10,marginTop:16}}><button onClick={()=>setZoom(crop.zoom-.1)} aria-label="Zoom out" style={{...baseButton,width:40,height:40,padding:0,background:"#F0E5F7",color:"#63317D",fontSize:19}}>−</button><input aria-label="Crop zoom" type="range" min="1" max="2.5" step=".01" value={crop.zoom} onChange={event=>setZoom(Number(event.target.value))} style={{width:"100%",accentColor:"#63317D"}}/><button onClick={()=>setZoom(crop.zoom+.1)} aria-label="Zoom in" style={{...baseButton,width:40,height:40,padding:0,background:"#63317D",color:"#fff",fontSize:19}}>＋</button></div>
@@ -168,6 +187,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
   const [bannerCrop,setBannerCrop]=useState({zoom:1,x:50,y:50});
   const [croppingKind,setCroppingKind]=useState(null);
   const [editing,setEditing]=useState(false);
+  const [editorClosing,setEditorClosing]=useState(false);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
@@ -201,7 +221,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
       }catch(e){
         // A new profile has no document yet. Keep the owner in the editor rather
         // than turning the profile into a permanent warning state.
-        if(live&&e.code!=="permission-denied")setError("Could not load this study profile.");
+        if(live)setError(profileError(e));
       }
       finally{if(live)setLoading(false);}
     })();
@@ -236,6 +256,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
     update("sections",sections);
   };
   const save=async()=>{
+    if(busy)return;
     setError("");setMessage("");
     if(!validHex(profile.accent)||!validHex(profile.background)||!validHex(profile.text)
       ||contrastRatio(profile.background,profile.text)<4.5
@@ -245,19 +266,22 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
     }
     setBusy(true);
     try{
-      const photo=pendingPhoto?await croppedWebp(pendingPhoto,"photo",photoCrop.zoom,photoCrop.x,photoCrop.y):null;
-      const banner=pendingBanner?await croppedWebp(pendingBanner,"banner",bannerCrop.zoom,bannerCrop.x,bannerCrop.y):null;
-      if(photo)await uploadBytes(ref(storage,imagePath(username,"photo")),photo,{contentType:"image/webp"});
-      if(banner)await uploadBytes(ref(storage,imagePath(username,"banner")),banner,{contentType:"image/webp"});
+      if(!owner||!auth.currentUser)throw new Error("Please sign in again before saving your profile.");
       const clean={ownerUid:auth.currentUser.uid,bio:profile.bio.trim().slice(0,160),accent:profile.accent,background:profile.background,text:profile.text,
         title:earned.includes(profile.title)?profile.title:"",pinned:profile.pinned.filter(id=>earned.includes(id)).slice(0,5),
-        sections:profile.sections.filter(id=>SECTIONS.includes(id)),photo:profile.photo||!!photo,banner:profile.banner||!!banner,updatedAt:Date.now()};
-      await setDoc(profileRef(username),clean);
-      setProfile(clean);setEditing(false);setShowAchievementGallery(false);setPendingPhoto(null);setPendingBanner(null);setMessage("Profile saved.");
+        sections:profile.sections.filter(id=>SECTIONS.includes(id)),photo:!!profile.photo,banner:!!profile.banner,updatedAt:Date.now()};
+      await persistProfile(username,clean);
+      const photo=pendingPhoto?await croppedWebp(pendingPhoto,"photo",photoCrop.zoom,photoCrop.x,photoCrop.y):null;
+      const banner=pendingBanner?await croppedWebp(pendingBanner,"banner",bannerCrop.zoom,bannerCrop.x,bannerCrop.y):null;
+      if(photo)await uploadProfileImage(username,"photo",photo);
+      if(banner)await uploadProfileImage(username,"banner",banner);
+      if(photo||banner){clean.photo=clean.photo||!!photo;clean.banner=clean.banner||!!banner;clean.updatedAt=Date.now();await persistProfile(username,clean);}
+      setProfile(clean);setEditorClosing(true);setShowAchievementGallery(false);setPendingPhoto(null);setPendingBanner(null);setMessage("Profile saved.");
+      window.setTimeout(()=>{setEditing(false);setEditorClosing(false);},240);
       if(photo){if(photoUrl)URL.revokeObjectURL(photoUrl);setPhotoUrl(URL.createObjectURL(photo));}
       if(banner){if(bannerUrl)URL.revokeObjectURL(bannerUrl);setBannerUrl(URL.createObjectURL(banner));}
       window.dispatchEvent(new CustomEvent("lumora-profile-updated",{detail:username}));
-    }catch(e){setError(e.message||"Could not save profile.");}
+    }catch(e){setError(profileError(e));}
     finally{setBusy(false);}
   };
   const removeImage=async kind=>{
@@ -303,7 +327,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
         </div>
         {profile.bio&&<p style={{whiteSpace:"pre-wrap",margin:"12px 0 0",fontSize:13,lineHeight:1.5,color:"#584E5D"}}>{profile.bio}</p>}
         {loading?<p style={{padding:"24px 0",color:"#6D6273"}}>Loading profile…</p>:error&&!owner?<div role="alert" style={{...softCard,padding:16,textAlign:"center",marginTop:18}}><div style={{fontSize:22}}>◌</div><strong style={{display:"block",marginTop:5}}>Profile unavailable</strong><span style={{display:"block",fontSize:12,color:"#6B606F",marginTop:4}}>This study profile cannot be shown right now.</span></div>:<>
-          {editing&&<div style={{display:"grid",gap:14,background:"linear-gradient(180deg,#FFFFFF,#FCFAFD)",border:"1px solid rgba(88,55,104,.12)",padding:18,borderRadius:18,margin:"18px 0 4px"}}>
+          {editing&&<div style={{display:"grid",gap:14,background:"linear-gradient(180deg,#FFFFFF,#FCFAFD)",border:"1px solid rgba(88,55,104,.12)",padding:18,borderRadius:18,margin:"18px 0 4px",opacity:editorClosing?0:1,transform:editorClosing?"translateY(-8px) scale(.98)":"none",transition:"opacity 240ms ease, transform 240ms ease",pointerEvents:editorClosing?"none":"auto"}}>
             <div><strong style={{fontSize:14,color:"#34203D"}}>Personalise your profile</strong><span style={{display:"block",marginTop:3,fontSize:11.5,color:"#72667A"}}>Add a short introduction, then choose the achievements you want to show.</span></div>
             <label style={{fontSize:12,fontWeight:750,color:"#493D50"}}>Study bio<textarea aria-label="Study bio" maxLength={160} value={profile.bio} onChange={e=>update("bio",e.target.value)} style={{...inputStyle,display:"block",marginTop:6,minHeight:70,resize:"vertical"}}/></label>
             <ImagePicker kind="photo" file={pendingPhoto} onPick={file=>chooseImage("photo",file)}/>
@@ -321,7 +345,7 @@ export default function StudyProfile({username,currentUser,badges=[],badgeCatalo
           <div style={{height:1,background:"rgba(88,55,104,.1)",margin:"22px 0 18px"}}/>
           <div style={{display:"grid",gap:20}}>{profile.sections.map(id=><div key={id}>{section(id)}</div>)}</div>
         </>}
-        {error&&owner&&editing&&<p role="alert" style={{margin:"10px 0 0",fontSize:12,color:"#A13A47"}}>{error}</p>}
+        {error&&<p role="alert" style={{margin:"10px 0 0",fontSize:12,color:"#A13A47"}}>{error}</p>}
         {message&&<p role="status" style={{margin:"12px 0 0",fontSize:12,color:"#356444"}}>{message}</p>}
       </div>
     </div>
