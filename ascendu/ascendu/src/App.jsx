@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragmen
 import { createPortal } from "react-dom";
 import ImageAsset from "./ImageAsset.jsx";
 import SoundSettings from "./SoundSettings.jsx";
-import {CharacterAvatar,CharacterEditor,CharacterFullBody,DEFAULT_CHARACTER,normalizeCharacter} from "./CharacterAvatar.jsx";
+import {CharacterEditor,CharacterFullBody,DEFAULT_CHARACTER,normalizeCharacter} from "./CharacterAvatar.jsx";
+import {TREE_SKINS,getCharacterProgressionImage} from "./characterCatalog.js";
 import {CHARACTER_STAGE_RANGES,CHARACTER_STAGE_ENDS,characterStageIndex} from "./characterStages.js";
 import {soundEffects,normalizeSoundPreferences} from "./soundEffects.js";
 import {resolveSignedInAccount} from "./authFlows.js";
@@ -1506,30 +1507,7 @@ const SKIN_COLLECTIONS = [
 
 // Every character skin supplies five source stages for its preview and for
 // minute-by-minute progression on the Focus screen.
-const CHARACTER_PROGRESSION_STAGES = {
-  "lumora-scholar-man":["First Day","Finding Focus","Researcher","Thesis Complete","Lumora Graduate"],
-  "lumora-scholar-woman":["First Day","Finding Focus","Researcher","Thesis Complete","Lumora Graduate"],
-  "cristiano-ronaldo":["Madeira Football Child","Madeira Broom Teen","Real Madrid Champion","Ballon d'Or Winner","Portugal Euros Champion"],
-  "einstein":["Compass-Curious Child","Aarau Light-Beam Student","Bern Patent Clerk","Relativity Physicist","Scientific Genius"],
-  "davinci":["Vinci Nature Sketcher","Florentine Workshop Apprentice","Anatomy Notebook Scholar","Flying Machine Visionary","Renaissance Master"],
-  "edison":["Basement Laboratory Boy","Railway Newsboy Inventor","Telegraph Operator","Menlo Park Inventor","Electric Light Pioneer"],
-  "gallileo":["Pisa Sky-Watcher","Mathematics Student","Motion Experimenter","Starry Messenger Astronomer","Heliocentric Visionary"],
-  "lebron-james":["Akron Kid","High School Player","Cleveland Champion","Scoring King","Legacy"],
-  "lionel-messi":["Grandoli Child","Academy Teen","Barcelona Peak","Club Champion","World Cup Champion"],
-  "michael-jackson":["Child Singer","Disco Performer","Red Jacket Era","Moonwalk Peak","King of Pop Legacy"],
-  "tiger-woods":["Child Golfer","Junior Champion","Red Shirt Breakthrough","Masters Champion","Comeback Legend"],
-  "william-shakespeare":["Stratford Child","Quill Poet","Globe Playwright","The Bard","First Folio Legacy"],
-  "marie-curie":["Polish Schoolgirl","Paris Science Student","Laboratory Researcher","Radium Pioneer","Two Nobel Icon"],
-  "pythagoras":["Counting Stones","Number Patterns","Triangle Solver","Theorem Demonstration","Greek Sage Legacy"],
-  "jk-rowling":["Young Story Creator","Student Writer","Cafe Manuscript Writer","Published Fantasy Author","Seven Book Legacy"],
-  "ludwig-van-beethoven":["Child Pianist","Vienna Student","Concert Pianist","Symphony Composer","Deaf Maestro Legacy"],
-  "neil-armstrong":["Model Plane Dreamer","X-15 Test Pilot","Gemini Astronaut","Apollo 11 Commander","Moonwalk Legacy"],
-  "henry-ford":["Watch Tinkerer","Engine Builder","Quadricycle Engineer","Model T Innovator","Automobile Mastermind"],
-  "michelangelo":["Marble Apprentice","Medici Sculptor","Sculpture Master","Sistine Visionary","Dome Architect Legacy"],
-  "christopher-columbus":["Mediterranean Sailor","Chart Navigator","Captain with Instruments","1492 Expedition","Four Voyage Navigator"],
-  "elon-musk":["Computer Dreamer","Zip2 Startup Worker","Online Payments Founder","Electric Car and Rocket CEO","Mars Technology Figure"],
-  "bill-gates":["Lakeside Computer Student","Programming Hustler","PC Software Cofounder","Graphical Computing CEO","Computing and Philanthropy Legacy"],
-};
+
 const FOCUS_STAGE_RANGES = CHARACTER_STAGE_RANGES;
 const FOCUS_STAGE_ENDS = CHARACTER_STAGE_ENDS;
 const STARTER_SKIN_IDS = ["lumora-scholar-man","lumora-scholar-woman"];
@@ -1564,35 +1542,7 @@ const SKIN_TAG_EMOJIS = Object.freeze({
   Science:"🔬", Space:"🚀", Sport:"⚽", Technology:"💻",
 });
 
-const TREE_SKINS = [
-  // Internal fallback for legacy sessions. It is intentionally not displayed
-  // or purchasable in the Skins page.
-  { id:"default", name:"Oak", cost:0, shape:"round", trunk:"#8B6340", canopy:null, desc:"", collection:"legacy", hidden:true },
-  { id:"lumora-scholar-man", name:"Lumora Scholar Man", cost:0, shape:"round", trunk:"#63317D", canopy:"#8E4CB0", desc:"Free Lumora student · grow into a graduate", collection:"characters", characterImage:"/Images/Lumora Scholar Man (5) - Lumora Graduate.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lumora-scholar-man"], finalEvolution:true, alwaysShowCharacter:true },
-  { id:"lumora-scholar-woman", name:"Lumora Scholar Woman", cost:0, shape:"round", trunk:"#63317D", canopy:"#8E4CB0", desc:"Free Lumora student · grow into a graduate", collection:"characters", characterImage:"/Images/Lumora Scholar Woman (5) - Lumora Graduate.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lumora-scholar-woman"], finalEvolution:true, alwaysShowCharacter:true },
-  { id:"einstein", name:"Albert Einstein", cost:1600, shape:"round", trunk:"#6B4A36", canopy:"#B98253", desc:"The Genius · relativity icon", collection:"characters", characterImage:"/Images/Albert Einstein (5) - Scientific Genius.png", progressionStages:CHARACTER_PROGRESSION_STAGES.einstein, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"gallileo", name:"Galileo Galilei", cost:1700, shape:"round", trunk:"#5F402A", canopy:"#A97A40", desc:"The Visionary · observational astronomy", collection:"characters", characterImage:"/Images/Galileo Galilei (5) - Heliocentric Visionary.png", characterImageScale:1.1, progressionStages:CHARACTER_PROGRESSION_STAGES.gallileo, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"davinci", name:"Leonardo da Vinci", cost:1800, shape:"round", trunk:"#6C5137", canopy:"#9A6A32", desc:"The Renaissance Master · art and invention", collection:"characters", characterImage:"/Images/Leonardo da Vinci (5) - Renaissance Master.png", progressionStages:CHARACTER_PROGRESSION_STAGES.davinci, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"edison", name:"Thomas Alva Edison", cost:1900, shape:"round", trunk:"#454545", canopy:"#D6A83C", desc:"The Bright Spark · electric light pioneer", collection:"characters", characterImage:"/Images/Thomas Alva Edison (5) - Electric Light Pioneer.png", progressionStages:CHARACTER_PROGRESSION_STAGES.edison, finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  // Life-stage character collection. Cards showcase the fifth-stage artwork;
-  // Focus sessions move through stages one to five minute by minute.
-  { id:"lebron-james", name:"LeBron James", cost:2500, shape:"round", trunk:"#5A3624", canopy:"#7E2D2D", desc:"Final evolution · basketball legacy", collection:"characters", characterImage:"/Images/LeBron James (5) - Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lebron-james"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"lionel-messi", name:"Lionel Messi", cost:2500, shape:"round", trunk:"#35567F", canopy:"#71BCEB", desc:"Final evolution · World Cup champion", collection:"characters", characterImage:"/Images/Lionel Messi (5) - World Cup Champion.png", progressionStages:CHARACTER_PROGRESSION_STAGES["lionel-messi"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"michael-jackson", name:"Michael Jackson", cost:2500, shape:"round", trunk:"#36263C", canopy:"#D74A50", desc:"Final evolution · King of Pop legacy", collection:"characters", characterImage:"/Images/Michael Jackson (5) - King of Pop Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["michael-jackson"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"tiger-woods", name:"Tiger Woods", cost:2400, shape:"round", trunk:"#315235", canopy:"#84B45E", desc:"Final evolution · comeback legend", collection:"characters", characterImage:"/Images/Tiger Woods (5) - Comeback Legend.png", progressionStages:CHARACTER_PROGRESSION_STAGES["tiger-woods"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"william-shakespeare", name:"William Shakespeare", cost:2200, shape:"round", trunk:"#523C2C", canopy:"#A07B54", desc:"Final evolution · First Folio legacy", collection:"characters", characterImage:"/Images/William Shakespeare (5) - First Folio Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["william-shakespeare"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"marie-curie", name:"Marie Curie", cost:2300, shape:"round", trunk:"#3D5360", canopy:"#85B9A8", desc:"Final evolution · two Nobel icon", collection:"characters", characterImage:"/Images/Marie Curie (5) - Two Nobel Icon.png", progressionStages:CHARACTER_PROGRESSION_STAGES["marie-curie"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"pythagoras", name:"Pythagoras", cost:2100, shape:"round", trunk:"#6A4C32", canopy:"#C7A15C", desc:"Final evolution · Greek sage", collection:"characters", characterImage:"/Images/Pythagoras (5) - Greek Sage Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["pythagoras"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"jk-rowling", name:"J. K. Rowling", cost:2200, shape:"round", trunk:"#4A355F", canopy:"#9F83C7", desc:"Final evolution · seven-book legacy", collection:"characters", characterImage:"/Images/J. K. Rowling (5) - Seven Book Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["jk-rowling"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"ludwig-van-beethoven", name:"Ludwig van Beethoven", cost:2300, shape:"round", trunk:"#473C34", canopy:"#A8927C", desc:"Final evolution · deaf maestro legacy", collection:"characters", characterImage:"/Images/Ludwig van Beethoven (5) - Deaf Maestro Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["ludwig-van-beethoven"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"neil-armstrong", name:"Neil Armstrong", cost:2400, shape:"round", trunk:"#31445D", canopy:"#91B7D9", desc:"Final evolution · moonwalk legacy", collection:"characters", characterImage:"/Images/Neil Armstrong (5) - Moonwalk Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["neil-armstrong"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"henry-ford", name:"Henry Ford", cost:2200, shape:"round", trunk:"#4D4239", canopy:"#8F8A76", desc:"Final evolution · automobile mastermind", collection:"characters", characterImage:"/Images/Henry Ford (5) - Automobile Mastermind.png", progressionStages:CHARACTER_PROGRESSION_STAGES["henry-ford"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"michelangelo", name:"Michelangelo", cost:2300, shape:"round", trunk:"#6D5642", canopy:"#B99B7B", desc:"Final evolution · dome architect legacy", collection:"characters", characterImage:"/Images/Michelangelo (5) - Dome Architect Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["michelangelo"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"christopher-columbus", name:"Christopher Columbus", cost:2200, shape:"round", trunk:"#3D5263", canopy:"#7FA9B7", desc:"Final evolution · four-voyage navigator", collection:"characters", characterImage:"/Images/Christopher Columbus (5) - Four Voyage Navigator.png", progressionStages:CHARACTER_PROGRESSION_STAGES["christopher-columbus"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"elon-musk", name:"Elon Musk", cost:2600, shape:"round", trunk:"#343B4A", canopy:"#8F9FB7", desc:"Final evolution · Mars technology figure", collection:"characters", characterImage:"/Images/Elon Musk (5) - Mars Technology Figure.png", progressionStages:CHARACTER_PROGRESSION_STAGES["elon-musk"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"bill-gates", name:"Bill Gates", cost:2500, shape:"round", trunk:"#3F5A45", canopy:"#87AF7A", desc:"Final evolution · computing and philanthropy", collection:"characters", characterImage:"/Images/Bill Gates (5) - Computing and Philanthropy Legacy.png", progressionStages:CHARACTER_PROGRESSION_STAGES["bill-gates"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-  { id:"cristiano-ronaldo", name:"Cristiano Ronaldo", cost:2600, shape:"round", trunk:"#5C292D", canopy:"#B62E36", desc:"The Goalscorer · Portugal football legend", collection:"characters", characterImage:"/Images/Cristiano Ronaldo (5) - Portugal Euros Champion.png", progressionStages:CHARACTER_PROGRESSION_STAGES["cristiano-ronaldo"], finalEvolution:true, alwaysShowCharacter:true, isNew:true },
-];
+
 
 const TREE_SHOP_RARITY_ORDER = Object.freeze({
   characters:0,
@@ -1604,11 +1554,7 @@ const TREE_SHOP_CATALOGUE = Object.freeze(TREE_SKINS.filter(skin=>!skin.hidden).
   || left.name.localeCompare(right.name)
 ));
 
-const getCharacterProgressionImage = (skin, stageIndex=0) => {
-  const stageName=skin?.progressionStages?.[stageIndex];
-  if(!stageName||skin?.blankProgressions)return null;
-  return `/Images/${skin.name} (${stageIndex+1}) - ${stageName}.png`;
-};
+
 
 // Focus stages advance at the shared character milestones. Keeping this
 // calculation in one place makes the Focus screen,
@@ -3597,6 +3543,7 @@ async function fbSavePrefs(usernameRaw, patch) {
     const ownedPatch={...patch,...(auth.currentUser?.uid?{ownerUid:auth.currentUser.uid}:{})};
     if (snap.exists()) await updateDoc(ref, ownedPatch);
     else await setDoc(ref, ownedPatch);
+    if(patch.activeSkin||patch.characterAvatar)window.dispatchEvent(new CustomEvent("lumora-character-updated",{detail:username}));
     return true;
   } catch(e) { console.error("Firebase prefs save error:", e); return false; }
 }
@@ -8746,7 +8693,7 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, avatar, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
   const viewItems = [
     { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
@@ -8776,7 +8723,7 @@ function HeaderMenu({ user, avatar, coins, streak, badgeCount, plannerNotificati
         <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
         <div style={hm.grabber}/>
         <button style={hm.profile} className="sg-tap-card" onClick={onProfile}>
-          <ProfileAvatar username={user} allow size={42} avatar={avatar}/>
+          <ProfileAvatar username={user} allow size={42} avatar={avatar} skinId={skinId}/>
           <div style={{flex:1,textAlign:"left"}}>
             <div style={hm.name}>{user}</div>
             <div style={hm.meta}><AnimatedNumber value={coins} prefix="🪙 "/> · 🔥 {streak} day{streak!==1?"s":""}</div>
@@ -13325,7 +13272,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setSoundPreferences(next);soundEffects.configure(next);lsSet(`lumora_sounds_${user}`,next);
     return await withTimeout(fbSavePrefs(user,{soundEffects:next}),10000,'Sound settings sync timed out.');
   };
-  const saveCharacterAvatar=async value=>{const next=normalizeCharacter(value),skinId=`lumora-scholar-${next.model}`;setCharacterAvatar(next);setActiveSkin(skinId);lsSetR(LS_SKIN,skinId);lsSet(`lumora_character_avatar_${user}`,next);setShowCharacterEditor(false);return fbSavePrefs(user,{characterAvatar:next,activeSkin:skinId});};
+  const saveCharacterAvatar=async (value,selectedSkinId)=>{
+    const next=normalizeCharacter(value);
+    const skinId=ownedSkins.includes(selectedSkinId)&&TREE_SKINS.some(skin=>skin.id===selectedSkinId&&skin.characterImage)?selectedSkinId:'lumora-scholar-'+next.model;
+    const saved=await withTimeout(fbSavePrefs(user,{characterAvatar:next,activeSkin:skinId}),10000,'Saving your character is taking too long. Please try again.');
+    if(!saved)throw new Error('Could not save your character. Please check your connection and try again.');
+    setCharacterAvatar(next);setActiveSkin(skinId);lsSetR(LS_SKIN,skinId);lsSet('lumora_character_avatar_'+user,next);lsRemove('lumora_character_avatar_draft');setShowCharacterEditor(false);
+  };
   const [profileUser,setProfileUser]=useState(null);
   const [profileAchievementGallery,setProfileAchievementGallery]=useState(false);
   const [showPrivacyData,setShowPrivacyData]=useState(false);
@@ -14788,7 +14741,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             navigateOnboarding(6);
           }}/>
         : onboardingStep===6
-        ? <CharacterEditor initialValue={characterAvatar} onBack={()=>navigateOnboarding(5)} onSave={value=>{const next=normalizeCharacter(value);setCharacterAvatar(next);setActiveSkin(`lumora-scholar-${next.model}`);lsSetR(LS_SKIN,`lumora-scholar-${next.model}`);lsSet("lumora_character_avatar_draft",next);if(user)saveCharacterAvatar(next);if(onboardingReplayRef.current){navigateOnboarding(7);return;}lsSetR(LS_ONBOARDING_COMPLETE,"1");setOnboardingStep(0);}}/>
+        ? <CharacterEditor initialValue={characterAvatar} onBack={()=>navigateOnboarding(5)} onSave={async value=>{const next=normalizeCharacter(value);if(user)await saveCharacterAvatar(next);setCharacterAvatar(next);setActiveSkin(`lumora-scholar-${next.model}`);lsSetR(LS_SKIN,`lumora-scholar-${next.model}`);if(!user)lsSet("lumora_character_avatar_draft",next);if(onboardingReplayRef.current){navigateOnboarding(7);return;}lsSetR(LS_ONBOARDING_COMPLETE,"1");setOnboardingStep(0);}}/>
         : onboardingStep===7
         ? <OnboardingFinish isReplay={onboardingReplayRef.current} onBack={()=>navigateOnboarding(6)} onNext={()=>navigateOnboarding(8)}/>
         : <LoginScreen flow="link" onBack={()=>navigateOnboarding(7)}
@@ -14870,12 +14823,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
         onBack={recapFromMenu?()=>{setShowRecap(false);setRecapFromMenu(false);setShowMenu(true);}:null}/>}
       {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)} onProfile={()=>{setProfileAchievementGallery(false);setProfileUser(visiting);}}/>}
-      {profileUser&&<StudyProfile username={profileUser} currentUser={user} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
+      {profileUser&&<StudyProfile username={profileUser} currentUser={user} skinId={profileUser===user?activeSkin:null} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}
       {showSoundSettings&&<SoundSettings initialPreferences={soundPreferences} onSave={saveSoundPreferences} onClose={()=>{setShowSoundSettings(false);setShowMenu(true);}}/>}
-      {showCharacterEditor&&<div style={{position:"fixed",inset:0,zIndex:440,overflowY:"auto"}}><CharacterEditor title="Edit your character" initialValue={characterAvatar} onBack={()=>{setShowCharacterEditor(false);setShowMenu(true);}} onSave={value=>{saveCharacterAvatar(value);setShowMenu(true);}}/></div>}
+      {showCharacterEditor&&<div style={{position:"fixed",inset:0,zIndex:440,overflowY:"auto"}}><CharacterEditor title="Edit your character" initialValue={characterAvatar} initialSkinId={activeSkin} ownedSkins={ownedSkins} onBack={()=>{setShowCharacterEditor(false);setShowMenu(true);}} onSave={async(value,id)=>{await saveCharacterAvatar(value,id);setShowMenu(true);}}/></div>}
       {showAccount&&<AccountPanel user={user}
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
@@ -14939,7 +14892,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
-              user={user} avatar={characterAvatar} coins={walletCoins} streak={streak}
+              user={user} avatar={characterAvatar} skinId={activeSkin} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
               plannerNotificationCount={notificationCounts.planner}
               achievementsNotificationCount={notificationCounts.achievements}

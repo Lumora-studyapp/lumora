@@ -3,7 +3,7 @@ import {auth,db,storage} from "./firebase.js";
 import {doc,getDoc,getDocFromServer,setDoc} from "firebase/firestore";
 import {ref,uploadBytesResumable,deleteObject,getBlob} from "firebase/storage";
 import {studyRecords} from "./studyProfileRecords.js";
-import {CharacterAvatar} from "./CharacterAvatar.jsx";
+import {CharacterPortrait,PORTRAIT_BACKGROUND} from "./CharacterAvatar.jsx";
 
 const SECTIONS=["highlights","records","badges"];
 const DEFAULT_PROFILE={bio:"",accent:"#63317D",background:"#F8F3FC",text:"#271535",title:"",pinned:[],sections:SECTIONS,photo:false,banner:false};
@@ -50,8 +50,20 @@ async function imageObjectUrl(username,kind){
   return URL.createObjectURL(blob);
 }
 
-export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null}){
+export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null,skinId=null}){
   const [url,setUrl]=useState("");
+  const [character,setCharacter]=useState(null);
+  useEffect(()=>{
+    setCharacter(null);
+    if(!allow||!username||skinId)return;
+    let alive=true;
+    const refresh=()=>getDoc(doc(db,"prefs",safeUser(username))).then(snap=>{
+      if(alive&&snap.exists())setCharacter(snap.data());
+    }).catch(()=>{});
+    const onUpdate=event=>{if(safeUser(event.detail)===safeUser(username))refresh();};
+    refresh();window.addEventListener("lumora-character-updated",onUpdate);
+    return()=>{alive=false;window.removeEventListener("lumora-character-updated",onUpdate);};
+  },[username,allow,skinId]);
   useEffect(()=>{
     if(!allow||!username){setUrl("");return;}
     let alive=true,objectUrl="";
@@ -65,8 +77,8 @@ export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null
     refresh();window.addEventListener("lumora-profile-updated",onUpdate);
     return()=>{alive=false;window.removeEventListener("lumora-profile-updated",onUpdate);if(objectUrl)URL.revokeObjectURL(objectUrl);};
   },[username,allow]);
-  return <span style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:"#63317D",color:"#fff",fontWeight:800,...style}}>
-    {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar?<CharacterAvatar value={avatar} size={size}/>:String(username||"?").slice(0,1).toUpperCase()}
+  return <span style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:PORTRAIT_BACKGROUND,color:"#fff",fontWeight:800,...style}}>
+    {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<CharacterPortrait skinId={skinId||character?.activeSkin} value={avatar||character?.characterAvatar} size={size}/>}
   </span>;
 }
 
@@ -173,9 +185,10 @@ function CropEditor({kind,file,crop,onChange,onClose}){
   </div>;
 }
 
-export default function StudyProfile({username,currentUser,avatar=null,badges=[],badgeCatalog=[],history=[],openAchievementGallery=false,onClose}){
+export default function StudyProfile({username,currentUser,avatar=null,skinId=null,badges=[],badgeCatalog=[],history=[],openAchievementGallery=false,onClose}){
   const owner=safeUser(username)===safeUser(currentUser);
   const [profile,setProfile]=useState(DEFAULT_PROFILE);
+  const [character,setCharacter]=useState(null);
   const [earned,setEarned]=useState(badges);
   const [sessions,setSessions]=useState(history);
   const [photoUrl,setPhotoUrl]=useState("");
@@ -215,7 +228,10 @@ export default function StudyProfile({username,currentUser,avatar=null,badges=[]
         const [prefsSnap,histSnap]=owner?[null,null]:await Promise.all([getDoc(doc(db,"prefs",safeUser(username))),getDoc(doc(db,"history",safeUser(username)))]);
         if(!live)return;
         setProfile(next);
-        if(prefsSnap?.exists())setEarned(Array.isArray(prefsSnap.data().badges)?prefsSnap.data().badges:[]);
+        if(prefsSnap?.exists()){
+          setEarned(Array.isArray(prefsSnap.data().badges)?prefsSnap.data().badges:[]);
+          setCharacter(prefsSnap.data());
+        }
         if(histSnap?.exists())setSessions(Array.isArray(histSnap.data().sessions)?histSnap.data().sessions:[]);
         if(next.photo){const url=await imageObjectUrl(username,"photo");urls.push(url);if(live)setPhotoUrl(url);}
         if(next.banner){const url=await imageObjectUrl(username,"banner");urls.push(url);if(live)setBannerUrl(url);}
@@ -315,8 +331,8 @@ export default function StudyProfile({username,currentUser,avatar=null,badges=[]
         <button onClick={onClose} aria-label="Close profile" style={{...baseButton,position:"absolute",right:14,top:14,background:"rgba(255,255,255,.94)",width:34,height:34,padding:0,fontSize:16}}>✕</button>
       </div>
       <div style={{padding:"0 22px 28px"}}>
-        <div style={{marginTop:-42,position:"relative",width:82,height:82,border:"5px solid "+profile.background,borderRadius:"50%",overflow:"hidden",background:profile.accent,color:"#fff",display:"grid",placeItems:"center",fontSize:30,fontWeight:800,boxShadow:"0 5px 16px rgba(40,22,50,.18)"}}>
-          {(photoPreview||photoUrl)?<img src={photoPreview||photoUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:photoCrop.x+"% "+photoCrop.y+"%",transform:photoPreview?"scale("+photoCrop.zoom+")":undefined}}/>:avatar?<CharacterAvatar value={avatar} size={82}/>:username.slice(0,1).toUpperCase()}
+        <div style={{marginTop:-42,position:"relative",width:82,height:82,border:0,borderRadius:"50%",overflow:"hidden",background:PORTRAIT_BACKGROUND,color:"#fff",display:"grid",placeItems:"center",fontSize:30,fontWeight:800}}>
+          {(photoPreview||photoUrl)?<img src={photoPreview||photoUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:photoCrop.x+"% "+photoCrop.y+"%",transform:photoPreview?"scale("+photoCrop.zoom+")":undefined}}/>:<CharacterPortrait skinId={skinId||character?.activeSkin} value={avatar||character?.characterAvatar} size={82}/>}
         </div>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,marginTop:13}}>
           <div style={{minWidth:0}}>
