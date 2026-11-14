@@ -8695,17 +8695,31 @@ const pd={
 };
 function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [grantingCoins,setGrantingCoins]=useState(false);
+  const [customisationOpen,setCustomisationOpen]=useState(false);
+  const customisationButton=useRef(null);
+  const customisationBack=useRef(null);
+  const menuSheet=useRef(null);
+  useEffect(()=>{
+    if(menuSheet.current)menuSheet.current.scrollTop=0;
+    if(customisationOpen)customisationBack.current?.focus();
+  },[customisationOpen]);
+  const backToMenu=()=>{
+    setCustomisationOpen(false);
+    requestAnimationFrame(()=>customisationButton.current?.focus());
+  };
   const viewItems = [
     { id:"timer", icon:"⏱", label:"Focus", sub:"Timer and study session" },
     { id:"leaderboard", icon:"🏆", label:"Board", sub:"Rankings and groups", notificationCount:friendRequestsNotificationCount, notificationLabel:"incoming friend requests" },
     { id:"planner", icon:"▦", label:"Planner", sub:"Tasks and deadlines", notificationCount:plannerNotificationCount, notificationLabel:"planner notifications" },
     { id:"stats", icon:"📊", label:"Stats", sub:"Progress and history" },
   ];
-  const items = [
-    { icon:"👥", label:"Study Profile", sub:"Photo, records and achievement showcase", onClick:onProfile },
+  const customisationItems = [
     { icon:"🎨", label:"Edit character", sub:"Hair, skin and eye colour", onClick:onCharacterEditor },
     { icon:"🧑‍🎓", label:"Skins", sub:"Growth looks and unlocks", onClick:onTreeShop },
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
+  ];
+  const items = [
+    { icon:"🎨", label:"Customisation", sub:"Character, skins and classroom decor", onClick:()=>setCustomisationOpen(true), ref:customisationButton },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, notificationCount:achievementsNotificationCount, notificationLabel:"unclaimed achievement rewards", onClick:onBadges },
     { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
@@ -8720,15 +8734,40 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
   return createPortal((
     <div className="sg-shell" style={{...themeStyle,display:"contents"}} data-background={backgroundId}>
       <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
-        <div style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}>
+        <div ref={menuSheet} style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}
+          role="dialog" aria-modal="true" aria-label={customisationOpen?"Customisation":"Menu"}
+          onKeyDown={event=>{if(customisationOpen&&event.key==="Escape"){event.stopPropagation();backToMenu();}}}>
         <div style={hm.grabber}/>
-        <button style={hm.profile} className="sg-tap-card" onClick={onProfile}>
-          <ProfileAvatar username={user} allow size={42} avatar={avatar} skinId={skinId}/>
-          <div style={{flex:1,textAlign:"left"}}>
+        {customisationOpen?<>
+          <div style={hm.customisationHeader}>
+            <button ref={customisationBack} type="button" style={hm.backBtn} onClick={backToMenu} aria-label="Back to menu">←</button>
+            <div>
+              <h2 style={hm.customisationTitle}>Customisation</h2>
+              <div style={hm.itemSub}>Make your character and classroom your own</div>
+            </div>
+          </div>
+          <div style={hm.list}>
+            {customisationItems.map(it=>(
+              <button key={it.label} type="button" className="sg-tap-card" style={hm.item} onClick={it.onClick}>
+                <span style={hm.itemIcon} aria-hidden="true">{it.icon}</span>
+                <span style={{flex:1,textAlign:"left"}}>
+                  <span style={hm.itemLabel}>{it.label}</span>
+                  <span style={hm.itemSub}>{it.sub}</span>
+                </span>
+                <span style={hm.chev} aria-hidden="true">›</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" style={hm.closeBtn} onClick={onClose}>Close</button>
+        </>:<>
+        <button type="button" style={hm.profile} className="sg-tap-card" onClick={onProfile} aria-label={`View ${user}'s study profile`}>
+          <ProfileAvatar username={user} allow size={56} avatar={avatar} skinId={skinId}/>
+          <div style={{flex:1,minWidth:0,textAlign:"left"}}>
             <div style={hm.name}>{user}</div>
             <div style={hm.meta}><AnimatedNumber value={coins} prefix="🪙 "/> · 🔥 {streak} day{streak!==1?"s":""}</div>
+            <div style={hm.profileLink}>View study profile</div>
           </div>
-          <span style={hm.chev}>›</span>
+          <span style={hm.chev} aria-hidden="true">›</span>
         </button>
         {canAddTestCoins && <button
           type="button"
@@ -8765,7 +8804,7 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
         <div style={hm.sectionLabel}>SETTINGS</div>
         <div style={hm.list}>
           {items.map(it=>(
-            <button key={it.label} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
+            <button key={it.label} ref={it.ref} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
               <span style={hm.itemIcon}>{it.icon}</span>
               <span style={{flex:1,textAlign:"left"}}>
                 <span style={hm.itemLabel}>{it.label}</span>
@@ -8813,20 +8852,25 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#E07B54"}}>Log out</span>
         </button>
         <button style={hm.closeBtn} onClick={onClose}>Close</button>
+        </>}
         </div>
       </div>
     </div>
   ),document.body);
 }
 const hm = {
+  customisationHeader:{display:"flex",alignItems:"center",gap:12,padding:"4px 0 18px"},
+  customisationTitle:{fontSize:19,fontWeight:800,color:"var(--sg-theme-text,#1a1a2e)",margin:"0 0 4px"},
+  backBtn:{width:40,height:40,flexShrink:0,border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:12,background:"var(--sg-theme-neutral,#F9FBF8)",color:"var(--sg-theme-text,#1a1a2e)",fontSize:20,cursor:"pointer"},
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:350},
   sheet:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"10px 16px 28px",width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -4px 24px rgba(0,0,0,0.15)"},
   grabber:{width:36,height:4,borderRadius:4,background:"#E0E0E0",margin:"0 auto 14px"},
-  profile:{display:"flex",alignItems:"center",gap:12,padding:"8px 8px",width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,cursor:"pointer",marginBottom:10},
+  profile:{display:"flex",alignItems:"center",gap:12,padding:"14px 12px",width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,cursor:"pointer",marginBottom:10},
   testCoins:{display:"flex",alignItems:"center",justifyContent:"center",gap:7,width:"100%",minHeight:40,margin:"-2px 0 10px",border:"1px solid #E8D28A",borderRadius:13,background:"#FFF8E7",color:"#8B6815",fontSize:12,fontWeight:750,cursor:"pointer"},
   avatar:{width:42,height:42,borderRadius:"50%",background:"var(--sg-theme-accent,#2D6A4F)",color:"#fff",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
-  name:{fontSize:16,fontWeight:700,color:"#1a1a2e"},
-  meta:{fontSize:12,color:"#999",marginTop:2},
+  name:{fontSize:17,fontWeight:800,color:"var(--sg-theme-text,#1a1a2e)",overflowWrap:"anywhere"},
+  meta:{fontSize:12,color:"var(--sg-theme-muted,#777)",marginTop:3},
+  profileLink:{fontSize:11,fontWeight:750,color:"var(--sg-theme-accent-strong,#63317D)",marginTop:5},
   sectionLabel:{fontSize:10,fontWeight:800,letterSpacing:"1.2px",color:"var(--sg-theme-muted,#888)",padding:"2px 6px 7px"},
   list:{display:"flex",flexDirection:"column",gap:4},
   item:{display:"flex",alignItems:"center",gap:12,width:"100%",background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid var(--sg-theme-border,#EEF2EC)",borderRadius:14,padding:"12px 14px",cursor:"pointer",transition:"background 0.15s"},
