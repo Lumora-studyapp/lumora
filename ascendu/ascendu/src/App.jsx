@@ -12,6 +12,10 @@ import StudyProfile, {ProfileAvatar} from "./StudyProfile.jsx";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
 import SubjectColourPicker from "./SubjectColourPicker.jsx";
 import {attachClassroomGestures} from "./classroomGestures.js";
+import {sessionPresenceSnapshot} from "./presenceSession.js";
+import StudyPresenceStrip from "./StudyPresenceStrip.jsx";
+import StatsPage from "./StatsDashboard.jsx";
+import {canSaveSession} from "./sessionDuration.js";
 import PRIVACY_POLICY_HTML from "./privacyPolicy.html?raw";
 import { auth, db, functions } from "./firebase.js";
 import {
@@ -2175,130 +2179,7 @@ function buildBadgeCtx({ history, streak, decorCount, subjects }) {
   return { totalSessions, maxDaySecs, streak, allSubjectsThisWeek, decorCount, hasNightOwl, hasEarlyBird };
 }
 
-// ── Smart insights engine ─────────────────────────────────────────────────────
-// Pure analysis over the full session history. Returns an ordered list of
-// insight cards. Each insight is ONLY produced when it has real supporting data
-// — so old sessions that predate the richer logging simply yield fewer cards,
-// never fabricated ones. Tone is warm + encouraging (Duolingo-style).
-function buildInsights({ history, subjects, targets, streak, coins }) {
-  const hist = Array.isArray(history) ? history : [];
-  const out = [];
-  if(hist.length === 0) return out;
 
-  const now = new Date();
-  const subjName = id => (subjects.find(s=>s.id===id)||{label:"a subject",emoji:"📘"});
-  const H = 3600;
-
-  // Bucket helpers
-  const ws = startOfWeek(now);
-  const lastWs = getPreviousStudyWeekStart(now);
-  const thisWeek = hist.filter(s=>new Date(s.ts)>=ws);
-  const lastWeek = hist.filter(s=>{ const t=new Date(s.ts); return t>=lastWs && t<ws; });
-  const sum = arr => arr.reduce((a,s)=>a+s.secs,0);
-
-  // 1) Week-over-week focus change
-  if(lastWeek.length>=2 && thisWeek.length>=2){
-    const tw=sum(thisWeek), lw=sum(lastWeek);
-    if(lw>0){
-      const pct=Math.round(((tw-lw)/lw)*100);
-      if(Math.abs(pct)>=8){
-        out.push(pct>0
-          ? { icon:"📈", tone:"good", title:`You focused ${pct}% longer than last week`, body:`That's ${fmtHrs(tw)} so far this week. Keep the momentum going!` }
-          : { icon:"🌧️", tone:"soft", title:`A lighter week — down ${Math.abs(pct)}%`, body:`No worries, every week is different. A short session today gets you back on track.` });
-      }
-    }
-  }
-
-  // 2) Most productive day of week (needs spread across days)
-  const dowTotals=[0,0,0,0,0,0,0], dowCount=[0,0,0,0,0,0,0];
-  hist.forEach(s=>{ const d=getStudyDayOfWeek(s.ts); dowTotals[d]+=s.secs; dowCount[d]++; });
-  const activeDows=dowTotals.filter(v=>v>0).length;
-  if(activeDows>=3){
-    const bestDow=dowTotals.indexOf(Math.max(...dowTotals));
-    const FULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    out.push({ icon:"🗓️", tone:"good", title:`${FULL[bestDow]} is your power day`, body:`You consistently get the most focus done on ${FULL[bestDow]}s — ${fmtHrs(dowTotals[bestDow])} all-time.` });
-  }
-
-  // 3) Best time-of-day window (needs startTs logging on ≥5 sessions)
-  const withStart=hist.filter(s=>s.startTs);
-  if(withStart.length>=5){
-    const blocks={}; // 0:morning 1:midday 2:afternoon 3:evening 4:night
-    const label=["the early morning","the late morning","the afternoon","the evening","late at night"];
-    const range=["5–9am","9am–12pm","12–5pm","5–9pm","9pm–5am"];
-    withStart.forEach(s=>{
-      const h=new Date(s.startTs).getHours();
-      const b = h>=5&&h<9?0 : h>=9&&h<12?1 : h>=12&&h<17?2 : h>=17&&h<21?3 : 4;
-      blocks[b]=(blocks[b]||0)+s.secs;
-    });
-    const bestB=Object.entries(blocks).sort((a,b)=>b[1]-a[1])[0];
-    if(bestB){
-      const bi=Number(bestB[0]);
-      out.push({ icon:"🌙", tone:"good", title:`You focus best in ${label[bi]}`, body:`Your deepest sessions happen around ${range[bi]}. Try protecting that window for your hardest subjects.` });
-    }
-  }
-
-  // 4) Fastest/most-focused subject by avg session length (needs ≥2 subjects w/ ≥3 sessions)
-  const subjStats={};
-  hist.forEach(s=>getSessionSubjectSegments(s).forEach(segment=>{
-    (subjStats[segment.subject]=subjStats[segment.subject]||{secs:0,n:0}).secs+=segment.secs;
-    subjStats[segment.subject].n++;
-  }));
-  const eligible=Object.entries(subjStats).filter(([,v])=>v.n>=3);
-  if(eligible.length>=2){
-    const byAvg=eligible.map(([id,v])=>({id,avg:v.secs/v.n})).sort((a,b)=>b.avg-a.avg);
-    const top=byAvg[0]; const sn=subjName(top.id);
-    out.push({ icon:sn.emoji||"⚡", tone:"good", title:`You go deepest on ${sn.label}`, body:`Your ${sn.label} sessions average ${fmtMins(Math.round(top.avg))} — your longest focus stretches.` });
-  }
-
-  // 5) Focus drop-off / break suggestion (needs pause logging on ≥5 sessions)
-  const withPauses=hist.filter(s=>typeof s.pauses==="number" && s.secs>=300);
-  if(withPauses.length>=5){
-    // Average session length where the FIRST pause tends to happen ≈ secs/(pauses+1)
-    const spans=withPauses.filter(s=>s.pauses>0).map(s=>s.secs/(s.pauses+1));
-    if(spans.length>=3){
-      const avgSpan=spans.reduce((a,b)=>a+b,0)/spans.length;
-      const mins=Math.round(avgSpan/60);
-      if(mins>=15 && mins<=90){
-        out.push({ icon:"⏳", tone:"soft", title:`You tend to lose focus after ~${mins} min`, body:`That's totally normal. A 5-minute break around the ${mins}-minute mark could keep you sharper for longer.` });
-      }
-    }
-  }
-
-  // 6) Goal completion (needs weekly targets set)
-  const hasTargets = targets && Object.values(targets).some(v=>v>0);
-  if(hasTargets){
-    let goalSecs=0, doneSecs=0;
-    subjects.forEach(s=>{ if(targets[s.id]>0){
-      goalSecs+=targets[s.id]*H;
-      doneSecs+=thisWeek.reduce((total,session)=>total+getSessionSubjectSegments(session)
-        .filter(segment=>segment.subject===s.id).reduce((sum,segment)=>sum+segment.secs,0),0);
-    } });
-    if(goalSecs>0){
-      const pct=Math.min(999,Math.round((doneSecs/goalSecs)*100));
-      out.push(pct>=100
-        ? { icon:"🏆", tone:"good", title:`You smashed your weekly goal — ${pct}%!`, body:`Incredible. You've hit ${fmtHrs(doneSecs)} against your ${fmtHrs(goalSecs)} target.` }
-        : { icon:"🎯", tone:"good", title:`You're ${pct}% to your weekly goal`, body:`${fmtHrs(doneSecs)} of ${fmtHrs(goalSecs)} done. ${pct>=70?"So close — you've got this!":"Every session counts."}` });
-    }
-  }
-
-  // 7) Streak encouragement
-  if(streak>=3){
-    out.push({ icon:"🔥", tone:"good", title:`${streak}-day streak — you're on fire`, body:`Showing up daily is the whole game. Don't break the chain!` });
-  }
-
-  // 8) Improving-every-week trend (needs ≥3 weeks of data)
-  const weekBuckets={};
-  hist.forEach(s=>{ const d=new Date(s.ts); const k=startOfWeek(d).getTime(); weekBuckets[k]=(weekBuckets[k]||0)+s.secs; });
-  const weekVals=Object.entries(weekBuckets).sort((a,b)=>a[0]-b[0]).map(e=>e[1]);
-  if(weekVals.length>=3){
-    const last3=weekVals.slice(-3);
-    if(last3[0]<last3[1] && last3[1]<last3[2]){
-      out.push({ icon:"🚀", tone:"good", title:`You're improving every week`, body:`Three weeks of growth in a row. This is exactly how lasting study habits are built.` });
-    }
-  }
-
-  return out;
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Keep the long-standing helper names inside App.jsx, but route all of them to
@@ -2409,6 +2290,7 @@ const startOfYear  = d => new Date(d.getFullYear(), 0, 1);
 // ── Firebase helpers ──────────────────────────────────────────────────────────
 
 async function fbSaveSession(usernameRaw, subjId, secs, skin, meta, coinDelta=0) {
+  if(!canSaveSession(secs))return {ok:false,error:"Sessions need at least 5 minutes of focus time to be saved"};
   const username = canonUsername(usernameRaw);
   const m=meta||{};
   const subjectSegments=normalizeSessionSubjectSegments(m.subjectSegments,subjId,secs);
@@ -3116,7 +2998,7 @@ async function fbClaimPreviousWeekReward(usernameRaw, now = new Date()) {
 // status with "studying" or "paused" plus the selected subject. Presence reads
 // are limited to accepted friends and people who share a study group.
 const PRESENCE_TTL = 120 * 1000;
-async function fbHeartbeat(username, status="online", subjLabel="", subjEmoji="", subjColor="") {
+async function fbHeartbeat(username, status="online", subjLabel="", subjEmoji="", subjColor="", session=null) {
   try {
     const activeStatus=status==="studying"||status==="paused";
     await setDoc(doc(db, "presence", username), {
@@ -3124,6 +3006,7 @@ async function fbHeartbeat(username, status="online", subjLabel="", subjEmoji=""
       subjLabel:activeStatus?subjLabel:"",
       subjEmoji:activeStatus?subjEmoji:"",
       subjColor:activeStatus?subjColor:"",
+      ...(activeStatus&&session?{session}:{}),
       ts:Date.now()
     });
   } catch(e) {}
@@ -6341,7 +6224,7 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
     setSubjectPickerOpen(false);
   };
   return (
-    <div className={`sg-session-screen sg-focus-anim${isBreak?" sg-break-screen":""}`} style={{...fs.wrap,"--sg-focus-accent":`${subject.color}18`}}>
+    <div className={`sg-session-screen sg-focus-anim${isBreak?" sg-break-screen":""}`} style={{...fs.wrap,"--sg-focus-accent":`${subject.color}18`,"--sg-character-scale":equippedSkin.characterImageScale||1}}>
       <div className="sg-session-top" style={fs.topBar}>
         <div style={fs.subjectControl}>
           <div style={fs.subjectChip}><span>{isBreak?"☕":subject.emoji}</span><span style={{marginLeft:6,fontWeight:600}}>{isBreak?"Break":subject.label}</span></div>
@@ -6373,13 +6256,13 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
           outgoingImage={outgoingProgressionImage} incomingImage={progressionImage}
           imageScale={equippedSkin.characterImageScale||1} onPlaybackChange={onStagePlaybackChange}/>}
         {showProgression
-          ? <div style={fs.finalEvolutionWrap}>
+          ? <div className="sg-focus-character-frame" style={fs.finalEvolutionWrap}>
               {customScholar
                 ? <CharacterFullBody value={{...avatar,model:equippedSkin.id.endsWith("woman")?"woman":"man"}} stage={stageIndex} style={{width:280,height:420,opacity:paused?.5:1,filter:fs.progressionImage.filter}}/>
                 : <ImageAsset src={progressionImage} alt={`${equippedSkin.name} stage ${stageIndex+1}: ${progressionName}`} fetchPriority="high" style={{...fs.progressionImage,opacity:stageTransitionPlaying?0:paused?.5:1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>}
             </div>
           : showFinalEvolution
-          ? <div style={fs.finalEvolutionWrap}>
+          ? <div className="sg-focus-character-frame" style={fs.finalEvolutionWrap}>
               <ImageAsset src={equippedSkin.characterImage} alt={`${equippedSkin.name} final evolution`} fetchPriority="high" style={{...fs.finalEvolutionImage,opacity:paused ? .5 : 1,transform:`scale(${equippedSkin.characterImageScale||1})`,transformOrigin:"bottom center"}}/>
               <div style={fs.finalEvolutionLabel}>✨ Final evolution · {equippedSkin.name}</div>
             </div>
@@ -6432,7 +6315,7 @@ export function FocusScreen({ subject, subjects=[], onChangeSubject, mode, elaps
 }
 
 const fs = {
-  wrap:{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",alignItems:"center",padding:"0 max(24px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))",overflow:"hidden",isolation:"isolate"},
+  wrap:{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",alignItems:"center",padding:"0 max(24px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))",overflowY:"auto",overflowX:"hidden",isolation:"isolate"},
   topBar:{position:"relative",zIndex:3,display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",maxWidth:400,paddingTop:"max(52px,calc(env(safe-area-inset-top) + 18px))"},
   subjectControl:{display:"flex",alignItems:"center",gap:7},
   subjectChip:{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500},
@@ -8693,16 +8576,12 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onRecap, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+export function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+  const [statsOpen,setStatsOpen]=useState(false);
   const [grantingCoins,setGrantingCoins]=useState(false);
   const [customisationOpen,setCustomisationOpen]=useState(false);
   const customisationButton=useRef(null);
-  const customisationBack=useRef(null);
   const menuSheet=useRef(null);
-  useEffect(()=>{
-    if(menuSheet.current)menuSheet.current.scrollTop=0;
-    if(customisationOpen)customisationBack.current?.focus();
-  },[customisationOpen]);
   const backToMenu=()=>{
     setCustomisationOpen(false);
     requestAnimationFrame(()=>customisationButton.current?.focus());
@@ -8719,9 +8598,8 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
     { icon:"🏫", label:"Classroom Decor", sub:"Desks, details & more", onClick:onGardenShop },
   ];
   const items = [
-    { icon:"🎨", label:"Customisation", sub:"Character, skins and classroom decor", onClick:()=>setCustomisationOpen(true), ref:customisationButton },
+    { icon:"🎨", label:"Customisation", sub:"Character, skins and classroom decor", onClick:()=>setCustomisationOpen(open=>!open), ref:customisationButton },
     { icon:"🏅", label:"Achievements",  sub:`${badgeCount}/${BADGES.length} earned`, notificationCount:achievementsNotificationCount, notificationLabel:"unclaimed achievement rewards", onClick:onBadges },
-    { icon:"📊", label:"Smart Analytics", sub:"Insights & trends",     onClick:onRecap },
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
     ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
@@ -8735,31 +8613,9 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
     <div className="sg-shell" style={{...themeStyle,display:"contents"}} data-background={backgroundId}>
       <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
         <div ref={menuSheet} style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}
-          role="dialog" aria-modal="true" aria-label={customisationOpen?"Customisation":"Menu"}
+          role="dialog" aria-modal="true" aria-label="Menu"
           onKeyDown={event=>{if(customisationOpen&&event.key==="Escape"){event.stopPropagation();backToMenu();}}}>
         <div style={hm.grabber}/>
-        {customisationOpen?<>
-          <div style={hm.customisationHeader}>
-            <button ref={customisationBack} type="button" style={hm.backBtn} onClick={backToMenu} aria-label="Back to menu">←</button>
-            <div>
-              <h2 style={hm.customisationTitle}>Customisation</h2>
-              <div style={hm.itemSub}>Make your character and classroom your own</div>
-            </div>
-          </div>
-          <div style={hm.list}>
-            {customisationItems.map(it=>(
-              <button key={it.label} type="button" className="sg-tap-card" style={hm.item} onClick={it.onClick}>
-                <span style={hm.itemIcon} aria-hidden="true">{it.icon}</span>
-                <span style={{flex:1,textAlign:"left"}}>
-                  <span style={hm.itemLabel}>{it.label}</span>
-                  <span style={hm.itemSub}>{it.sub}</span>
-                </span>
-                <span style={hm.chev} aria-hidden="true">›</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" style={hm.closeBtn} onClick={onClose}>Close</button>
-        </>:<>
         <button type="button" style={hm.profile} className="sg-tap-card" onClick={onProfile} aria-label={`View ${user}'s study profile`}>
           <ProfileAvatar username={user} allow size={56} avatar={avatar} skinId={skinId}/>
           <div style={{flex:1,minWidth:0,textAlign:"left"}}>
@@ -8785,9 +8641,9 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
         <div style={hm.sectionLabel}>VIEWS</div>
         <div style={hm.list}>
           {viewItems.map(it=>{
-            const isActive=activeView===it.id;
-            return <button key={it.id} className="sg-tap-card" aria-current={isActive?"page":undefined}
-              style={{...hm.item,...(isActive?hm.viewItemActive:{})}} onClick={()=>onNavigate(it.id)}>
+            const isActive=activeView===it.id||(it.id==="stats"&&activeView==="garden");
+            return <Fragment key={it.id}><button className="sg-tap-card" aria-current={it.id!=="stats"&&isActive?"page":undefined} aria-expanded={it.id==="stats"?statsOpen:undefined} aria-controls={it.id==="stats"?"sg-stats-options":undefined}
+              style={{...hm.item,...(isActive?hm.viewItemActive:{})}} onClick={()=>it.id==="stats"?setStatsOpen(open=>!open):onNavigate(it.id)}>
               <span style={hm.itemIcon}>{it.icon}</span>
               <span style={{flex:1,textAlign:"left"}}>
                 <span style={{...hm.itemLabel,...(isActive?hm.viewLabelActive:{})}}>{it.label}</span>
@@ -8796,15 +8652,19 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
               {it.notificationCount>0&&<span className="sg-notification-count" aria-label={`${it.notificationCount} ${it.notificationLabel}`}>
                 {it.notificationCount>9?"9+":it.notificationCount}
               </span>}
-              <span style={isActive?hm.activeMark:hm.chev}>{isActive?"✓":"›"}</span>
-            </button>;
+              <span style={isActive?hm.activeMark:hm.chev}>{it.id==="stats"?(statsOpen?"⌃":"⌄"):isActive?"✓":"›"}</span>
+            </button>
+            {it.id==="stats"&&statsOpen&&<div id="sg-stats-options" className="sg-stats-menu-options" role="group" aria-label="Stats destinations">
+              {[["stats","📊","Analytics","Progress, insights and milestones"],["garden","🏫","Garden","Your classroom and layout"]].map(([id,icon,label,sub])=><button key={id} className="sg-tap-card" style={{...hm.item,...(activeView===id?hm.viewItemActive:{})}} aria-current={activeView===id?"page":undefined} onClick={()=>onNavigate(id)}><span style={hm.itemIcon} aria-hidden="true">{icon}</span><span style={{flex:1,textAlign:"left"}}><span style={hm.itemLabel}>{label}</span><span style={hm.itemSub}>{sub}</span></span><span style={hm.chev}>›</span></button>)}
+            </div>}
+            </Fragment>;
           })}
         </div>
         <div style={hm.divider}/>
         <div style={hm.sectionLabel}>SETTINGS</div>
         <div style={hm.list}>
           {items.map(it=>(
-            <button key={it.label} ref={it.ref} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
+            <Fragment key={it.label}><button ref={it.ref} className="sg-tap-card" style={hm.item} onClick={it.onClick} aria-expanded={it.label==="Customisation"?customisationOpen:undefined} aria-controls={it.label==="Customisation"?"sg-customisation-options":undefined}>
               <span style={hm.itemIcon}>{it.icon}</span>
               <span style={{flex:1,textAlign:"left"}}>
                 <span style={hm.itemLabel}>{it.label}</span>
@@ -8813,8 +8673,10 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
               {it.notificationCount>0&&<span className="sg-notification-count" aria-label={`${it.notificationCount} ${it.notificationLabel}`}>
                 {it.notificationCount>9?"9+":it.notificationCount}
               </span>}
-              <span style={hm.chev}>›</span>
+              <span style={hm.chev}>{it.label==="Customisation"?(customisationOpen?"⌃":"⌄"):"›"}</span>
             </button>
+            {it.label==="Customisation"&&customisationOpen&&<div id="sg-customisation-options" className="sg-stats-menu-options" role="group" aria-label="Customisation options">{customisationItems.map(option=><button key={option.label} type="button" className="sg-tap-card" style={hm.item} onClick={option.onClick}><span style={hm.itemIcon} aria-hidden="true">{option.icon}</span><span style={{flex:1,textAlign:"left"}}><span style={hm.itemLabel}>{option.label}</span><span style={hm.itemSub}>{option.sub}</span></span><span style={hm.chev}>›</span></button>)}</div>}
+            </Fragment>
           ))}
         </div>
         <div style={hm.divider}/>
@@ -8852,8 +8714,7 @@ function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNo
           <span style={{flex:1,textAlign:"left",fontSize:14,fontWeight:600,color:"#E07B54"}}>Log out</span>
         </button>
         <button style={hm.closeBtn} onClick={onClose}>Close</button>
-        </>}
-        </div>
+       </div>
       </div>
     </div>
   ),document.body);
@@ -8892,197 +8753,7 @@ const hm = {
   closeBtn:{display:"block",width:"100%",marginTop:10,padding:"13px 0",background:"var(--sg-theme-control-track,#F5F7F2)",border:"none",borderRadius:14,fontSize:15,fontWeight:600,color:"var(--sg-theme-muted,#666)",cursor:"pointer"},
 };
 
-// ── Smart Analytics Dashboard ─────────────────────────────────────────────────
-// Replaces the old Weekly Recap. One rich scroll: hero stats, AI-style insight
-// cards (only those with real data), a contribution heatmap, a focus trend, and
-// subject rankings. Auto-shows once per week and is reachable from the menu.
-function SmartDashboard({ history, subjects, streak, targets, coins, onClose, onBack }) {
-  const hist = Array.isArray(history) ? history : [];
-  const empty = hist.length === 0;
 
-  // Lifetime + this-week stats
-  const ws = startOfWeek(new Date());
-  const week = hist.filter(s=>new Date(s.ts)>=ws);
-  const weekSecs = week.reduce((a,s)=>a+s.secs,0);
-  const lifeSecs = hist.reduce((a,s)=>a+s.secs,0);
-  const avgSession = hist.length ? Math.round(lifeSecs/hist.length) : 0;
-
-  // Insights from the engine
-  const insights = buildInsights({ history:hist, subjects, targets, streak, coins });
-
-  // ── Contribution heatmap (last ~13 weeks, GitHub-style) ──
-  const DAYS = 7, WEEKS = 13;
-  const today = startOfStudyDay(new Date());
-  const dayMap = {};
-  hist.forEach(s=>{ const k=startOfStudyDay(s.ts).getTime(); dayMap[k]=(dayMap[k]||0)+s.secs; });
-  // Build complete Melbourne Monday→Sunday columns. Future cells in the
-  // current week stay transparent until that Melbourne calendar day arrives.
-  const gridStart = shiftStudyWeek(today,-(WEEKS-1)).start;
-  const heat = [];
-  let maxDay = 0;
-  for(let w=0; w<WEEKS; w++){
-    const col=[];
-    for(let d=0; d<DAYS; d++){
-      const day=shiftStudyDay(gridStart,w*DAYS+d);
-      const secs = day>today ? -1 : (dayMap[day.getTime()]||0);
-      if(secs>maxDay) maxDay=secs;
-      col.push({ t:day.getTime(), secs });
-    }
-    heat.push(col);
-  }
-  const heatColor = secs => {
-    if(secs<0) return "transparent";
-    if(secs===0) return "#EAF0E8";
-    const r = maxDay>0 ? secs/maxDay : 0;
-    return r>0.66 ? "#2D6A4F" : r>0.33 ? "#5BAE7E" : "#A9D9BE";
-  };
-
-  // ── Focus trend (last 8 weeks total hours) ──
-  const trendWeeks = 8;
-  const trend = [];
-  for(let i=trendWeeks-1; i>=0; i--){
-    const range=shiftStudyWeek(ws,-i);
-    const s=range.start, e=range.endExclusive;
-    const secs=hist.filter(x=>{const t=new Date(x.ts); return t>=s&&t<e;}).reduce((a,x)=>a+x.secs,0);
-    trend.push({ secs, label:formatStudyDate(s,{month:"numeric",day:"numeric"}) });
-  }
-  const trendMax = Math.max(...trend.map(t=>t.secs), 1);
-  const tW=300, tH=70, tPad=4;
-  const trendPts = trend.map((t,i)=>{
-    const x = tPad + (i/(trend.length-1))*(tW-tPad*2);
-    const y = tH - tPad - (t.secs/trendMax)*(tH-tPad*2);
-    return [x,y];
-  });
-  const trendPath = trendPts.map((p,i)=>`${i===0?"M":"L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-  const trendArea = `${trendPath} L${trendPts[trendPts.length-1][0].toFixed(1)},${tH-tPad} L${trendPts[0][0].toFixed(1)},${tH-tPad} Z`;
-
-  // ── Subject rankings (lifetime) ──
-  const subjTot={};
-  hist.forEach(s=>{ subjTot[s.subject]=(subjTot[s.subject]||0)+s.secs; });
-  const ranks=Object.entries(subjTot).map(([id,secs])=>{
-    const subj=subjects.find(x=>x.id===id)||{emoji:"✏️",label:"(removed)",color:"#aaa"};
-    return {...subj,secs};
-  }).sort((a,b)=>b.secs-a.secs);
-  const rankMax = ranks[0]?.secs||1;
-
-  return (
-    <div style={sd.overlay} className="sg-overlay-anim" onClick={onClose}>
-      <div style={sd.modal} className="sg-sheet-anim" onClick={e=>e.stopPropagation()}>
-        <div style={sd.header}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {onBack && <button style={sd.back} onClick={onBack} title="Back">←</button>}
-            <div>
-              <div style={sd.kicker}>SMART ANALYTICS</div>
-              <h3 style={sd.title}>Your Insights 📊</h3>
-            </div>
-          </div>
-          <button style={sd.x} onClick={onClose}>✕</button>
-        </div>
-
-        {empty ? (
-          <p style={sd.empty}>No sessions yet — complete your first focus session and your classroom will grow here 🌱</p>
-        ) : (
-          <>
-            {/* Hero stats */}
-            <div style={sd.heroRow}>
-              <div style={sd.hero}><div style={sd.heroVal}>{fmtHrs(weekSecs)}</div><div style={sd.heroLbl}>this week</div></div>
-              <div style={sd.hero}><div style={sd.heroVal}>{fmtHrs(lifeSecs)}</div><div style={sd.heroLbl}>all time</div></div>
-              <div style={sd.hero}><div style={sd.heroVal}>{fmtMins(avgSession)}</div><div style={sd.heroLbl}>avg session</div></div>
-            </div>
-
-            {/* Insight cards */}
-            {insights.length>0 && (
-              <div style={sd.section}>
-                <div style={sd.secTitle}>What we noticed</div>
-                <div style={sd.insightList}>
-                  {insights.map((ins,i)=>(
-                    <div key={i} className="sg-card-anim"
-                      style={{...sd.insight,...(ins.tone==="soft"?sd.insightSoft:sd.insightGood),animationDelay:`${Math.min(i*0.05,0.4)}s`}}>
-                      <span style={sd.insightIcon}>{ins.icon}</span>
-                      <div style={{flex:1}}>
-                        <div style={sd.insightTitle}>{ins.title}</div>
-                        <div style={sd.insightBody}>{ins.body}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Heatmap */}
-            <div style={sd.section}>
-              <div style={sd.secTitle}>Focus heatmap · last 13 weeks</div>
-              <div style={sd.heatWrap}>
-                <div style={sd.heatDays}>
-                  {["","M","","W","","F",""].map((d,i)=><div key={i} style={sd.heatDayLbl}>{d}</div>)}
-                </div>
-                <div style={sd.heatGrid}>
-                  {heat.map((col,ci)=>(
-                    <div key={ci} style={sd.heatCol}>
-                      {col.map((cell,di)=>(
-                        <div key={di} title={cell.secs>=0?`${fmtMins(cell.secs)} on ${formatStudyDate(cell.t,{day:"numeric",month:"short"})}`:""}
-                          style={{...sd.heatCell,background:heatColor(cell.secs)}}/>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={sd.heatLegend}>
-                <span style={sd.legendLbl}>Less</span>
-                {["#EAF0E8","#A9D9BE","#5BAE7E","#2D6A4F"].map(c=><div key={c} style={{...sd.heatCell,background:c}}/>)}
-                <span style={sd.legendLbl}>More</span>
-              </div>
-            </div>
-
-            {/* Focus trend */}
-            <div style={sd.section}>
-              <div style={sd.secTitle}>Focus trend · last 8 weeks</div>
-              <svg viewBox={`0 0 ${tW} ${tH}`} width="100%" height={tH} style={{display:"block"}}>
-                <defs>
-                  <linearGradient id="sd-trend" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2D6A4F" stopOpacity="0.28"/>
-                    <stop offset="100%" stopColor="#2D6A4F" stopOpacity="0"/>
-                  </linearGradient>
-                </defs>
-                <path d={trendArea} fill="url(#sd-trend)"/>
-                <path d={trendPath} fill="none" stroke="#2D6A4F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                {trendPts.map((p,i)=>(
-                  <circle key={i} cx={p[0]} cy={p[1]} r={i===trendPts.length-1?3.5:2.2}
-                    fill="#fff" stroke="#2D6A4F" strokeWidth="2"/>
-                ))}
-              </svg>
-              <div style={sd.trendLbls}>
-                <span>{trend[0].label}</span><span>now</span>
-              </div>
-            </div>
-
-            {/* Subject rankings */}
-            {ranks.length>0 && (
-              <div style={sd.section}>
-                <div style={sd.secTitle}>Subject rankings · all time</div>
-                <div style={sd.rankList}>
-                  {ranks.map((r,i)=>(
-                    <div key={r.label} style={sd.rankRow}>
-                      <span style={sd.rankNum}>{i+1}</span>
-                      <span style={{fontSize:16,width:22}}>{r.emoji}</span>
-                      <div style={{flex:1}}>
-                        <div style={sd.rankName}>{r.label}</div>
-                        <div style={sd.rankTrack}><div style={{...sd.rankFill,width:`${(r.secs/rankMax)*100}%`,background:r.color}}/></div>
-                      </div>
-                      <span style={{...sd.rankVal,color:r.color}}>{fmtHrs(r.secs)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        <button style={sd.doneBtn} onClick={onClose}>Keep learning</button>
-      </div>
-    </div>
-  );
-}
 const sd = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:340},
   modal:{background:"#F7FAF6",borderRadius:"24px 24px 0 0",padding:"22px 18px 30px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 -8px 32px rgba(0,0,0,0.18)"},
@@ -9685,77 +9356,11 @@ const taskStyles={
   error:{fontSize:11,color:"#A34C42",background:"#FFF2EF",border:"1px solid #F3D4CE",borderRadius:9,padding:"7px 9px",marginBottom:7},
 };
 
-// ── Accepted-friend presence strip ────────────────────────────────────────────
-function StudyingNow({ presence, currentUser, compact=false }) {
-  const [chipRowRef] = useHScroll();
-  const others = presence.filter(p=>p.username!==currentUser);
-  if(!others.length) return null;
-  const studyingCount=others.filter(p=>p.status==="studying").length;
-  const pausedCount=others.filter(p=>p.status==="paused").length;
-  const activeSummary=[studyingCount&&`${studyingCount} studying`,pausedCount&&`${pausedCount} paused`].filter(Boolean).join(" · ");
-  const summary=activeSummary
-    ? `${others.length} friend${others.length===1?"":"s"} online · ${activeSummary}`
-    : `${others.length} friend${others.length===1?"":"s"} online`;
-  if(compact){
-    return (
-      <div style={sn.compactWrap}>
-        <div style={sn.compactHeader}>
-          <span style={sn.pulse}/>
-          <span style={sn.compactLabel}>{summary}</span>
-        </div>
-        <div style={sn.compactRowWrap}>
-          <div style={sn.compactRow} ref={chipRowRef}>
-            {others.map(p=>(
-              <span key={p.username} style={{...sn.compactChip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):p.status==="paused"?"#B8A26C":"#C8D0CA"}}
-                title={p.status==="studying"?`Studying ${p.subjLabel}`:p.status==="paused"?`Paused · ${p.subjLabel}`:"Online"}>
-                <span>{p.status==="studying"?(p.subjEmoji||"📚"):p.status==="paused"?"⏸":"●"}</span>
-                <span style={sn.compactChipName}>{p.username}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div style={sn.wrap}>
-      <span style={sn.pulse}/>
-      <span style={sn.label}>{summary}</span>
-      <div style={sn.avatars}>
-        {others.slice(0,6).map(p=>(
-          <span key={p.username} style={{...sn.chip,borderColor:p.status==="studying"?(p.subjColor||"#56B68B"):p.status==="paused"?"#B8A26C":"#C8D0CA"}}
-            title={p.status==="studying"?`${p.username} · studying ${p.subjLabel}`:p.status==="paused"?`${p.username} · paused ${p.subjLabel}`:`${p.username} · online`}>
-            <span style={{color:p.status==="studying"?"inherit":p.status==="paused"?"#927A3D":"#8FA098"}}>{p.status==="studying"?(p.subjEmoji||"📚"):p.status==="paused"?"⏸":"●"}</span>
-            <span style={sn.chipName}>{p.username}</span>
-          </span>
-        ))}
-        {others.length>6 && <span style={sn.more}>+{others.length-6}</span>}
-      </div>
-    </div>
-  );
+// ── Accepted-friend and group presence strip ──────────────────────────────────
+function StudyingNow({presence,currentUser,compact=false}) {
+  const [scrollRef]=useHScroll(presence.map(person=>`${person.username}:${person.ts}`).join('|'));
+  return <StudyPresenceStrip presence={presence} currentUser={currentUser} compact={compact} scrollRef={scrollRef}/>;
 }
-const sn = {
-  wrap:{display:"flex",alignItems:"center",gap:8,background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"10px 12px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",flexWrap:"wrap"},
-  pulse:{width:8,height:8,borderRadius:"50%",background:"#34C759",boxShadow:"0 0 0 0 rgba(52,199,89,0.5)",animation:"sgpulse 1.8s infinite",flexShrink:0},
-  label:{fontSize:12,fontWeight:700,color:"#34A853"},
-  avatars:{display:"flex",gap:5,flexWrap:"wrap",flex:1},
-  chip:{display:"inline-flex",alignItems:"center",gap:4,border:"1.5px solid",borderRadius:14,padding:"3px 8px",fontSize:11,background:"#F8FBF8"},
-  chipName:{fontWeight:600,color:"#555",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},
-  more:{fontSize:11,color:"#888",alignSelf:"center"},
-  // Presence card for the immersive focus screen — frosted glass to match the
-  // subject/coin chips already floating on that gradient background. Full
-  // named chips laid out with real spacing; the row scrolls (mouse wheel
-  // included, via useHScroll) if there are more people than fit on screen.
-  compactWrap:{width:"100%",maxWidth:380,boxSizing:"border-box",alignSelf:"center",background:"rgba(255,255,255,0.88)",backdropFilter:"blur(6px)",borderRadius:18,padding:"12px 14px",marginTop:12,boxShadow:"0 2px 10px rgba(0,0,0,0.06)"},
-  compactHeader:{display:"flex",alignItems:"center",gap:7,marginBottom:9},
-  compactLabel:{fontSize:12.5,fontWeight:700,color:"#34A853"},
-  compactRowWrap:{position:"relative"},
-  compactRow:{display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none",cursor:"grab"},
-  compactChip:{display:"inline-flex",alignItems:"center",gap:6,flexShrink:0,border:"1.5px solid",borderRadius:16,padding:"6px 11px",fontSize:12.5,background:"var(--sg-theme-neutral,#fff)",whiteSpace:"nowrap"},
-  compactChipName:{fontWeight:600,color:"#3A3A3A"},
-  compactFadeL:{position:"absolute",left:0,top:0,bottom:0,width:20,background:"linear-gradient(to right,rgba(255,255,255,0.88),rgba(255,255,255,0))",pointerEvents:"none"},
-  compactFadeR:{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(to left,rgba(255,255,255,0.88),rgba(255,255,255,0))",pointerEvents:"none"},
-};
 
 // ── Weekly Targets Modal (hours per subject) ──────────────────────────────────
 function WeeklyTargetsModal({ subjects, targets, onSave, onClose }) {
@@ -11852,7 +11457,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
 
 const fg = {
   wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"none",userSelect:"none"},
-  zoomControls:{position:"sticky",top:8,left:"calc(100% - 80px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px 8px -38px auto",pointerEvents:"auto"},
+  zoomControls:{position:"sticky",top:8,left:"calc(50% - 34px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px auto -38px",pointerEvents:"auto"},
   zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"var(--sg-theme-neutral,rgba(255,255,255,.92))",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
   footer:{display:"flex",justifyContent:"center",gap:20,padding:"8px 0 12px",background:"rgba(0,0,0,0.18)",backdropFilter:"blur(4px)"},
   stat:{fontSize:12,color:"rgba(255,255,255,0.82)",fontWeight:600},
@@ -12133,191 +11738,23 @@ const ge={
 };
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
-function AnalyticsPanel({ user, subjects, decorations, targets, enhancements={}, gardenLayout={}, onSaveGardenLayout }) {
+function StatsClassroom({sessions,subjects,decorations,enhancements={},gardenLayout={},onSaveGardenLayout}) {
   const [range,setRange]=useState("week");
-  const [history,setHistory]=useState(null);
-  const [editingGarden,setEditingGarden]=useState(false);
-
-  useEffect(()=>{
-    fbLoadHistory(user).then(setHistory);
-  },[user]);
-
-  if(history===null) return <p style={S.empty}>Loading analytics...</p>;
-
+  const [editing,setEditing]=useState(false);
   const now=new Date();
-  let rangeStart, bars;
-
-  // Each bucket tracks total + per-subject seconds, so bars stack by subject
-  const mkBuckets = n => Array.from({length:n}, ()=>({ total:0, bySubj:{} }));
-  const addTo = (b,s) => {
-    b.total += s.secs;
-    getSessionSubjectSegments(s).forEach(segment=>{b.bySubj[segment.subject]=(b.bySubj[segment.subject]||0)+segment.secs;});
-  };
-  const toSegments = bySubj => Object.entries(bySubj)
-    .map(([id,secs])=>{
-      const subj = subjects.find(x=>x.id===id) || { color:"#aaa", emoji:"✏️", label:"(removed)" };
-      return { id, color:subj.color, emoji:subj.emoji, label:subj.label, value:secs };
-    })
-    .sort((a,b)=>b.value-a.value);
-
-  if(range==="week"){
-    rangeStart=startOfWeek(now);
-    const t=mkBuckets(7);
-    history.forEach(s=>{const d=new Date(s.ts);if(d>=rangeStart)addTo(t[getStudyDayOfWeek(d)],s);});
-    bars=t.map((b,i)=>({label:DAY_LABELS[i],value:b.total,segments:toSegments(b.bySubj)}));
-  } else if(range==="month"){
-    rangeStart=startOfMonth(now);
-    const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-    const buckets=mkBuckets(dim);  // one bucket per calendar day
-    history.forEach(s=>{
-      const d=new Date(s.ts);
-      if(d>=rangeStart&&d.getMonth()===now.getMonth())
-        addTo(buckets[d.getDate()-1],s);
-    });
-    // Label every 5th day (1, 5, 10, …) plus the last day, blank otherwise
-    bars=buckets.map((b,i)=>{
-      const day=i+1;
-      const showLabel = day===1 || day%5===0 || day===dim;
-      return {
-        label:showLabel?String(day):"",
-        tip:`${MONTH_LABELS[now.getMonth()]} ${day}`,
-        value:b.total,
-        segments:toSegments(b.bySubj),
-      };
-    });
-  } else {
-    rangeStart=startOfYear(now);
-    const t=mkBuckets(12);
-    history.forEach(s=>{const d=new Date(s.ts);if(d>=rangeStart)addTo(t[d.getMonth()],s);});
-    bars=t.map((b,i)=>({label:MONTH_LABELS[i],value:b.total,segments:toSegments(b.bySubj)}));
-  }
-
-  const inRange=history.filter(s=>new Date(s.ts)>=rangeStart);
-  const totalSecs=inRange.reduce((a,s)=>a+s.secs,0);
-  const count=inRange.length;
-  const avg=count>0?Math.round(totalSecs/count):0;
-  const activeDays=new Set(inRange.map(s=>startOfDay(new Date(s.ts)).getTime())).size;
-
-  const subjTotals={};
-  inRange.forEach(s=>getSessionSubjectSegments(s).forEach(segment=>{
-    subjTotals[segment.subject]=(subjTotals[segment.subject]||0)+segment.secs;
-  }));
-  const subjRows=Object.entries(subjTotals)
-    .map(([id,secs])=>{
-      const subj=subjects.find(x=>x.id===id)||{emoji:"✏️",label:"(removed)",color:"#aaa"};
-      return {...subj,secs,pct:totalSecs>0?secs/totalSecs:0};
-    })
-    .sort((a,b)=>b.secs-a.secs);
-
-  // ── Balance nudge ───────────────────────────────────────────────────────────
-  // Builds a gentle suggestion toward the most-neglected ACTIVE subject. We look
-  // at every current subject (not just ones studied), since a subject with zero
-  // time is the strongest neglect signal. If weekly targets are set we measure
-  // neglect as furthest-below-target; otherwise as lowest share of total time.
-  const balanceNudge = (()=>{
-    if(!subjects.length || totalSecs<600) return null;       // need a little data first
-    const hasTargets = targets && Object.values(targets).some(v=>v>0);
-    const rows = subjects.map(s=>{
-      const secs = subjTotals[s.id]||0;
-      const pct  = totalSecs>0 ? secs/totalSecs : 0;
-      let deficit;
-      if(hasTargets && targets[s.id]>0){
-        // for week view compare to weekly target; month/year scale the target up
-        const mult = range==="week"?1 : range==="month"?4.3 : 52;
-        const goalSecs = targets[s.id]*3600*mult;
-        deficit = goalSecs>0 ? (goalSecs-secs)/goalSecs : 0;   // 1 = nothing done
-      } else {
-        const fairShare = 1/subjects.length;
-        deficit = (fairShare-pct)/fairShare;                   // >0 = below fair share
-      }
-      return { ...s, secs, pct, deficit };
-    });
-    const worst = rows.slice().sort((a,b)=>b.deficit-a.deficit)[0];
-    const best  = rows.slice().sort((a,b)=>b.secs-a.secs)[0];
-    // Only nudge if the gap is real and the two subjects differ
-    if(!worst || worst.deficit < 0.34 || worst.id===best.id) return null;
-    return { worst, best, hasTargets };
-  })();
-
-  return (
-    <div>
-      <div style={S.toggleRow}>
-        {[["week","Week"],["month","Month"],["year","Year"]].map(([id,lbl])=>(
-          <button key={id} style={{...S.toggleBtn,...(range===id?S.toggleBtnActive:{})}}
-            onClick={()=>setRange(id)}>{lbl}</button>
-        ))}
-      </div>
-      <div style={{display:"flex",justifyContent:"flex-end",margin:"0 0 9px"}}><button style={S.arrangeGardenBtn} onClick={()=>setEditingGarden(true)}><span style={{fontSize:13}}>↔</span> Arrange</button></div>
-      <ForestGarden sessions={inRange} subjects={subjects} range={range} decorations={decorations} enhancements={enhancements} layout={gardenLayout}/>
-      {editingGarden&&<GardenEditor sessions={inRange} subjects={subjects} decorations={decorations} layout={gardenLayout} range={range} enhancements={enhancements} onClose={()=>setEditingGarden(false)} onSave={next=>{onSaveGardenLayout(next);setEditingGarden(false);}}/>}
-      <div style={an.statRow}>
-        <div style={an.statCard}><div style={an.statVal}>{fmtHrs(totalSecs)}</div><div style={an.statLbl}>Total focus</div></div>
-        <div style={an.statCard}><div style={an.statVal}>{count}</div><div style={an.statLbl}>Sessions</div></div>
-        <div style={an.statCard}><div style={an.statVal}>{activeDays}</div><div style={an.statLbl}>Active days</div></div>
-        <div style={an.statCard}><div style={an.statVal}>{fmtMins(avg)}</div><div style={an.statLbl}>Avg session</div></div>
-      </div>
-      <h3 style={an.subTitle}>{range==="week"?"This week by day":range==="month"?"This month by day":"This year by month"}</h3>
-            <BarChart bars={bars} maxVal={Math.max(...bars.map(b=>b.value),1)} color="var(--sg-theme-accent,#56B68B)"/>
-      <h3 style={an.subTitle}>By subject</h3>
-      {balanceNudge && (
-        <div style={{...an.nudge,borderColor:balanceNudge.worst.color+"55",background:balanceNudge.worst.color+"0D"}}>
-          <div style={{flex:1}}>
-            <div style={an.nudgeTitle}>
-              {balanceNudge.worst.emoji} {balanceNudge.worst.label} could use some love
-            </div>
-            <div style={an.nudgeBody}>
-              {balanceNudge.worst.secs===0
-                ? `No ${balanceNudge.worst.label} time yet this ${range}`
-                : `Only ${fmtHrs(balanceNudge.worst.secs)} this ${range}`}
-              {" "}— you've put {fmtHrs(balanceNudge.best.secs)} into {balanceNudge.best.label}.
-              {balanceNudge.hasTargets ? " A short session would help you hit your target." : " A short session would even things out."}
-            </div>
-          </div>
-        </div>
-      )}
-      {subjRows.length===0&&<p style={S.empty}>No sessions in this period yet.</p>}
-      {subjRows.map(row=>(
-        <div key={row.label} style={an.subjRow}>
-          <span style={{fontSize:20}}>{row.emoji}</span>
-          <div style={{flex:1,marginLeft:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>{row.label}</span>
-              <span style={{fontSize:13,fontWeight:700,color:row.color}}>{fmtHrs(row.secs)} <span style={{color:"#bbb",fontWeight:400}}>({Math.round(row.pct*100)}%)</span></span>
-            </div>
-            <div style={an.subjTrack}><div style={{...an.subjFill,width:`${row.pct*100}%`,background:row.color}}/></div>
-          </div>
-        </div>
-      ))}
+  const start=range==="week"?startOfWeek(now):range==="month"?startOfMonth(now):new Date(now.getFullYear(),0,1);
+  const inRange=sessions.filter(session=>session.ts>=+start);
+  return <div>
+    <div className="sg-stats-segments" role="group" aria-label="Classroom period">
+      {[["week","Week"],["month","Month"],["year","Year"]].map(([id,label])=><button key={id} aria-pressed={range===id} onClick={()=>setRange(id)}>{label}</button>)}
     </div>
-  );
+    <div style={{display:"flex",justifyContent:"flex-end",margin:"12px 0"}}><button onClick={()=>setEditing(true)}>Arrange classroom</button></div>
+    <ForestGarden sessions={inRange} subjects={subjects} range={range} decorations={decorations} enhancements={enhancements} layout={gardenLayout}/>
+    {editing&&<GardenEditor sessions={inRange} subjects={subjects} decorations={decorations} layout={gardenLayout} range={range} enhancements={enhancements} onClose={()=>setEditing(false)} onSave={next=>{onSaveGardenLayout(next);setEditing(false);}}/>}
+  </div>;
 }
 
-// A running clock lives at the App level, but analytics has no dependency on
-// elapsed seconds. Keep this large chart + SVG subtree intact between ticks.
-const MemoAnalyticsPanel=memo(AnalyticsPanel,(prev,next)=>
-  prev.user===next.user&&
-  prev.currentWeekKey===next.currentWeekKey&&
-  prev.subjects===next.subjects&&
-  prev.decorations===next.decorations&&
-  prev.targets===next.targets&&
-  prev.enhancements===next.enhancements&&
-  prev.gardenLayout===next.gardenLayout
-);
 
-const an = {
-  statRow:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18},
-  statCard:{background:"var(--sg-theme-neutral,#fff)",borderRadius:14,padding:"13px 6px 11px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",border:"1px solid #F0F3EE"},
-  statVal:{fontSize:18,fontWeight:800,color:"#1a1a2e",letterSpacing:"-0.5px"},
-  statLbl:{fontSize:9.5,color:"#9AA79A",marginTop:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"},
-  subTitle:{fontSize:14,fontWeight:700,color:"#1a1a2e",margin:"4px 0 10px"},
-  subjRow:{display:"flex",alignItems:"center",background:"var(--sg-theme-neutral,#fff)",borderRadius:12,padding:"11px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"},
-  nudge:{display:"flex",alignItems:"flex-start",gap:10,border:"1.5px solid",borderRadius:14,padding:"12px 14px",marginBottom:10},
-  nudgeIcon:{fontSize:18,lineHeight:1.2,flexShrink:0},
-  nudgeTitle:{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:3},
-  nudgeBody:{fontSize:12,color:"#777",lineHeight:1.45},
-  subjTrack:{height:6,background:"#F0F2EE",borderRadius:10,overflow:"hidden"},
-  subjFill:{height:"100%",borderRadius:10,transition:"width 0.4s ease"},
-};
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 // Build the {year-Wnn} key + a friendly label for a week N weeks ago
@@ -13295,7 +12732,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showBadges,setShowBadges]=useState(false);
   const [showMenu,setShowMenu]=useState(false);       // header overflow menu
   const [showSessions,setShowSessions]=useState(false); // my-sessions self-edit panel
-  const [showRecap,setShowRecap]=useState(false);     // weekly recap card
   const [showAccount,setShowAccount]=useState(false); // account panel
   const [showSoundSettings,setShowSoundSettings]=useState(false);
   const [showCharacterEditor,setShowCharacterEditor]=useState(false);
@@ -13334,14 +12770,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [showAdmin,setShowAdmin]=useState(false);     // admin console
   const [adminFromMenu,setAdminFromMenu]=useState(false);
   const [cameFromMenu,setCameFromMenu]=useState(false); // did tree shop open via menu?
-  const [recapFromMenu,setRecapFromMenu]=useState(false); // did recap open via menu?
   const prefsLoadedRef = useRef(false);
   const prefetchedPrefsRef = useRef(null);
   const [prefsReady,setPrefsReady]=useState(false);
   const rewardCheckedWeekRef = useRef("");
   const rewardClaimBusyRef = useRef(false);
   const recoveredRef = useRef(false);
-  const recapCheckedRef = useRef(false);
   const pomodoroRef=useRef(pomodoro);
   const pomodoroTransitionRef=useRef(false);
   const pomodoroBoundaryRef=useRef(()=>{});
@@ -13354,7 +12788,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   useEffect(()=>{
     // Let the new Melbourne week independently run its recap and podium-claim
     // checks even when this tab stayed open across Monday's 04:00 reset.
-    recapCheckedRef.current=false;
+
     rewardCheckedWeekRef.current="";
   },[studyWeekKey]);
   const renderedBackgroundId=normalizeBackgroundId(previewBackgroundId||activeBackground);
@@ -13548,11 +12982,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     // account's cached subject under the newly logged-in username.
     if(!user || !prefsReady) return;
     if(privacyPrefs.sharePresence===false){fbClearPresence(user);return;}
-    const earningFocus=timerStyle!=="pomodoro"||pomodoroRef.current.phase==="focus";
     const publish=()=>{
-      const status=running&&paused?"paused":running&&!paused&&earningFocus?"studying":"online";
+      const now=Date.now();
+      const phaseElapsed=baseElapsed.current+(!paused&&startTimeRef.current?Math.floor((now-startTimeRef.current)/1000):0);
+      const session=running?sessionPresenceSnapshot({elapsed:phaseElapsed,paused,timerStyle,pomodoro:pomodoroRef.current,now}):null;
+      const status=running?(session.counting?"studying":"paused"):"online";
       const subj = subjects.find(s=>s.id===subject) || subjects[0];
-      fbHeartbeat(user,status,subj?.label,subj?.emoji,subj?.color);
+      fbHeartbeat(user,status,subj?.label,subj?.emoji,subj?.color,session);
     };
     publish();
     const hb=setInterval(publish,45*1000);
@@ -14034,7 +13470,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           const recoveredTask=a.taskId?{id:String(a.taskId),title:cleanTaskTitle(a.taskTitle)}:null;
           if(a.finalizing||advanced.finished){
             const secs=Math.max(0,Math.trunc(Number(a.finalFocusSeconds)||advanced.state.completedFocusSeconds));
-            if(secs<60){localStorage.removeItem(LS_ACTIVE);return;}
+            if(!canSaveSession(secs)){localStorage.removeItem(LS_ACTIVE);return;}
             const coinsEarned=Math.floor(secs/60)*COINS_PER_MIN;
             localStorage.setItem(LS_ACTIVE,JSON.stringify({...a,
               username:canonUsername(user),startTs:null,base:0,paused:true,
@@ -14086,7 +13522,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         // Timer sessions can run into overtime, so don't clamp to duration —
         // just cap everything at 4h to guard against a tab left open for days.
         const secs=getRecoverableSeconds(a);
-        if(secs >= 60){
+        if(canSaveSession(secs)){
           const coinsEarned = Math.floor(secs/60) * COINS_PER_MIN;
           const newCoins = coins + coinsEarned;
           setCoins(newCoins); lsSet(LS_COINS, newCoins);
@@ -14199,6 +13635,9 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     showToast("Break skipped — next focus round started.",true);
   };
   const endSession=()=>{
+    // A double tap or an automatic Pomodoro completion may already be saving.
+    // Do not reinterpret its reset clock as a second, zero-length session.
+    if(finishingSessionRef.current||!sessionIdRef.current)return;
     // Never trust `elapsed` state here — it's only refreshed by the interval
     // tick or a wake-up event, both of which can lag behind a real screen
     // lock/unlock. Recompute from the wall clock at the exact moment the
@@ -14212,10 +13651,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       creditedElapsed=validPomodoroFocusSeconds(advanced.state,advanced.elapsed);
       pomodoroRef.current=advanced.state;setPomodoro(advanced.state);
     }
+    clearInterval(intervalRef.current);
+    baseElapsed.current=trueElapsed;
+    startTimeRef.current=null;
     setElapsed(trueElapsed);
     setRunning(false);setPaused(false);
-    if(creditedElapsed>=60)finishSession(creditedElapsed,{timerMode:timerStyle,pomodoro:completedPomo||pomodoroRef.current});
-    else{const a=parseActive(localStorage.getItem(LS_ACTIVE));if(!a||a.tabId===tabIdRef.current)localStorage.removeItem(LS_ACTIVE);sessionIdRef.current=null;sessionStartRef.current=null;activeTaskRef.current=null;setElapsed(0);showToast("Session too short (min 1 min)");}
+    if(canSaveSession(creditedElapsed))finishSession(creditedElapsed,{timerMode:timerStyle,pomodoro:completedPomo||pomodoroRef.current});
+    else{const a=parseActive(localStorage.getItem(LS_ACTIVE));if(!a||a.tabId===tabIdRef.current)localStorage.removeItem(LS_ACTIVE);sessionIdRef.current=null;sessionStartRef.current=null;activeTaskRef.current=null;setElapsed(0);showToast("Session not saved — at least 5 minutes of focus time is required");}
   };
 
   const showToast=(msg,allowDuringFocus=false)=>{
@@ -14240,7 +13682,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     recoveredRef.current=false;
     rewardCheckedWeekRef.current="";
     rewardClaimBusyRef.current=false;
-    recapCheckedRef.current=false;
+
     setPreviewBackgroundId(null);
     const cachedOwned=normalizeOwnedBackgrounds(lsGet(ownedBackgroundsCacheKey(uname),[DEFAULT_BACKGROUND_ID]));
     const cachedActive=normalizeBackgroundId(lsRaw(backgroundCacheKey(uname),DEFAULT_BACKGROUND_ID));
@@ -14303,7 +13745,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
     clearInterval(intervalRef.current);
     startTimeRef.current=null;baseElapsed.current=0;sessionStartRef.current=null;sessionIdRef.current=null;pauseCountRef.current=0;
-    prefsLoadedRef.current=false;recoveredRef.current=false;recapCheckedRef.current=false;
+    prefsLoadedRef.current=false;recoveredRef.current=false;
     rewardCheckedWeekRef.current="";rewardClaimBusyRef.current=false;
     setPrefsReady(false);setUser(null);setRunning(false);setPaused(false);setElapsed(0);setDuration(25*60);
     setTimerStyle("standard");const freshPomo=createPomodoroState({});setPomodoro(freshPomo);pomodoroRef.current=freshPomo;
@@ -14315,7 +13757,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setDecorations([]);setGardenLayout({});setTasks([]);setTasksError("");setTasksLoading(false);setSelectedTaskId("");
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
-    setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);setShowRecap(false);
+    setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);
     setShowSoundSettings(false);setShowCharacterEditor(false);setCharacterAvatar(DEFAULT_CHARACTER);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
   };
 
@@ -14730,24 +14172,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[history, streak, decorations, subjects, user, prefsReady]);
 
-  // Auto-show the weekly recap once per week (first visit after Monday 04:00), but
-  // only if there's something to show — i.e. the user studied at least once.
-  useEffect(()=>{
-    if(!user || history===null || recapCheckedRef.current) return;
-    recapCheckedRef.current = true;
-    const thisWeek = getWeekKey();
-    const lastShown = lsRaw(LS_RECAP, "");
-    if(lastShown === thisWeek) return;            // already shown this week
-    const ws = startOfWeek(new Date());
-    const studiedThisWeek = history.some(s=>new Date(s.ts) >= ws);
-    // We recap the current week's progress, so just require some activity.
-    if(studiedThisWeek){
-      setShowRecap(true);
-      lsSetR(LS_RECAP, thisWeek);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[user, history, studyWeekKey]);
-
   if(!authReady)return (
     <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
@@ -14863,9 +14287,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       />}
       {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onAddToProfile={()=>{setShowBadges(false);setProfileAchievementGallery(true);setProfileUser(user);}} onClose={()=>setShowBadges(false)}
         onBack={()=>{setShowBadges(false);setShowMenu(true);}}/>}
-      {showRecap&&<SmartDashboard history={history} subjects={subjects} streak={streak} targets={targets} coins={walletCoins}
-        onClose={()=>{setShowRecap(false);setRecapFromMenu(false);}}
-        onBack={recapFromMenu?()=>{setShowRecap(false);setRecapFromMenu(false);setShowMenu(true);}:null}/>}
       {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)} onProfile={()=>{setProfileAchievementGallery(false);setProfileUser(visiting);}}/>}
       {profileUser&&<StudyProfile username={profileUser} currentUser={user} skinId={profileUser===user?activeSkin:null} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
@@ -14954,7 +14375,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onTreeShop={()=>{setShowMenu(false);setCameFromMenu(true);setShowShop(true);}}
               onGardenShop={()=>{setShowMenu(false);setCameFromMenu(true);setShowGardenShop(true);}}
               onBadges={()=>{setShowMenu(false);setShowBadges(true);}}
-              onRecap={()=>{setShowMenu(false);setRecapFromMenu(true);setShowRecap(true);}}
               onSessions={()=>{setShowMenu(false);setSessionsFromMenu(true);setShowSessions(true);}}
               onProfile={()=>{setShowMenu(false);setProfileAchievementGallery(false);setProfileUser(user);}}
               onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
@@ -15187,9 +14607,17 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             </div>
           )}
 
-          {tab==="stats"&&(
+          {(tab==="stats"||tab==="garden")&&(
             <div style={S.boardView} className="sg-view-anim" key="view-stats">
-              <MemoAnalyticsPanel user={user} subjects={subjects} decorations={decorations} targets={targets} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout} currentWeekKey={studyWeekKey}/>
+              <StatsPage destination={tab==="garden"?"garden":"analytics"} user={user} initialHistory={history} subjects={subjects} targets={targets} milestones={MILESTONE_STAGES} friends={friendNetwork.friends}
+                onPlan={({subjectId,minutes})=>{
+                  if(running||paused){showToast("Finish your current session before setting up another.");return;}
+                  if(subjects.some(item=>item.id===subjectId)){setSubject(subjectId);lsSetR(LS_SUBJECT,subjectId);}
+                  setTimerStyle("standard");lsSetR(LS_TIMER_STYLE,"standard");
+                  setMode("timer");lsSetR(LS_MODE,"timer");setDuration(minutes*60);setElapsed(0);setTab("timer");
+                }}>
+                {sessions=><StatsClassroom sessions={sessions} subjects={subjects} decorations={decorations} enhancements={enhancements} gardenLayout={gardenLayout} onSaveGardenLayout={handleSaveGardenLayout}/>}
+              </StatsPage>
             </div>
           )}
         </>

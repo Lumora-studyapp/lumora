@@ -2,6 +2,27 @@
    keyboards and user-generated content rather than clipping controls. */
 html { min-height: 100%; scroll-padding-bottom: env(safe-area-inset-bottom, 0px); }
 body { margin: 0; }
+/* Reserve the full painted character height, including skin-specific scaling.
+   Short screens scroll rather than squeezing the character into presence. */
+.sg-session-screen { --sg-character-height: min(50svh, 460px); }
+.sg-session-screen > * { flex-shrink: 0; }
+.sg-session-screen .sg-session-tree {
+  flex: 1 0 auto !important;
+  min-height: calc(var(--sg-character-height) + 40px);
+  padding-block: 24px 16px;
+  box-sizing: border-box;
+  isolation: isolate;
+}
+.sg-session-tree .sg-focus-character-frame {
+  height: calc(var(--sg-character-height) / var(--sg-character-scale, 1)) !important;
+  width: calc(min(100%, 410px) / var(--sg-character-scale, 1)) !important;
+  flex-shrink: 0;
+  justify-content: center !important;
+}
+.sg-session-tree .sg-stage-character img {
+  max-height: calc(var(--sg-character-height) / var(--sg-character-scale, 1));
+  max-width: calc(min(84vw, 410px) / var(--sg-character-scale, 1));
+}
 .sg-shell {
   min-height: 100svh !important;
   padding-top: env(safe-area-inset-top, 0px);

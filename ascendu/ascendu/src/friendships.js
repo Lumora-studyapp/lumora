@@ -81,5 +81,6 @@ export function normalizePresenceRecord(value) {
     subjEmoji: hasSubject ? String(record.subjEmoji || "📚") : "",
     subjColor: hasSubject ? String(record.subjColor || "#56B68B") : "#A7B0A9",
     ts: Number(record.ts || 0),
+      ...(hasSubject&&record.session?{session:record.session}:{}),
   };
 }
