@@ -3,24 +3,32 @@ import {TREE_SKINS,getCharacterProgressionImage} from './characterCatalog.js';
 
 // Seated poses and raised props need framing around the face, not the canvas centre.
 export const PORTRAIT_BACKGROUND='#EDE2F3';
+// Each anchor follows the head rather than the centre of the full-body artwork.
+// Explicit frames also keep hats, hair and seated poses inside the circular crop.
 const PORTRAIT_FRAMES={
-  'lumora-scholar-man':{x:.54,y:0,scale:.24},
-  'lumora-scholar-woman':{x:.54,y:0,scale:.24},
-  einstein:{x:.475,y:.05,scale:.23},
-  gallileo:{x:.31,y:.11,scale:.32},
-  davinci:{x:.32,y:.035,scale:.30},
-  edison:{x:.49,y:.14,scale:.25},
-  'lionel-messi':{x:.55,y:.15,scale:.27},
-  'michael-jackson':{x:.48,y:0,scale:.26},
-  'tiger-woods':{x:.52,y:0,scale:.26},
-  'william-shakespeare':{x:.52,y:0,scale:.26},
-  'jk-rowling':{x:.48,y:0,scale:.26},
-  'christopher-columbus':{x:.46,y:0,scale:.26},
-  'elon-musk':{x:.46,y:0,scale:.26},
-  'ludwig-van-beethoven':{x:.5,y:.045,scale:.26},
-  'cristiano-ronaldo':{x:.52,y:0,scale:.26},
+  'lumora-scholar-man':{x:.54,y:-.015,scale:.28},
+  'lumora-scholar-woman':{x:.55,y:-.015,scale:.28},
+  einstein:{x:.475,y:.01,scale:.32},
+  gallileo:{x:.34,y:.085,scale:.36},
+  davinci:{x:.33,y:.015,scale:.34},
+  edison:{x:.49,y:.12,scale:.29},
+  'lebron-james':{x:.5,y:-.01,scale:.29},
+  'lionel-messi':{x:.55,y:.13,scale:.30},
+  'michael-jackson':{x:.48,y:-.015,scale:.29},
+  'tiger-woods':{x:.52,y:-.015,scale:.29},
+  'william-shakespeare':{x:.5,y:-.015,scale:.29},
+  'marie-curie':{x:.55,y:-.01,scale:.29},
+  pythagoras:{x:.5,y:-.015,scale:.29},
+  'jk-rowling':{x:.48,y:-.015,scale:.29},
+  'ludwig-van-beethoven':{x:.53,y:.005,scale:.33},
+  'neil-armstrong':{x:.5,y:-.015,scale:.29},
+  'henry-ford':{x:.5,y:-.015,scale:.29},
+  michelangelo:{x:.5,y:-.015,scale:.29},
+  'christopher-columbus':{x:.46,y:-.015,scale:.29},
+  'elon-musk':{x:.46,y:-.015,scale:.29},
+  'bill-gates':{x:.5,y:-.015,scale:.29},
+  'cristiano-ronaldo':{x:.52,y:-.015,scale:.29},
 };
-
 function finishPortrait(context){
   // Keep the connected character silhouette; detached speech bubbles and
   // cropped prop fragments should not float in the portrait background.
