@@ -1,3 +1,4 @@
+import {loadProfileAppearance} from "./profileAppearance.js";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {auth,db,storage} from "./firebase.js";
 import {doc,getDoc,getDocFromServer,setDoc} from "firebase/firestore";
@@ -62,13 +63,17 @@ export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null
       const request=++revision;
       let nextUrl="";
       try{
-        const profile=await loadStudyProfile(identity);
-        let character=null;
-        if(profile.photo)nextUrl=await imageObjectUrl(identity,"photo");
-        else if(!skinId&&!avatar){
-          const snap=await boundedRequest(getDoc(doc(db,"prefs",identity)),"Loading character");
-          character=snap.exists()?snap.data():{};
-        }
+        const result=await loadProfileAppearance({
+          loadProfile:()=>loadStudyProfile(identity),
+          loadCharacter:async()=>{
+            if(skinId||avatar)return {activeSkin:skinId,characterAvatar:avatar};
+            const snap=await boundedRequest(getDoc(doc(db,"prefs",identity)),"Loading character");
+            return snap.exists()?snap.data():{};
+          },
+          loadPhoto:()=>imageObjectUrl(identity,"photo"),
+        });
+        nextUrl=result.url;
+        const character=result.character;
         if(!alive||request!==revision){if(nextUrl)URL.revokeObjectURL(nextUrl);return;}
         if(objectUrl)URL.revokeObjectURL(objectUrl);
         objectUrl=nextUrl;
@@ -76,7 +81,7 @@ export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null
       }catch{
         if(nextUrl)URL.revokeObjectURL(nextUrl);
         // An unavailable custom image must not become a default portrait.
-        if(alive&&request===revision)setAppearance(null);
+        if(alive&&request===revision)setAppearance({identity,error:true});
       }
     };
     const onUpdate=event=>{if(safeUser(event.detail)===identity)refresh();};
@@ -85,7 +90,7 @@ export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null
   },[identity,allow,skinId,avatar]);
   const ready=allow&&appearance?.identity===identity;
   return <span aria-busy={!ready} style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:"var(--sg-theme-control-track,#EAE5ED)",color:"var(--sg-theme-muted,#817287)",fontWeight:800,...style}}>
-    {ready?(appearance.url?<img src={appearance.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<CharacterPortrait key={identity} skinId={skinId||appearance.character?.activeSkin} value={avatar||appearance.character?.characterAvatar} size={size}/>):<span aria-hidden="true" style={{width:"42%",height:"42%",borderRadius:"50%",background:"currentColor",opacity:.15}}/>}
+    {ready?(appearance.error?<span aria-label="Profile picture unavailable">{identity.slice(0,1).toUpperCase()}</span>:appearance.url?<img src={appearance.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<CharacterPortrait key={identity} skinId={skinId||appearance.character?.activeSkin} value={avatar||appearance.character?.characterAvatar} size={size}/>):<span aria-hidden="true" style={{width:"42%",height:"42%",borderRadius:"50%",background:"currentColor",opacity:.15}}/>}
   </span>;
 }
 

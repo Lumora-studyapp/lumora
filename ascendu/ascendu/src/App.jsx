@@ -100,7 +100,7 @@ const LS_RECAP    = "studygrove_recap_shown";
 const LS_ONBOARDING_COMPLETE = "lumora_onboarding_complete";
   // last week-key the recap auto-showed
 
-const ONBOARDING_WELCOME_IMAGE = "/mascot/lumora-gorilla-3d-waving-no-background.png";
+const ONBOARDING_WELCOME_IMAGE = "/mascot/lumora-gorilla-3d-waving-transparent.png";
 const ONBOARDING_EDUCATION_IMAGE = "/mascot/lumora-gorilla-3d-uni-no-background.png";
 const ONBOARDING_REFERRAL_IMAGE = "/mascot/lumora-gorilla-3d-point-no-background.png";
 const ONBOARDING_PROGRESS_IMAGE = "/mascot/lumora-gorilla-3d-progress-no-background.png";
@@ -212,6 +212,9 @@ export const APP_CSS = `
   position:relative;
   z-index:2;
   width:min(100%,380px);
+  flex-shrink:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
   max-height:calc(100dvh - max(29px,env(safe-area-inset-top) + env(safe-area-inset-bottom)));
   box-sizing:border-box;
   margin-top:clamp(5px,2.2dvh,25px);
@@ -226,8 +229,8 @@ export const APP_CSS = `
 }
 @media (min-width:900px) and (min-height:560px) {
   .lumora-auth-stage { align-items:center; }
-  .lumora-auth-panel { margin-top:0; transform:translateX(-215px); }
-  .lumora-auth-art { left:calc(50% + 225px); bottom:10dvh; width:min(42vw,70dvh,540px); }
+  .lumora-auth-panel { margin-top:0; }
+  .lumora-auth-art { left:50%; bottom:0; width:min(100%,51dvh,680px); }
 }
 .lumora-auth-brand {
   display:flex;
@@ -586,6 +589,17 @@ export const APP_CSS = `
   white-space:nowrap;
 }
 .sg-main-menu-button .sg-notification-count{position:absolute;top:-3px;right:-5px}
+.sg-notification-count.sg-friend-tab-count{
+  box-sizing:border-box;
+  flex:0 0 auto;
+  min-width:16px;
+  height:16px;
+  padding:0 4px;
+  font-size:9px;
+  line-height:1;
+  letter-spacing:0;
+  box-shadow:none;
+}
 .sg-shell .sg-pop-anim.sg-add-subject-modal{
   background:color-mix(in srgb,#fff 80%,var(--sg-theme-accent,#56B68B) 20%)!important;
 }
@@ -7590,7 +7604,7 @@ function MySessionsPanel({ user, history, subjects, onEdit, onClose, onBack }) {
                       <div style={ms.editorPreview}>
                         {draftMin*60 < s.secs
                           ? <span>🪙 {draftMin-Math.floor(s.secs/60)} coins on save</span>
-                          : <span style={{color:"#bbb"}}>Drag left to reduce</span>}
+                          : <span style={{color:"var(--sg-theme-muted,#59675e)"}}>Drag left to reduce</span>}
                       </div>
                       <button style={{...ms.saveBtn,...(draftMin*60>=s.secs?ms.saveBtnDisabled:{})}}
                         disabled={busy || draftMin*60>=s.secs} onClick={()=>save(s)}>
@@ -7617,31 +7631,31 @@ const ms = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:340},
   sheet:{background:"var(--sg-theme-neutral,#fff)",borderRadius:"24px 24px 0 0",padding:"20px 16px 28px",width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto"},
   header:{marginBottom:6},
-  back:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"#666",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2},
-  title:{fontSize:19,fontWeight:700,color:"#1a1a2e",margin:0,letterSpacing:-0.2},
-  subtitle:{fontSize:12,color:"#999",marginTop:2,lineHeight:1.4,maxWidth:280},
+  back:{background:"#F0F2EE",border:"none",borderRadius:"50%",width:32,height:32,fontSize:17,color:"var(--sg-theme-text,#33463A)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2},
+  title:{fontSize:19,fontWeight:700,color:"var(--sg-theme-text,#1a1a2e)",margin:0,letterSpacing:-0.2},
+  subtitle:{fontSize:12,color:"var(--sg-theme-muted,#59675e)",marginTop:2,lineHeight:1.4,maxWidth:280},
   toast:{background:"#1a1a2e",color:"#fff",fontSize:12.5,fontWeight:600,borderRadius:10,padding:"8px 12px",margin:"8px 0",textAlign:"center"},
-  empty:{textAlign:"center",color:"#aaa",fontSize:13.5,padding:"36px 12px"},
+  empty:{textAlign:"center",color:"var(--sg-theme-muted,#59675e)",fontSize:13.5,padding:"36px 12px"},
   list:{display:"flex",flexDirection:"column",gap:8,marginTop:12},
   card:{background:"var(--sg-theme-neutral,#F9FBF8)",border:"1px solid #EEF2EC",borderRadius:14,overflow:"hidden"},
   row:{display:"flex",alignItems:"center",gap:10,width:"100%",background:"transparent",border:"none",padding:"11px 12px",cursor:"pointer",textAlign:"left"},
   icon:{width:34,height:34,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0},
-  subjLabel:{display:"block",fontSize:13.5,fontWeight:700,color:"#1a1a2e"},
+  subjLabel:{display:"block",fontSize:13.5,fontWeight:700,color:"var(--sg-theme-text,#1a1a2e)"},
   editedTag:{fontSize:9.5,fontWeight:700,color:"#8B5CB8",background:"#F4EEFA",borderRadius:8,padding:"1px 6px",marginLeft:6},
-  adminTag:{fontSize:9.5,fontWeight:700,color:"#999",background:"#F0F2EE",borderRadius:8,padding:"1px 6px",marginLeft:6},
-  when:{display:"block",fontSize:11,color:"#aaa",marginTop:1},
+  adminTag:{fontSize:9.5,fontWeight:700,color:"var(--sg-theme-muted,#59675e)",background:"#F0F2EE",borderRadius:8,padding:"1px 6px",marginLeft:6},
+  when:{display:"block",fontSize:11,color:"var(--sg-theme-muted,#59675e)",marginTop:1},
   dur:{fontSize:13.5,fontWeight:700,color:"var(--sg-theme-accent-strong,#2D6A4F)",flexShrink:0},
-  chev:{fontSize:15,color:"#ccc",fontWeight:700,flexShrink:0,width:14,textAlign:"center"},
+  chev:{fontSize:15,color:"var(--sg-theme-muted,#59675e)",fontWeight:700,flexShrink:0,width:14,textAlign:"center"},
   editor:{padding:"2px 14px 14px",borderTop:"1px solid #EEF2EC",marginTop:2},
   editorRow:{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginTop:10,marginBottom:6},
-  editorNow:{fontSize:20,fontWeight:800,color:"#1a1a2e"},
-  editorWas:{fontSize:11.5,color:"#aaa"},
+  editorNow:{fontSize:20,fontWeight:800,color:"var(--sg-theme-text,#1a1a2e)"},
+  editorWas:{fontSize:11.5,color:"var(--sg-theme-muted,#59675e)"},
   slider:{width:"100%",accentColor:"var(--sg-theme-accent,#2D6A4F)",cursor:"pointer"},
   editorPreview:{fontSize:12,fontWeight:600,color:"#C0392B",margin:"8px 0"},
   saveBtn:{display:"block",width:"100%",padding:"11px 0",background:"var(--sg-theme-accent,#2D6A4F)",border:"none",borderRadius:12,fontSize:13.5,fontWeight:700,color:"#fff",cursor:"pointer"},
   saveBtnDisabled:{background:"#D5DBD3",cursor:"not-allowed"},
   removeBtn:{display:"block",width:"100%",padding:"9px 0",background:"transparent",border:"none",fontSize:12,fontWeight:600,color:"#C0392B",cursor:"pointer",marginTop:6},
-  removeNote:{textAlign:"center",fontSize:10.5,color:"#bbb",marginTop:-2},
+  removeNote:{textAlign:"center",fontSize:12,lineHeight:1.5,color:"var(--sg-theme-text,#33463A)",marginTop:4},
   closeBtn:{display:"block",width:"100%",marginTop:16,padding:"13px 0",background:"var(--sg-theme-primary-gradient,linear-gradient(135deg,#2D6A4F,#56B68B))",border:"none",borderRadius:14,fontSize:15,fontWeight:750,color:"#fff",cursor:"pointer",boxShadow:"0 5px 16px var(--sg-theme-shadow,rgba(45,106,79,.2))"},
 };
 
@@ -11861,7 +11875,7 @@ function VisitGarden({ username, viewerSubjects, onClose, onProfile }) {
 
 function LeaderboardRows({entries,currentUser,subjects,onVisit,loading=false,emptyTitle="No study time yet",emptyBody="Complete a session to appear here."}){
   const podiumStyles=[gl.rankGold,gl.rankSilver,gl.rankBronze];
-  if(loading)return <div style={gl.loadingRows}>{[0,1,2,3].map(i=><div key={i} style={gl.loadingRow}>
+  if(loading&&!entries.length)return <div style={gl.loadingRows}>{[0,1,2,3].map(i=><div key={i} style={gl.loadingRow}>
     <div className="sg-skeleton" style={{width:30,height:30,borderRadius:10}}/>
     <div className="sg-skeleton" style={{width:34,height:34,borderRadius:"50%"}}/>
     <div className="sg-skeleton" style={{height:11,flex:1}}/>
@@ -12096,7 +12110,7 @@ const fr={
   notice:{fontSize:10.5,color:"#718078",background:"#F2F5F1",border:"1px solid #E1E7DF",borderRadius:11,padding:"8px 10px",marginBottom:9,lineHeight:1.4},
 };
 
-function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey }){
+function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey, visible=true }){
   const inviteFromUrl=()=>new URLSearchParams(window.location.search).get("group")?.toUpperCase()||"";
   const [groups,setGroups]=useState(null);
   const [groupsError,setGroupsError]=useState("");
@@ -12104,8 +12118,9 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [view,setView]=useState("weekly");
   const [weekOffset,setWeekOffset]=useState(1);
   const [boards,setBoards]=useState({weekly:[],allTime:[]});
-  const [boardLoading,setBoardLoading]=useState(false);
-  const [boardError,setBoardError]=useState("");
+  const [boardReady,setBoardReady]=useState({});
+
+  const [boardErrors,setBoardErrors]=useState({});
   const [pastBoard,setPastBoard]=useState([]);
   const [pastLoading,setPastLoading]=useState(false);
   const [pastError,setPastError]=useState("");
@@ -12125,31 +12140,38 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   const [transferPickerOpen,setTransferPickerOpen]=useState(false);
 
   const reload=useCallback(async preferredId=>{
-    const [groupResult,inbox]=await Promise.all([fbLoadGroups(currentUser),fbLoadGroupInvites(currentUser)]);
+    const groupResult=await fbLoadGroups(currentUser);
     const next=groupResult.groups||[];
     setGroups(next);
     setGroupsError(groupResult.ok?"":groupResult.error);
-    setIncomingInvites(inbox.invites||[]);
-    setInviteLoadError(inbox.ok?"":inbox.error);
-    setInvitesLoading(false);
     setActiveId(current=>{
       const wanted=preferredId||current;
       return next.some(g=>g.id===wanted)?wanted:(next[0]?.id||null);
     });
   },[currentUser]);
-  useEffect(()=>{reload();},[reload]);
+  useEffect(()=>{if(visible)reload();},[reload,visible]);
+  useEffect(()=>{
+    if(!visible)return;
+    let live=true;
+    fbLoadGroupInvites(currentUser).then(inbox=>{if(live){setIncomingInvites(inbox.invites||[]);setInviteLoadError(inbox.ok?"":inbox.error);setInvitesLoading(false);}});
+    return()=>{live=false;};
+  },[currentUser,visible,groups]);
   const active=groups?.find(g=>g.id===activeId)||null;
   useEffect(()=>{
     let live=true;
-    if(!active){setBoards({weekly:[],allTime:[]});setBoardError("");setPendingInvites([]);return;}
-    setBoardLoading(true);setBoardError("");
-    Promise.all([fbLoadGroupBoard(active,"weekly"),fbLoadGroupBoard(active,"allTime"),fbLoadPendingGroupInvites(active)]).then(([weekly,allTime,pending])=>{
-      if(live){
-        setBoards({weekly:weekly.rows||[],allTime:allTime.rows||[]});
-        setBoardError(weekly.ok&&allTime.ok?"":weekly.error||allTime.error);
-        setPendingInvites(pending);setBoardLoading(false);
-      }
-    });
+    if(!active){setBoards({weekly:[],allTime:[]});setBoardErrors({});setPendingInvites([]);return;}
+    setBoardErrors({});
+    for(const period of ["weekly","allTime"]){
+      fbLoadGroupBoard(active,period).then(result=>{
+        if(!live)return;
+        if(result.ok){
+          setBoards(current=>({...current,[period]:result.rows||[]}));
+          setBoardReady(current=>({...current,[period]:active.id+":"+currentWeekKey}));
+        }else setBoardErrors(current=>({...current,[period]:result.error}));
+      });
+    }
+    // Invitations and other periods must never delay a ready ranking.
+    fbLoadPendingGroupInvites(active).then(pending=>{if(live)setPendingInvites(pending);});
     return()=>{live=false;};
   },[active,currentWeekKey]);
   useEffect(()=>{
@@ -12227,9 +12249,9 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
     if(result)await reload();
   };
   const owner=active&&canonUsername(active.owner)===canonUsername(currentUser);
-  const board=view==="past"?pastBoard:(boards[view]||[]);
-  const showBoardLoading=view==="past"?pastLoading:boardLoading;
-  const showBoardError=view==="past"?pastError:boardError;
+  const board=view==="past"?pastBoard:(boardReady[view]===active?.id+":"+currentWeekKey?boards[view]||[]:[]);
+  const showBoardLoading=view==="past"?pastLoading:!boardErrors[view]&&boardReady[view]!==active?.id+":"+currentWeekKey;
+  const showBoardError=view==="past"?pastError:boardErrors[view];
   const weeklyEligibility=groupRewardEligibility(active,boards.weekly);
   const displayedWeek=view==="past"?weekKeyForOffset(weekOffset):weekKeyForOffset(0);
   const displayedEligibility=groupRewardEligibility(active,view==="past"?pastBoard:boards.weekly);
@@ -12371,21 +12393,20 @@ function GroupLeaderboardPanel({ currentUser, subjects, onVisit, currentWeekKey 
   </div>;
 }
 
-function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network,onRetryNetwork}){
+function LeaderboardHub({data,currentUser,loading,subjects,onVisit,currentWeekKey,network,onRetryNetwork,visible=true}){
   const [section,setSection]=useState("groups");
   return <div>
     <div style={{...S.toggleRow,marginBottom:12}}>
       <button style={{...S.toggleBtn,...(section==="groups"?S.toggleBtnActive:{})}} onClick={()=>setSection("groups")}>🔐 Groups</button>
-      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{})}} onClick={()=>setSection("friends")}>
+      <button style={{...S.toggleBtn,...(section==="friends"?S.toggleBtnActive:{}),display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={()=>setSection("friends")}>
         <span style={fr.friendTabLabel}>👥 Friends</span>
-        {network.incoming.length>0&&<span className="sg-notification-count" aria-label={`${network.incoming.length} incoming friend requests`}>
+        {network.incoming.length>0&&<span className="sg-notification-count sg-friend-tab-count" aria-label={`${network.incoming.length} incoming friend requests`}>
           {network.incoming.length>9?"9+":network.incoming.length}
         </span>}
       </button>
     </div>
-    {section==="groups"
-      ? <GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey}/>
-      : <FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network} currentWeekKey={currentWeekKey} onRetryNetwork={onRetryNetwork}/>}
+    <div hidden={section!=="groups"}><GroupLeaderboardPanel currentUser={currentUser} subjects={subjects} onVisit={onVisit} currentWeekKey={currentWeekKey} visible={visible&&section==="groups"}/></div>
+    <div hidden={section!=="friends"}><FriendsLeaderboardPanel data={data} currentUser={currentUser} loading={loading} subjects={subjects} onVisit={onVisit} network={network} currentWeekKey={currentWeekKey} onRetryNetwork={onRetryNetwork}/></div>
   </div>;
 }
 
@@ -12656,6 +12677,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [paused,setPaused]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [tab,setTab]=useState("timer");
+  const [boardOpenedUser,setBoardOpenedUser]=useState(null);
+  useEffect(()=>{if(tab==="leaderboard")setBoardOpenedUser(user);},[tab,user]);
   const studyWeekKey=weekRolloverToken;
   const [lb,setLb]=useState({weekly:[],allTime:[]});
   const [loading,setLoading]=useState(false);
@@ -13771,7 +13794,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setBadges([]);setHistory(null);setTodaySecs(0);setStreak(0);
     setLb({weekly:[],allTime:[]});setPresence([]);setGroupPresencePeers([]);setFriendNetwork({friends:[],incoming:[],outgoing:[],loading:false,error:""});setOtherTabActive(false);setLoading(false);setTab("timer");
     setShowComplete(null);setShowShop(false);setShowGardenShop(false);setShowBackgroundShop(false);setShowBadges(false);
-    setShowSoundSettings(false);setShowCharacterEditor(false);setCharacterAvatar(DEFAULT_CHARACTER);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);
+    setShowSoundSettings(false);setShowCharacterEditor(false);setCharacterAvatar(DEFAULT_CHARACTER);soundEffects.stop();setShowSessions(false);setShowAccount(false);setShowPrivacyData(false);setPrivacyFromMenu(false);setShowAdmin(false);setVisiting(null);setProfileUser(null);setProfileAchievementGallery(false);setShowMenu(false);setBoardOpenedUser(null);
   };
 
   const navigateOnboarding=nextStep=>{
@@ -13779,11 +13802,17 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     setOnboardingStep(nextStep);
   };
   const handleReplayOnboarding=()=>{
-    lsRemove(LS_ONBOARDING_COMPLETE);
+    if(!user)return;
     setOnboardingAnswers({educationStage:"",referralSource:"",studyHours:"",studyGoals:[]});
     setShowMenu(false);
     onboardingReplayRef.current=true;
     navigateOnboarding(1);
+  };
+  const handleExitOnboarding=()=>{
+    if(!user || !onboardingReplayRef.current)return;
+    onboardingReplayRef.current=false;
+    lsSetR(LS_ONBOARDING_COMPLETE,"1");
+    setOnboardingStep(0);
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
@@ -14197,6 +14226,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   if(onboardingStep)return (
     <>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
+      {user && onboardingReplayRef.current && (
+        <div style={{position:"sticky",top:0,zIndex:10,display:"flex",justifyContent:"center",background:"#fff",padding:"max(8px,env(safe-area-inset-top)) 16px 8px"}}>
+          <div style={{width:"100%",maxWidth:472,display:"flex",justifyContent:"flex-end"}}>
+            <button type="button" onClick={handleExitOnboarding} style={{minHeight:44,padding:"8px 14px",border:"1px solid #D9C7DE",borderRadius:12,background:"#fff",color:"#5B1B6B",fontSize:14,fontWeight:750,cursor:"pointer"}}>Exit onboarding</button>
+          </div>
+        </div>
+      )}
       <div key={onboardingStep} className={`lumora-onboarding-slide${onboardingDirection<0?" is-back":""}`}>
         {onboardingStep===1
         ? <OnboardingWelcome onNext={()=>navigateOnboarding(2)}/>
@@ -14594,10 +14630,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             </div>
           )}
 
-          {tab==="leaderboard"&&(
-            <div style={S.boardView} className="sg-view-anim" key="view-board">
+          {(tab==="leaderboard"||boardOpenedUser===user)&&(
+            <div hidden={tab!=="leaderboard"} style={{...S.boardView,...(tab!=="leaderboard"?{display:"none"}:{})}} key="view-board">
               <StudyingNow presence={presence} currentUser={user}/>
-              <MemoLeaderboardHub data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}
+              <MemoLeaderboardHub key={user} visible={tab==="leaderboard"} data={lb} currentUser={user} loading={loading||friendNetwork.loading} subjects={subjects} onVisit={setVisiting} currentWeekKey={studyWeekKey} network={friendNetwork}
                 onRetryNetwork={()=>setFriendNetworkAttempt(attempt=>attempt+1)}/>
             </div>
           )}
