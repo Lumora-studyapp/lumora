@@ -171,7 +171,8 @@ service cloud.firestore {
       allow get: if signedIn()
         && (!exists(/databases/$(database)/documents/friend_connections/$(connectionId))
           || isFriendParticipant(resource.data));
-      allow list: if isFriendParticipant(resource.data);
+      // array-contains proves membership, but not a separate is-list type guard.
+      allow list: if signedIn() && request.auth.uid in resource.data.userUids;
       allow create: if signedIn()
         && request.resource.data.status == 'pending'
         && request.resource.data.requesterUid == request.auth.uid

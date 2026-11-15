@@ -12,7 +12,7 @@ const handler=app.slice(app.indexOf('  const endSession=()=>{'),app.indexOf('  c
 function runEnd(overrides={}) {
   const saves=[],messages=[];
   const context={
-    finishingSessionRef:{current:false},sessionIdRef:{current:'test-session'},
+    finishingSessionRef:{current:false},sessionIdRef:{current:'test-session'},goalChimedRef:{current:false},soundEffects:{play:()=>{},stop:()=>{}},
     sessionStartRef:{current:1},activeTaskRef:{current:null},intervalRef:{current:1},
     paused:false,baseElapsed:{current:0},startTimeRef:{current:1},
     elapsed:0,getTrueElapsed:()=>600,timerStyle:'standard',

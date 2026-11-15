@@ -7184,7 +7184,7 @@ const gs = {
 };
 
 // ── Badges / Achievements Modal ───────────────────────────────────────────────
-function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onAddToProfile, onClose, onBack }) {
+export function BadgesModal({ unlocked, history, claimedRewards, onClaimReward, onAddToProfile, onClose, onBack }) {
   const earned = BADGES.filter(b=>unlocked.includes(b.id)).length;
   return (
     <div style={bg.overlay} className="sg-overlay-anim" onClick={onClose}>
@@ -11458,7 +11458,7 @@ function ForestGarden({ sessions, subjects, range, decorations = [], enhancement
 const fg = {
   wrap:{background:"#0f1f1a",borderRadius:18,padding:0,marginBottom:16,overflow:"auto",maxHeight:"min(68vh,560px)",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.18)",position:"relative",contain:"layout paint style",WebkitOverflowScrolling:"touch",cursor:"grab",touchAction:"none",userSelect:"none"},
   zoomControls:{position:"sticky",top:8,left:"calc(50% - 34px)",width:68,display:"flex",gap:5,zIndex:4,margin:"8px auto -38px",pointerEvents:"auto"},
-  zoomButton:{width:31,height:31,border:0,borderRadius:9,background:"var(--sg-theme-neutral,rgba(255,255,255,.92))",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
+  zoomButton:{display:"grid",placeItems:"center",padding:0,minHeight:0,boxSizing:"border-box",flexShrink:0,width:31,height:31,border:0,borderRadius:9,background:"var(--sg-theme-neutral,rgba(255,255,255,.92))",boxShadow:"0 2px 8px rgba(37,48,38,.22)",color:"#315E4F",fontSize:21,fontWeight:750,lineHeight:1,cursor:"pointer"},
   footer:{display:"flex",justifyContent:"center",gap:20,padding:"8px 0 12px",background:"rgba(0,0,0,0.18)",backdropFilter:"blur(4px)"},
   stat:{fontSize:12,color:"rgba(255,255,255,0.82)",fontWeight:600},
 };
@@ -12062,9 +12062,9 @@ function FriendsLeaderboardPanel({ data, currentUser, loading, subjects, onVisit
       </div>
       {view==="past"&&<LeaderboardWeekNavigator weekOffset={weekOffset} onChange={setWeekOffset}/>}
       <div style={fr.periodNote}>{view==="allTime"?"All-time rankings are private to your accepted friends.":weekKeyForOffset(view==="past"?weekOffset:0).rangeLabel}</div>
-      <LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showLoading}
+      {(!network.error||network.friends.length>0)&&<LeaderboardRows entries={entries} currentUser={currentUser} subjects={subjects} onVisit={onVisit} loading={showLoading}
         emptyTitle={network.friends.length?"No study time here yet":"Add a friend to build your leaderboard"}
-        emptyBody={network.friends.length?(view==="past"?"No accepted friends recorded study time in this week.":"Complete a session to appear in this ranking."):"Choose Add friend to invite someone by username."}/>
+        emptyBody={network.friends.length?(view==="past"?"No accepted friends recorded study time in this week.":"Complete a session to appear in this ranking."):"Choose Add friend to invite someone by username."}/>}
     </div>
   );
 }
@@ -12429,13 +12429,14 @@ const MILESTONE_GREEN = "#1FA34D"; // vivid saturated green
 const MILESTONE_GREY  = "#C6CEC7"; // fully greyed-out locked stage
 const MILESTONE_TIP_W = 40; // speech-bubble width as a percentage of the track
 const mp = {
-  cardOpen:{ position:"relative", background:"linear-gradient(155deg,#FFFFFF 0%,#FBFDFB 62%,#F5FAF6 100%)", border:"1px solid #DDE8DE", borderRadius:20, padding:"13px 14px 12px", marginTop:7, marginBottom:9, boxShadow:"0 8px 24px rgba(36,75,48,.075), inset 0 1px 0 rgba(255,255,255,.9)", overflow:"hidden" },
+  claimNotice:{position:"absolute",inset:"auto 10px 10px",zIndex:5,boxSizing:"border-box",padding:"9px 12px",borderRadius:12,background:"var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff))",color:"var(--sg-theme-accent-strong,#2D6A4F)",border:"1px solid var(--sg-theme-border,#D9E8DD)",boxShadow:"0 4px 16px rgba(0,0,0,.14)",fontSize:12,fontWeight:750,lineHeight:1.4,textAlign:"center",overflowWrap:"anywhere",pointerEvents:"none"},
+  cardOpen:{ position:"relative", background:"linear-gradient(155deg,#FFFFFF 0%,#FBFDFB 62%,#F5FAF6 100%)", border:"1px solid #DDE8DE", borderRadius:20, padding:"10px 12px", marginTop:7, marginBottom:9, boxShadow:"0 8px 24px rgba(36,75,48,.075), inset 0 1px 0 rgba(255,255,255,.9)", overflow:"hidden" },
   cardClosed:{ position:"relative", background:"transparent", border:"none", borderRadius:15, padding:"0 2px 0", marginBottom:0 },
-  header:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:10 },
+  header:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:6 },
   title:{ fontSize:11, fontWeight:850, color:"#5B6B60", textTransform:"uppercase", letterSpacing:".7px" },
   hours:{ fontSize:11, fontWeight:850, color:"#245C43", background:"linear-gradient(135deg,#E4F4E9,#F4FAF5)", border:"1px solid #CFE7D6", borderRadius:12, padding:"6px 10px", marginTop:-3, marginRight:-4, whiteSpace:"nowrap", boxShadow:"0 2px 7px rgba(45,106,79,.09)" },
   track:{ position:"relative", display:"flex", alignItems:"center", padding:"12px 4px 13px" },
-  dividerOpen:{ height:0, margin:"10px 0 0" },
+  dividerOpen:{ height:0, margin:0 },
   dividerClosed:{ height:0, margin:"5px 0 0" },
   seg:{ flex:"1 1 auto", minWidth:7, height:3, margin:"0 -8.5px", transition:"background .25s ease, box-shadow .25s ease" },
   dot:{ position:"relative", flex:"0 0 auto", width:17, height:17, borderRadius:"50%", cursor:"pointer", border:"none", padding:0, outline:"none", transition:"transform .15s ease, box-shadow .15s ease" },
@@ -12495,6 +12496,12 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
   const [claiming,setClaiming] = useState(false);
+  const [claimNotice,setClaimNotice] = useState(null);
+  useEffect(()=>{
+    if(!claimNotice)return;
+    const timer=setTimeout(()=>setClaimNotice(null),3500);
+    return()=>clearTimeout(timer);
+  },[claimNotice]);
   const totalHours = Array.isArray(history)
     ? history.reduce((a,s)=>a+(Number(s.secs)||0),0)/3600
     : 0;
@@ -12554,18 +12561,23 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
   const claimReward=async()=>{
     if(rewardLocked||rewardClaimed||claiming||!onClaimReward)return;
     setClaiming(true);
-    try{await onClaimReward(carouselIndex);}finally{setClaiming(false);}
+    try{
+      const result=await onClaimReward(carouselIndex);
+      setClaimNotice({message:result?.message||(result===false?"Couldn’t claim that reward yet":`🪙 +${rewardAmount.toLocaleString()} coins claimed`)});
+    }catch{setClaimNotice({message:"Couldn’t claim that reward yet. Please retry."});}
+    finally{setClaiming(false);}
   };
 
   return (
-    <section style={mp.cardOpen} aria-label="Progress level carousel">
+    <section className="sg-milestone-card" style={mp.cardOpen} aria-label="Progress level carousel">
+      {claimNotice&&<div role="status" style={mp.claimNotice}>{claimNotice.message}</div>}
       <div style={mp.header}>
         <span style={mp.title}>Progress level</span>
         <span style={mp.hours}>⏳ {fmtHrs(totalHours*3600)} lifetime</span>
       </div>
       <div className="sg-milestone-layout" style={mp.carouselLayout}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-        <div style={mp.stageRail}>
+        <div className="sg-milestone-rail" style={mp.stageRail}>
           <div style={mp.railStages}>
             {visibleStages.map((stage, index) => {
               const completed = totalHours >= stage.max;
@@ -12588,7 +12600,7 @@ function MilestonePath({ history, claimedRewards=[], onClaimReward }) {
           </div>
         </div>
 
-        <div key={`art-${carouselIndex}`} className={transitionDirection==="next"?"sg-milestone-art-next":"sg-milestone-art-prev"} style={mp.artColumn}>
+        <div key={`art-${carouselIndex}`} className={`sg-milestone-art ${transitionDirection==="next"?"sg-milestone-art-next":"sg-milestone-art-prev"}`} style={mp.artColumn}>
           <div style={mp.artPanel}>
             <ImageAsset className="sg-keepcolor" src={selectedStage.image} alt={selectedStage.name} fetchPriority="high"
               style={{...mp.stageImage, transform:`translate(${selectedStage.displayOffsetX||0}px, ${selectedStage.displayOffsetY||0}px) scale(${selectedStage.displayScale||1})`, filter:`var(--sg-counter-filter) ${stageColourFilter}`, ...(!selectedCompleted ? mp.stageImageLocked : {})}} />
@@ -13620,7 +13632,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       }
     } catch(e) {}
   };
-  const pauseSession=()=>setPaused(p=>!p);
+  const pauseSession=()=>{if(!paused)soundEffects.play("breakStarted");setPaused(p=>!p);};
   const startNextPomodoro=()=>{
     if(timerStyle!=="pomodoro")return;
     const endingBreak=pomodoroRef.current.phase==="break"&&!pomodoroRef.current.awaitingNext;
@@ -13638,6 +13650,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     // A double tap or an automatic Pomodoro completion may already be saving.
     // Do not reinterpret its reset clock as a second, zero-length session.
     if(finishingSessionRef.current||!sessionIdRef.current)return;
+    soundEffects.stop();soundEffects.play("studyCompleted");goalChimedRef.current=true;
     // Never trust `elapsed` state here — it's only refreshed by the interval
     // tick or a wake-up event, both of which can lag behind a real screen
     // lock/unlock. Recompute from the wall clock at the exact moment the
@@ -13925,12 +13938,11 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const handleSaveTargets=obj=>{ setTargets(obj); lsSet(LS_TARGETS,obj); fbSavePrefs(user,{targets:obj}); };
   const handleClaimMilestoneReward=async stageIndex=>{
     const result=await fbClaimMilestoneReward(user,stageIndex);
-    if(!result.ok){showToast(result.reason==="locked"?"Reach this stage to unlock its reward":"Couldn’t claim that reward yet");return false;}
+    if(!result.ok)return {ok:false,message:result.reason==="locked"?"Reach this stage to unlock its reward":"Couldn’t claim that reward yet"};
     if(Array.isArray(result.claimed))setClaimedMilestoneRewards(result.claimed);
     if(typeof result.coinBalance==="number"){setCoins(result.coinBalance);lsSet(LS_COINS,result.coinBalance);}
     if(!result.alreadyClaimed)soundEffects.play('milestone');
-    showToast(result.alreadyClaimed?"This stage reward was already claimed":`🪙 ${result.reward.toLocaleString()} stage reward claimed`);
-    return true;
+    return {ok:true,message:result.alreadyClaimed?"This stage reward was already claimed":`🪙 +${result.reward.toLocaleString()} coins claimed`};
   };
 
   // Load subjects + exams from Firebase on login (cloud is source of truth).
@@ -14288,7 +14300,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
       {showBadges&&<BadgesModal unlocked={badges} history={history} claimedRewards={claimedMilestoneRewards} onClaimReward={handleClaimMilestoneReward} onAddToProfile={()=>{setShowBadges(false);setProfileAchievementGallery(true);setProfileUser(user);}} onClose={()=>setShowBadges(false)}
         onBack={()=>{setShowBadges(false);setShowMenu(true);}}/>}
       {visiting&&<VisitGarden username={visiting} viewerSubjects={subjects} onClose={()=>setVisiting(null)} onProfile={()=>{setProfileAchievementGallery(false);setProfileUser(visiting);}}/>}
-      {profileUser&&<StudyProfile username={profileUser} currentUser={user} skinId={profileUser===user?activeSkin:null} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
+      {profileUser&&<StudyProfile key={profileUser} username={profileUser} currentUser={user} skinId={profileUser===user?activeSkin:null} avatar={profileUser===user?characterAvatar:null} badges={badges} badgeCatalog={BADGES} history={history||[]} openAchievementGallery={profileAchievementGallery} onClose={()=>{setProfileUser(null);setProfileAchievementGallery(false);}}/>}
       {showSessions&&<MySessionsPanel user={user} history={history} subjects={subjects} onEdit={handleSessionEdited}
         onClose={()=>{setShowSessions(false);setSessionsFromMenu(false);}}
         onBack={sessionsFromMenu?()=>{setShowSessions(false);setSessionsFromMenu(false);setShowMenu(true);}:null}/>}

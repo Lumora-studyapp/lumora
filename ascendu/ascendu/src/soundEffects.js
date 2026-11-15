@@ -6,12 +6,14 @@ export const SOUND_EVENTS = [
   {id:'taskCompleted',label:'Task completed',description:'Subtle confirmation',notes:[659.25],spacing:0,duration:.22},
   {id:'milestone',label:'Milestone reached',description:'Warm celebratory chime',notes:[523.25,659.25,783.99,1046.5],spacing:.2,duration:.8},
 ];
-export const SOUND_STYLES = [{id:'soft',label:'Soft'},{id:'warm',label:'Warm'},{id:'glass',label:'Glass'}];
+export const SOUND_STYLES = [{id:'confirm',label:'Ready'},{id:'water',label:'Water drop'},{id:'sparkle',label:'Sparkle'},{id:'achievement',label:'Achievement'},{id:'soft',label:'Soft'},{id:'warm',label:'Warm'},{id:'glass',label:'Glass'}];
+const CLIPS={confirm:'/sounds/confirm.wav',water:'/sounds/water-drop.wav',sparkle:'/sounds/sparkle.wav',achievement:'/sounds/achievement.wav'};
+const DEFAULT_STYLES={studyStarted:'confirm',studyCompleted:'sparkle',breakStarted:'water',milestone:'achievement',breakEnded:'soft',taskCompleted:'soft'};
 export function normalizeSoundPreferences(value={}) {
   const raw=value&&typeof value==='object'?value:{};
-  return {enabled:raw.enabled!==false,volume:typeof raw.volume==='number'&&Number.isFinite(raw.volume)?Math.min(1,Math.max(0,raw.volume)):.55,
+  return {soundVersion:1,enabled:raw.enabled!==false,volume:typeof raw.volume==='number'&&Number.isFinite(raw.volume)?Math.min(1,Math.max(0,raw.volume)):.55,
     events:Object.fromEntries(SOUND_EVENTS.map(({id})=>[id,{enabled:raw.events?.[id]?.enabled!==false,
-      style:SOUND_STYLES.some(style=>style.id===raw.events?.[id]?.style)?raw.events[id].style:'soft'}]))};
+      style:SOUND_STYLES.some(style=>style.id===raw.events?.[id]?.style)&&!(raw.soundVersion!==1&&raw.events?.[id]?.style==='soft')?raw.events[id].style:DEFAULT_STYLES[id]}]))};
 }
 
 // One effects-only context; never touch media elements or the study audio player.
@@ -19,9 +21,9 @@ export function createSoundEffects(getContext=()=>{
   const Context=globalThis.AudioContext||globalThis.webkitAudioContext;
   return Context?new Context():null;
 }) {
-  let context=null,master=null,preferences=normalizeSoundPreferences(),activeUntil=0;
+  let context=null,master=null,preferences=normalizeSoundPreferences(),activeUntil=0,activeClip=null,pendingMilestone=false;
   const nodes=new Set(),timers=new Set(),lastPlayed=new Map();
-  const stop=()=>{timers.forEach(clearTimeout);timers.clear();nodes.forEach(node=>{try{node.stop();}catch{}});nodes.clear();activeUntil=0;};
+  const stop=()=>{pendingMilestone=false;if(activeClip){activeClip.pause();activeClip.onended=null;activeClip=null;}timers.forEach(clearTimeout);timers.clear();nodes.forEach(node=>{try{node.stop();}catch{}});nodes.clear();activeUntil=0;};
   const unlock=()=>{
     try {
       if(!context||context.state==='closed'){context=getContext();if(!context)return;master=context.createGain();master.gain.value=preferences.enabled?preferences.volume:0;master.connect(context.destination);}
@@ -31,11 +33,25 @@ export function createSoundEffects(getContext=()=>{
   const configure=value=>{
     preferences=normalizeSoundPreferences(value);
     if(!preferences.enabled||!preferences.volume)stop();
+    if(activeClip)activeClip.volume=preferences.enabled?preferences.volume:0;
     if(context&&master){master.gain.cancelScheduledValues(context.currentTime);master.gain.setTargetAtTime(preferences.enabled?preferences.volume:0,context.currentTime,.015);}
   };
   const play=(id,{preview=false}={})=>{
     const event=SOUND_EVENTS.find(item=>item.id===id),setting=preferences.events[id];
     if(!event||!preferences.enabled||!preferences.volume||(!preview&&!setting.enabled))return false;
+    if(preview)stop();
+    if(activeClip){if(!preview&&id==='milestone')pendingMilestone=true;return false;}
+    const clip=CLIPS[setting.style];
+    if(clip){
+      try{
+        if(typeof globalThis.Audio!=='function')return false;
+        const audio=new globalThis.Audio(clip);activeClip=audio;audio.volume=preferences.volume;
+        audio.onended=()=>{if(activeClip===audio){activeClip=null;if(pendingMilestone){pendingMilestone=false;play('milestone');}}};
+        audio.onerror=()=>{if(activeClip===audio){activeClip=null;pendingMilestone=false;}};
+        const result=audio.play();result?.catch(()=>{if(activeClip===audio){activeClip=null;pendingMilestone=false;}});
+        return true;
+      }catch{activeClip=null;return false;}
+    }
     unlock();
     if(!context||context.state!=='running'||!master)return false;
     const now=context.currentTime;

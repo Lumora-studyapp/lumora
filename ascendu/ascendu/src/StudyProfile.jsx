@@ -41,44 +41,51 @@ function uploadProfileImage(username,kind,blob){
 }
 
 export async function loadStudyProfile(username){
-  const snap=await getDoc(profileRef(username));
+  const snap=await boundedRequest(getDoc(profileRef(username)),"Loading your profile");
   return snap.exists()?{...DEFAULT_PROFILE,...snap.data()}:DEFAULT_PROFILE;
 }
 
 async function imageObjectUrl(username,kind){
-  const blob=await getBlob(ref(storage,imagePath(safeUser(username),kind)));
-  return URL.createObjectURL(blob);
+  const blob=await boundedRequest(getBlob(ref(storage,imagePath(safeUser(username),kind))),"Loading profile image");
+  const url=URL.createObjectURL(blob);
+  try{const image=new Image();image.src=url;await boundedRequest(image.decode(),"Preparing profile image");return url;}
+  catch(error){URL.revokeObjectURL(url);throw error;}
 }
 
 export function ProfileAvatar({username,allow=false,size=38,style={},avatar=null,skinId=null}){
-  const [url,setUrl]=useState("");
-  const [character,setCharacter]=useState(null);
+  const identity=safeUser(username);
+  const [appearance,setAppearance]=useState(null);
   useEffect(()=>{
-    setCharacter(null);
-    if(!allow||!username||skinId)return;
-    let alive=true;
-    const refresh=()=>getDoc(doc(db,"prefs",safeUser(username))).then(snap=>{
-      if(alive&&snap.exists())setCharacter(snap.data());
-    }).catch(()=>{});
-    const onUpdate=event=>{if(safeUser(event.detail)===safeUser(username))refresh();};
-    refresh();window.addEventListener("lumora-character-updated",onUpdate);
-    return()=>{alive=false;window.removeEventListener("lumora-character-updated",onUpdate);};
-  },[username,allow,skinId]);
-  useEffect(()=>{
-    if(!allow||!username){setUrl("");return;}
-    let alive=true,objectUrl="";
-    const refresh=()=>loadStudyProfile(username).then(profile=>profile.photo?imageObjectUrl(username,"photo"):null)
-      .then(next=>{
-        if(!alive){if(next)URL.revokeObjectURL(next);return;}
+    if(!allow||!identity)return;
+    let alive=true,objectUrl="",revision=0;
+    const refresh=async()=>{
+      const request=++revision;
+      let nextUrl="";
+      try{
+        const profile=await loadStudyProfile(identity);
+        let character=null;
+        if(profile.photo)nextUrl=await imageObjectUrl(identity,"photo");
+        else if(!skinId&&!avatar){
+          const snap=await boundedRequest(getDoc(doc(db,"prefs",identity)),"Loading character");
+          character=snap.exists()?snap.data():{};
+        }
+        if(!alive||request!==revision){if(nextUrl)URL.revokeObjectURL(nextUrl);return;}
         if(objectUrl)URL.revokeObjectURL(objectUrl);
-        objectUrl=next||"";setUrl(objectUrl);
-      }).catch(()=>{if(alive)setUrl("");});
-    const onUpdate=event=>{if(safeUser(event.detail)===safeUser(username))refresh();};
-    refresh();window.addEventListener("lumora-profile-updated",onUpdate);
-    return()=>{alive=false;window.removeEventListener("lumora-profile-updated",onUpdate);if(objectUrl)URL.revokeObjectURL(objectUrl);};
-  },[username,allow]);
-  return <span style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:PORTRAIT_BACKGROUND,color:"#fff",fontWeight:800,...style}}>
-    {url?<img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<CharacterPortrait skinId={skinId||character?.activeSkin} value={avatar||character?.characterAvatar} size={size}/>}
+        objectUrl=nextUrl;
+        setAppearance({identity,url:nextUrl,character});
+      }catch{
+        if(nextUrl)URL.revokeObjectURL(nextUrl);
+        // An unavailable custom image must not become a default portrait.
+        if(alive&&request===revision)setAppearance(null);
+      }
+    };
+    const onUpdate=event=>{if(safeUser(event.detail)===identity)refresh();};
+    refresh();window.addEventListener("lumora-profile-updated",onUpdate);window.addEventListener("lumora-character-updated",onUpdate);
+    return()=>{alive=false;window.removeEventListener("lumora-profile-updated",onUpdate);window.removeEventListener("lumora-character-updated",onUpdate);if(objectUrl)URL.revokeObjectURL(objectUrl);};
+  },[identity,allow,skinId,avatar]);
+  const ready=allow&&appearance?.identity===identity;
+  return <span aria-busy={!ready} style={{width:size,height:size,borderRadius:"50%",display:"inline-grid",placeItems:"center",overflow:"hidden",flexShrink:0,background:"var(--sg-theme-control-track,#EAE5ED)",color:"var(--sg-theme-muted,#817287)",fontWeight:800,...style}}>
+    {ready?(appearance.url?<img src={appearance.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<CharacterPortrait key={identity} skinId={skinId||appearance.character?.activeSkin} value={avatar||appearance.character?.characterAvatar} size={size}/>):<span aria-hidden="true" style={{width:"42%",height:"42%",borderRadius:"50%",background:"currentColor",opacity:.15}}/>}
   </span>;
 }
 
@@ -203,6 +210,8 @@ export default function StudyProfile({username,currentUser,avatar=null,skinId=nu
   const [editing,setEditing]=useState(false);
   const [editorClosing,setEditorClosing]=useState(false);
   const [loading,setLoading]=useState(true);
+  const [loadedUser,setLoadedUser]=useState("");
+  const [loadAttempt,setLoadAttempt]=useState(0);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
@@ -222,28 +231,35 @@ export default function StudyProfile({username,currentUser,avatar=null,skinId=nu
   },[pendingBanner]);
   useEffect(()=>{
     let live=true,urls=[];
+    setLoading(true);setError("");setLoadedUser("");
     (async()=>{
       try{
         const next=await loadStudyProfile(username);
-        const [prefsSnap,histSnap]=owner?[null,null]:await Promise.all([getDoc(doc(db,"prefs",safeUser(username))),getDoc(doc(db,"history",safeUser(username)))]);
+        const rememberImage=async kind=>{
+          const url=await imageObjectUrl(username,kind);
+          if(!live){URL.revokeObjectURL(url);return "";}
+          urls.push(url);return url;
+        };
+        const [prefsSnap,histSnap,photo,banner]=await Promise.all([
+          owner?null:boundedRequest(getDoc(doc(db,"prefs",safeUser(username))),"Loading character"),
+          owner?null:boundedRequest(getDoc(doc(db,"history",safeUser(username))),"Loading study history"),
+          next.photo?rememberImage("photo"):"",
+          next.banner?rememberImage("banner"):"",
+        ]);
         if(!live)return;
-        setProfile(next);
-        if(prefsSnap?.exists()){
-          setEarned(Array.isArray(prefsSnap.data().badges)?prefsSnap.data().badges:[]);
-          setCharacter(prefsSnap.data());
-        }
-        if(histSnap?.exists())setSessions(Array.isArray(histSnap.data().sessions)?histSnap.data().sessions:[]);
-        if(next.photo){const url=await imageObjectUrl(username,"photo");urls.push(url);if(live)setPhotoUrl(url);}
-        if(next.banner){const url=await imageObjectUrl(username,"banner");urls.push(url);if(live)setBannerUrl(url);}
+        setProfile(next);setPhotoUrl(photo);setBannerUrl(banner);
+        setCharacter(prefsSnap?.exists()?prefsSnap.data():null);
+        setEarned(owner?badges:(prefsSnap?.data()?.badges||[]));
+        setSessions(owner?history:(histSnap?.data()?.sessions||[]));
+        setLoadedUser(safeUser(username));
       }catch(e){
-        // A new profile has no document yet. Keep the owner in the editor rather
-        // than turning the profile into a permanent warning state.
+        // Keep failed loads separate from a confirmed, uncustomised profile.
         if(live)setError(profileError(e));
       }
       finally{if(live)setLoading(false);}
     })();
     return()=>{live=false;urls.forEach(URL.revokeObjectURL);};
-  },[username,owner]);
+  },[username,owner,loadAttempt]);
   useEffect(()=>{
     if(openAchievementGallery&&owner){setEditing(true);setShowAchievementGallery(true);}
   },[openAchievementGallery,owner]);
@@ -323,6 +339,17 @@ export default function StudyProfile({username,currentUser,avatar=null,skinId=nu
     if(id==="records")return <section><h3 style={sectionTitle}>Personal records</h3><div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9}}>{records.map(record=><div key={record.label} style={{...softCard,padding:"11px 12px"}}><div style={{fontSize:15,fontWeight:800,color:"#2D2034"}}>{record.icon} {record.value}</div><small style={{display:"block",marginTop:3,color:"#766C7B",fontSize:10}}>{record.label}</small></div>)}</div></section>;
     return <section><h3 style={sectionTitle}>Earned achievements</h3><div style={{...softCard,padding:earnedBadges.length?"10px":"15px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>{earnedBadges.map(badge=><span key={badge.id} title={badge.desc} style={{padding:"8px 10px",borderRadius:10,background:"#fff",fontSize:12,fontWeight:700}}>{badge.emoji} {badge.name}</span>)}{!earnedBadges.length&&<><span style={{fontSize:20}}>🏅</span><span style={{fontSize:12,color:"#675B6C"}}>Your achievements will collect here as you study.</span></>}</div></section>;
   };
+  if(loading||loadedUser!==safeUser(username))return <div role="presentation" className="sg-overlay-anim sg-profile-overlay" onClick={event=>{if(event.target===event.currentTarget)onClose();}} style={{position:"fixed",inset:0,zIndex:390,background:"rgba(19,9,31,.65)",display:"grid",placeItems:"center",padding:12}}>
+    <div role="dialog" aria-modal="true" aria-label={username+"'s Study Profile"} aria-busy={loading} style={{position:"relative",width:"min(100%,560px)",borderRadius:24,overflow:"hidden",background:"var(--sg-theme-panel-solid,var(--sg-theme-neutral,#F5F2F6))",color:"var(--sg-theme-text,#493D50)"}}>
+      <button onClick={onClose} aria-label="Close profile" style={{...baseButton,position:"absolute",right:14,top:14,zIndex:1}}>✕</button>
+      <div aria-hidden="true" style={{height:168,background:"var(--sg-theme-control-track,#EAE5ED)"}}/>
+      <div style={{padding:"0 22px 28px"}}><div aria-hidden="true" style={{position:"relative",marginTop:-42,width:82,height:82,borderRadius:"50%",background:"var(--sg-theme-border,#DCD5E0)"}}/>
+        <h2 style={{fontSize:23,margin:"13px 0"}}>{username}</h2>
+        <p role={error?"alert":"status"} style={{fontSize:13}}>{error?"This study profile could not be loaded. Please try again.":"Loading profile…"}</p>
+        {error&&<button onClick={()=>setLoadAttempt(value=>value+1)} style={{...baseButton,marginTop:12}}>Retry</button>}
+      </div>
+    </div>
+  </div>;
   return <div role="presentation" className="sg-overlay-anim sg-profile-overlay" onClick={event=>{if(event.target===event.currentTarget)onClose();}} style={{position:"fixed",inset:0,zIndex:390,background:"rgba(19,9,31,.65)",display:"grid",placeItems:"center",padding:12}}>
     <div role="dialog" className="sg-pop-anim sg-profile-dialog" aria-modal="true" aria-label={username+"'s Study Profile"} style={{width:"min(100%,560px)",maxHeight:"92dvh",overflowY:"auto",borderRadius:24,background:profile.background,color:profile.text,boxShadow:"0 24px 72px #16072666"}}>
       <div style={{height:168,background:bannerUrl?"url("+bannerUrl+") center/cover": "linear-gradient(125deg,"+profile.accent+",#B98BD3)",position:"relative",overflow:"hidden"}}>

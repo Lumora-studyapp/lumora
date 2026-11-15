@@ -1,15 +1,33 @@
 .lumora-sound-overlay{position:fixed;inset:0;z-index:440;display:grid;place-items:center;padding:16px;background:rgba(28,16,36,.5);font-family:Inter,system-ui,sans-serif}
-.lumora-sound-panel{width:min(100%,560px);max-height:calc(100dvh - 32px);overflow-y:auto;background:#fcf9fd;color:#302237;border:1px solid #e6dbe9;border-radius:24px;padding:24px;box-shadow:0 24px 80px #24112c33}
+.lumora-sound-panel{width:min(100%,560px);max-height:calc(100dvh - 32px);overflow-y:auto;background:var(--sg-theme-neutral,#fcf9fd);color:var(--sg-theme-text,#302237);border:1px solid var(--sg-theme-border,#e6dbe9);border-radius:24px;padding:24px;box-shadow:0 24px 80px #24112c33}
 .lumora-sound-panel header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:22px}
-.lumora-sound-panel h2{font-size:23px;margin:0 0 5px}.lumora-sound-panel header p,.lumora-sound-note{font-size:12px;line-height:1.5;color:#776c7d}
-.lumora-sound-panel button,.lumora-sound-panel select{min-height:36px;border:1px solid #dfd1e5;border-radius:10px;background:#fff;color:#63317d;padding:7px 11px;cursor:pointer;font:inherit;font-size:12px}
+.lumora-sound-panel h2{font-size:23px;margin:0 0 5px}.lumora-sound-panel header p,.lumora-sound-note{font-size:12px;line-height:1.5;color:var(--sg-theme-muted,#776c7d)}
+.lumora-sound-panel button,.lumora-sound-panel select{min-height:36px;border:1px solid var(--sg-theme-border,#dfd1e5);border-radius:10px;background:var(--sg-theme-panel-solid,#fff);color:var(--sg-theme-accent-strong,#63317d);padding:7px 11px;cursor:pointer;font:inherit;font-size:12px}
 .lumora-sound-panel button:disabled,.lumora-sound-panel select:disabled{opacity:.5;cursor:default}
-.lumora-sound-panel input{accent-color:#63317d}.lumora-sound-panel input[type=checkbox]{width:19px;height:19px;flex-shrink:0}
+.lumora-sound-panel input{accent-color:var(--sg-theme-accent-strong,#63317d)}.lumora-sound-panel input[type=checkbox]{width:19px;height:19px;flex-shrink:0}
 .lumora-sound-panel :focus-visible{outline:3px solid #ad81c5;outline-offset:3px}
 .lumora-sound-master{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:700;margin-bottom:24px}
 .lumora-sound-volume{display:grid;gap:12px;font-size:13px;font-weight:650}.lumora-sound-volume span{display:flex;justify-content:space-between}.lumora-sound-volume input{width:100%;height:26px}
-.lumora-sound-note{margin:10px 0 20px}.lumora-sound-panel h3{font-size:13px;padding-top:20px;border-top:1px solid #e7dfea;margin-bottom:4px}
-.lumora-sound-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;border-bottom:1px solid #eee6f1}
-.lumora-sound-row label{display:flex;align-items:center;gap:10px;min-width:0}.lumora-sound-row strong{display:block;font-size:13px}.lumora-sound-row small{display:block;font-size:11px;color:#817287;margin-top:3px}.lumora-sound-row>div{display:flex;gap:6px;flex-shrink:0}
-.lumora-sound-panel footer p{font-size:12px;line-height:1.5;min-height:18px;margin:12px 0}.lumora-sound-panel .lumora-sound-save{width:100%;background:#63317d;border-color:#63317d;color:#fff;font-weight:750;min-height:44px}
+.lumora-sound-note{margin:10px 0 20px}.lumora-sound-panel h3{font-size:13px;padding-top:20px;border-top:1px solid var(--sg-theme-border,#e7dfea);margin-bottom:4px}
+.lumora-sound-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;border-bottom:1px solid var(--sg-theme-border,#eee6f1)}
+.lumora-sound-row label{display:flex;align-items:center;gap:10px;min-width:0}.lumora-sound-row strong{display:block;font-size:13px}.lumora-sound-row small{display:block;font-size:11px;color:var(--sg-theme-muted,#817287);margin-top:3px}.lumora-sound-row>div{display:flex;gap:6px;flex-shrink:0}
+.lumora-sound-panel footer p{font-size:12px;line-height:1.5;min-height:18px;margin:12px 0}.lumora-sound-panel .lumora-sound-save{width:100%;background:var(--sg-theme-accent-strong,#63317d);border-color:var(--sg-theme-accent-strong,#63317d);color:#fff;font-weight:750;min-height:44px}
 @media(max-width:420px){.lumora-sound-panel{padding:18px}.lumora-sound-row{flex-wrap:wrap}.lumora-sound-row>div{margin-left:auto}.lumora-sound-row small{font-size:10px}}
+
+.lumora-sound-panel{background:linear-gradient(150deg,color-mix(in srgb,var(--sg-theme-accent,#9463ad) 8%,var(--sg-theme-neutral,#fff)),var(--sg-theme-neutral,#fff));box-sizing:border-box}.lumora-sound-row{margin:6px 0;padding:11px;border:1px solid var(--sg-theme-border,#e6dbe9);border-radius:14px;background:color-mix(in srgb,var(--sg-theme-accent,#9463ad) 6%,var(--sg-theme-neutral,#fff))}.lumora-sound-row>div{align-items:flex-start}
+.lumora-sound-panel .lumora-sound-picker{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:110px;text-align:left;color:var(--sg-theme-text,#302237);background:var(--sg-theme-neutral,#fff)}
+.lumora-sound-options{position:fixed;z-index:460;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;display:grid;gap:2px;padding:6px;border-radius:16px;background:var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff));border:1px solid var(--sg-theme-border,#dfd1e5);box-shadow:0 8px 28px rgba(0,0,0,.16);font-family:Inter,system-ui,sans-serif}
+.lumora-sound-options button{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;width:100%;padding:9px 10px;text-align:left;font:inherit;font-size:12px;font-weight:700;border:0;border-radius:10px;color:var(--sg-theme-text,#302237);background:transparent;cursor:pointer}.lumora-sound-options button[aria-selected=true]{background:color-mix(in srgb,var(--sg-theme-accent,#9473AD) 12%,transparent);color:var(--sg-theme-accent-strong,#63317d);font-weight:750}.lumora-sound-options button:hover{background:var(--sg-theme-accent-wash,#f2e6f7)}.lumora-sound-options button:focus-visible{outline:2px solid var(--sg-theme-accent-strong,#63317d);outline-offset:-2px}
+@media(max-width:360px){.lumora-sound-row>div{width:100%;margin-left:29px}.lumora-sound-panel .lumora-sound-picker{flex:1;min-width:0}}
+
+.lumora-sound-panel,.lumora-sound-options{
+  --sound-scroll-thumb:color-mix(in srgb,var(--sg-theme-accent,#9473AD) 72%,var(--sg-theme-text,#302237));
+  --sound-scroll-track:color-mix(in srgb,var(--sg-theme-accent,#9473AD) 8%,var(--sg-theme-panel-solid,var(--sg-theme-neutral,#fff)));
+  scrollbar-width:thin;
+  scrollbar-color:var(--sound-scroll-thumb) var(--sound-scroll-track);
+  scrollbar-gutter:stable;
+}
+.lumora-sound-panel::-webkit-scrollbar,.lumora-sound-options::-webkit-scrollbar{width:6px;height:6px}
+.lumora-sound-panel::-webkit-scrollbar-track,.lumora-sound-options::-webkit-scrollbar-track{background:var(--sound-scroll-track);border-radius:12px;margin-block:12px}
+.lumora-sound-panel::-webkit-scrollbar-thumb,.lumora-sound-options::-webkit-scrollbar-thumb{background:var(--sound-scroll-thumb);border-radius:12px;border:1px solid var(--sound-scroll-track)}
+.lumora-sound-panel::-webkit-scrollbar-thumb:hover,.lumora-sound-options::-webkit-scrollbar-thumb:hover{background:var(--sg-theme-accent-strong,var(--sound-scroll-thumb))}

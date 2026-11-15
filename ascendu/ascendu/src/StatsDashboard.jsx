@@ -1,9 +1,10 @@
 import {useEffect,useMemo,useState} from 'react';
 import {doc,onSnapshot} from 'firebase/firestore';
 import {db} from './firebase.js';
-import {formatStudyDate,getStudyWeek,shiftStudyWeek} from './studyWeek.js';
+import {formatStudyDate,getStudyWeek} from './studyWeek.js';
 import {calendarDays,cleanSessions,dateKey,personalBests,periodRange,shortTime,studySuggestions,summarize} from './statsModel.js';
 import WeeklyChallenges from './WeeklyChallenges.jsx';
+import StudyBarChart from './StudyBarChart.jsx';
 import './statsDashboard.css';
 import './statsNavigation.css';
 
@@ -34,9 +35,6 @@ export function StatsDashboard({user,history=[],subjects=[],targets={},milestone
   const progress=next?Math.max(0,Math.min(100,(records.total/3600-next.min)/(next.max-next.min)*100)):100;
   const suggestions=studySuggestions(sessions,subjects,targets,now);
   const subjectName=id=>subjects.find(s=>s.id===id)?.label||'Archived subject';
-  const subjectRows=Object.entries(summary.subjects).sort((a,b)=>b[1]-a[1]);
-  const trend=Array.from({length:8},(_,i)=>{const w=shiftStudyWeek(now,i-7);return {...w,...summarize(sessions,w.start,Math.min(+w.endExclusive,now+1))};});
-  const trendMax=Math.max(1,...trend.map(w=>w.secs));
   return <div className="sg-stats-dashboard">
     <header className="sg-stats-page-heading"><span className="sg-stats-eyebrow">YOUR LEARNING JOURNEY</span><h1>A little further, every day.</h1><p>See what’s working. Choose your next small step.</p></header>
     <div className="sg-stats-segments sg-stats-tabs" role="group" aria-label="Stats section">
@@ -60,6 +58,7 @@ export function StatsDashboard({user,history=[],subjects=[],targets={},milestone
       <section className="sg-stats-card"><div className="sg-stats-heading"><div><span className="sg-stats-eyebrow">SMART ANALYTICS</span><h2>A useful next step</h2></div><span aria-hidden="true">✦</span></div>
         {suggestions.map(suggestion=><article className="sg-stats-suggestion" key={suggestion.title}><h3>{suggestion.title}</h3><p>{suggestion.body}</p><button disabled={!onPlan||!suggestion.subjectId} onClick={()=>onPlan(suggestion)}>Set up {suggestion.minutes} min →</button></article>)}
       </section>
+      <StudyBarChart history={sessions} subjects={subjects} now={now}/>
       <section className="sg-stats-card"><div className="sg-stats-heading"><h2>Your focus calendar</h2><span className="sg-stats-caption">Tap a day</span></div>
         <div className="sg-stats-calendar-nav"><button aria-label="Previous month" onClick={()=>{setMonthOffset(n=>n-1);setSelected(null);}}>‹</button><strong>{formatStudyDate(calendar.start,{month:'long',year:'numeric'})}</strong><button aria-label="Next month" disabled={monthOffset===0} onClick={()=>{setMonthOffset(n=>n+1);setSelected(null);}}>›</button></div>
         <div className="sg-stats-calendar"><div className="sg-stats-weekdays" aria-hidden="true">{['M','T','W','T','F','S','S'].map((label,index)=><span key={index}>{label}</span>)}</div>
@@ -69,9 +68,7 @@ export function StatsDashboard({user,history=[],subjects=[],targets={},milestone
         {day&&<div className="sg-stats-day-detail" aria-live="polite"><div className="sg-stats-heading"><strong>{formatStudyDate(day.date,{weekday:'short',day:'numeric',month:'short'})}</strong><strong>{shortTime(day.secs)}</strong></div><p>{day.count?`${day.count} session${day.count===1?'':'s'} · You made time for learning.`:'No recorded sessions. Rest days belong here too.'}</p>{Object.entries(day.subjects).map(([id,secs])=><div className="sg-stats-split" key={id}><span>{subjectName(id)}</span><span>{shortTime(secs)}</span></div>)}</div>}
       </section>
       <section className="sg-stats-card"><h2>Your personal bests</h2><p>A record of your own journey.</p><div className="sg-stats-records"><div><span>Best focus day</span><strong>{shortTime(records.bestDay)}</strong><small>{records.bestDayKey?formatStudyDate(Date.parse(records.bestDayKey+'T00:00:00Z'),{day:'numeric',month:'short'}):'Your first is ahead'}</small></div><div><span>Longest session</span><strong>{shortTime(records.longestSession)}</strong><small>Quality matters too</small></div><div><span>Longest streak</span><strong>{records.longestStreak} days</strong><small>Built one day at a time</small></div><div><span>Days you showed up</span><strong>{records.activeDays}</strong><small>Every one counts</small></div></div></section>
-      <section className="sg-stats-card"><h2>Where your time went</h2>{subjectRows.length?subjectRows.map(([id,secs])=><div className="sg-stats-subject" key={id}><div className="sg-stats-split"><span>{subjectName(id)}</span><strong>{shortTime(secs)}</strong></div><progress value={secs} max={Math.max(1,summary.secs)} aria-label={`${subjectName(id)} share of ${period} focus`}/></div>):<p>Your subjects will appear after a session in this period.</p>}
-        <details><summary>Your eight-week trend</summary><div className="sg-stats-trend">{trend.map((w,index)=><div key={w.key}><span>{shortTime(w.secs)}</span><i style={{height:Math.max(2,w.secs/trendMax*74)}}/><small>{index===7?'Now':formatStudyDate(w.start,{day:'numeric',month:'numeric'})}</small></div>)}</div><p className="sg-stats-caption">The current week is still in progress.</p></details>
-      </section>
+
     </>}
   </div>;
 }

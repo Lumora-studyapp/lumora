@@ -7,6 +7,7 @@ function harness(){
   const gain=()=>({gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){},cancelScheduledValues(){},setTargetAtTime(value){this.value=value;}},connect(){},disconnect(){}});
   const context={state:'running',currentTime:1,destination:{},createGain:gain,createOscillator(){return {frequency:{setValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){},start(){started++;},stop(){stopped++;}};}};
   const engine=createSoundEffects(()=>{created++;return context;});
+  engine.configure({soundVersion:1,events:Object.fromEntries(SOUND_EVENTS.map(event=>[event.id,{style:"soft"}]))});
   return {engine,context,get started(){return started;},get stopped(){return stopped;},get created(){return created;}};
 }
 test('normalizes malformed preferences and fills newly added events',()=>{
@@ -18,7 +19,7 @@ test('normalizes malformed preferences and fills newly added events',()=>{
 test('master mute, zero volume, and individual toggles gate real events',()=>{
   const h=harness();h.engine.configure({enabled:false});assert.equal(h.engine.play('studyStarted'),false);assert.equal(h.created,0);
   h.engine.configure({volume:0});assert.equal(h.engine.play('studyStarted'),false);
-  h.engine.configure({events:{taskCompleted:{enabled:false}}});assert.equal(h.engine.play('taskCompleted'),false);
+  h.engine.configure({soundVersion:1,events:{taskCompleted:{enabled:false,style:"soft"}}});assert.equal(h.engine.play('taskCompleted'),false);
   assert.equal(h.engine.play('taskCompleted',{preview:true}),true);assert.equal(h.started,1);
 });
 test('all six cues play once, avoid overlap, and stop when muted',()=>{
@@ -31,3 +32,10 @@ test('unsupported or blocked audio never interrupts an app action',()=>{
 test('one effects context is reused and previews replace the previous cue',()=>{
   const h=harness();h.engine.play('studyStarted');h.engine.play('taskCompleted',{preview:true});assert.equal(h.created,1);assert.ok(h.stopped>=2);
 });
+
+test('default recordings play for the requested events and respect volume and mute',()=>{
+  const old=globalThis.Audio,created=[];
+  globalThis.Audio=class {constructor(src){this.src=src;created.push(this)} play(){return Promise.resolve()} pause(){this.paused=true}};
+  try {const engine=createSoundEffects(()=>null);for(const [event,src] of [['studyStarted','/sounds/confirm.wav'],['breakStarted','/sounds/water-drop.wav'],['studyCompleted','/sounds/sparkle.wav'],['milestone','/sounds/achievement.wav']]){engine.stop();assert.equal(engine.play(event),true);assert.equal(created.at(-1).src,src);assert.equal(created.at(-1).volume,.55);}engine.configure({enabled:false});assert.equal(created.at(-1).paused,true);assert.equal(engine.play('milestone'),false);}finally{globalThis.Audio=old;}
+});
+test('legacy settings adopt new defaults while preserving volume, mutes and chosen alternatives',()=>{const p=normalizeSoundPreferences({volume:.3,events:{studyStarted:{enabled:false,style:'soft'},studyCompleted:{style:'warm'}}});assert.equal(p.events.studyStarted.style,'confirm');assert.equal(p.events.studyStarted.enabled,false);assert.equal(p.events.studyCompleted.style,'warm');assert.equal(p.volume,.3);assert.equal(normalizeSoundPreferences({soundVersion:1,events:{studyStarted:{style:'soft'}}}).events.studyStarted.style,'soft');});

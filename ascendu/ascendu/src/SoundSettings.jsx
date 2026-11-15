@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {SOUND_EVENTS,SOUND_STYLES,normalizeSoundPreferences,soundEffects} from './soundEffects.js';
 import './soundSettings.css';
+import SoundPicker from './SoundPicker.jsx';
 
 export default function SoundSettings({initialPreferences,onSave,onClose}) {
   const [preferences,setPreferences]=useState(()=>normalizeSoundPreferences(initialPreferences));
@@ -26,8 +27,8 @@ export default function SoundSettings({initialPreferences,onSave,onClose}) {
       <p className="lumora-sound-note">Controls effects only. Your background study audio keeps its own volume.</p>
       <h3>Event sounds</h3>
       {SOUND_EVENTS.map(({id,label,description})=><div key={id} className="lumora-sound-row">
-        <label><input aria-label={label+' sound'} type="checkbox" checked={preferences.events[id].enabled} disabled={!preferences.enabled} onChange={event=>changeEvent(id,{enabled:event.target.checked})}/><span><strong>{label}</strong><small>{description}</small></span></label>
-        <div><select aria-label={label+' sound style'} value={preferences.events[id].style} disabled={!preferences.enabled} onChange={event=>changeEvent(id,{style:event.target.value})}>{SOUND_STYLES.map(style=><option key={style.id} value={style.id}>{style.label}</option>)}</select><button type="button" aria-label={'Preview '+label.toLowerCase()} disabled={!preferences.enabled||preferences.volume===0} onClick={()=>{soundEffects.configure(preferences);if(!soundEffects.play(id,{preview:true}))setStatus('Sound is unavailable in this browser.');}}><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11L13 8z"/></svg></button></div>
+        <label><input aria-label={label+' sound'} type="checkbox" checked={preferences.events[id].enabled} disabled={!preferences.enabled} onChange={event=>changeEvent(id,{enabled:event.target.checked})}/><span><strong>{label}</strong><small>{SOUND_STYLES.find(style=>style.id===preferences.events[id].style)?.label || description}</small></span></label>
+        <div><SoundPicker label={label} value={preferences.events[id].style} disabled={!preferences.enabled} onChange={style=>changeEvent(id,{style})}/><button type="button" aria-label={'Preview '+label.toLowerCase()} disabled={!preferences.enabled||preferences.volume===0} onClick={()=>{soundEffects.configure(preferences);if(!soundEffects.play(id,{preview:true}))setStatus('Sound is unavailable in this browser.');}}><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11L13 8z"/></svg></button></div>
       </div>)}
       <p className="lumora-sound-note">Previews play the selected style, even when that event is switched off. Browsers may silence reminders while the app is suspended.</p>
       <footer><p role="status">{status}</p><button className="lumora-sound-save" type="button" disabled={saving} onClick={save}>{saving?'Saving…':'Save sound settings'}</button></footer>
