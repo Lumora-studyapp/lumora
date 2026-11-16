@@ -290,3 +290,5 @@ exports.recordSession = onCall(async (request) => {
 
   return { ok: true, username, secs: dur, weekKey };
 });
+
+exports.submitFeedback = onCall(require("./feedback.cjs").createSubmitFeedback({db, ErrorType: HttpsError}));

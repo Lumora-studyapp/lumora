@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {TREE_SKINS,getCharacterProgressionImage} from './characterCatalog.js';
+import {recolourScholarPixels} from './scholarColour.js';
 
 // Seated poses and raised props need framing around the face, not the canvas centre.
 export const PORTRAIT_BACKGROUND='#EDE2F3';
@@ -83,19 +84,7 @@ export function CharacterFullBody({value,stage=0,style={},skinId=null,portrait=f
       const canvas=canvasRef.current,ctx=canvas.getContext('2d',{willReadFrequently:true});
       canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;ctx.drawImage(image,0,0);
       const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),data=pixels.data;
-      const rgb=hex=>[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
-      const skinRgb=rgb(c.skin),hair=rgb(c.hairColor),w=canvas.width;
-      const head=c.model==='woman'?{x1:285,x2:700,y1:0,y2:360}:{x1:380,x2:710,y1:0,y2:360};
-      if(scholar)for(let y=0;y<canvas.height;y++)for(let x=0;x<w;x++){
-        const i=(y*w+x)*4,a=data[i+3];if(a<200)continue;
-        const r=data[i],g=data[i+1],b=data[i+2];
-        const inHead=x>head.x1&&x<head.x2&&y>head.y1&&y<head.y2;
-        const inHands=y>250&&y<850&&x>160&&x<890;
-        const isSkin=(inHead||inHands)&&r>85&&g>42&&r>g*1.17&&g>b*1.06&&b<r*.78;
-        const isHair=inHead&&y<270&&r<125&&g<105&&b<105&&r>b*.85&&g>b*.7;
-        if(isSkin){const shade=Math.max(.34,Math.min(1.28,(r+g+b)/390));data[i]=Math.min(255,skinRgb[0]*shade);data[i+1]=Math.min(255,skinRgb[1]*shade);data[i+2]=Math.min(255,skinRgb[2]*shade);}
-        else if(isHair){const shade=Math.max(.23,Math.min(1.3,(r+g+b)/180));data[i]=Math.min(255,hair[0]*shade);data[i+1]=Math.min(255,hair[1]*shade);data[i+2]=Math.min(255,hair[2]*shade);}
-      }
+      if(scholar)recolourScholarPixels(pixels,{model:c.model,stage,skin:c.skin,hairColor:c.hairColor});
       ctx.putImageData(pixels,0,0);
       if(portrait){
         const original=document.createElement('canvas');
@@ -112,7 +101,7 @@ export function CharacterFullBody({value,stage=0,style={},skinId=null,portrait=f
     };
     image.src=source;
     return()=>{live=false;image.onload=null;};
-  },[c.model,c.skin,c.hairColor,source,scholar,portrait]);
+  },[c.model,c.skin,c.hairColor,source,scholar,portrait,stage]);
   return <canvas ref={canvasRef} role="img" aria-label={portrait?`${skin.name} profile picture`:`${skin.name}, stage ${stage+1}`} style={{display:'block',width:'190px',height:'285px',maxWidth:'100%',maxHeight:'100%',objectFit:'contain',...style}}/>;
 }
 

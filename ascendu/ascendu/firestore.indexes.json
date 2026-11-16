@@ -1,4 +1,19 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "queryScope": "COLLECTION",
+      "collectionGroup": "private_feedback",
+      "fields": [
+        {
+          "order": "ASCENDING",
+          "fieldPath": "category"
+        },
+        {
+          "order": "DESCENDING",
+          "fieldPath": "createdAt"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

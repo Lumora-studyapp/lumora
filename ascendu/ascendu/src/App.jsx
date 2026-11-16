@@ -3,11 +3,13 @@ import { useState, useEffect, useRef, useCallback, useId, useMemo, memo, Fragmen
 import { createPortal } from "react-dom";
 import ImageAsset from "./ImageAsset.jsx";
 import SoundSettings from "./SoundSettings.jsx";
+import FeedbackPanel,{AdminFeedbackSection} from "./FeedbackPanel.jsx";
 import {CharacterEditor,CharacterFullBody,DEFAULT_CHARACTER,normalizeCharacter} from "./CharacterAvatar.jsx";
 import {TREE_SKINS,getCharacterProgressionImage} from "./characterCatalog.js";
 import {CHARACTER_STAGE_RANGES,CHARACTER_STAGE_ENDS,characterStageIndex} from "./characterStages.js";
 import {soundEffects,normalizeSoundPreferences} from "./soundEffects.js";
 import {resolveSignedInAccount} from "./authFlows.js";
+import {useOnboardingMotion} from "./useOnboardingMotion.js";
 import StudyProfile, {ProfileAvatar} from "./StudyProfile.jsx";
 import FocusStageBadge, {useFocusStageAdvancement} from "./FocusStageBadge.jsx";
 import SubjectColourPicker from "./SubjectColourPicker.jsx";
@@ -83,6 +85,7 @@ const capitalizeSubjectLabel=value=>{
   const label=String(value||"").trim();
   return label?label.charAt(0).toLocaleUpperCase()+label.slice(1):label;
 };
+const FEEDBACK_ENABLED = import.meta.env.VITE_FEEDBACK_ENABLED === "true";
 const AUTH_FUNCTIONS_ENABLED = import.meta.env.VITE_LUMORA_AUTH_FUNCTIONS === "true";
 const ANNOUNCEMENT_ADMIN = ADMIN_USERS[0] || "";
 const ANNOUNCEMENT_REACTIONS = ["🌱","👏","❤️","🎉"];
@@ -139,18 +142,26 @@ const REFERRAL_OPTIONS = [
 ];
 
 export const APP_CSS = `
-@keyframes lumoraOnboardingForward {
-  from { opacity: 0; transform: translate3d(22px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+.sg-classroom-profile-link {
+  display:inline-flex; align-items:center; gap:5px; min-height:36px;
+  padding:4px 0; margin-top:2px; border:0; border-radius:4px;
+  background:transparent; box-shadow:none; cursor:pointer;
+  color:var(--sg-theme-accent-strong,#63317D);
+  font-family:inherit; font-size:12.5px; font-weight:650; line-height:1.4;
+  text-align:left;
 }
-@keyframes lumoraOnboardingBack {
-  from { opacity: 0; transform: translate3d(-22px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+.sg-classroom-profile-link:hover { text-decoration:underline; text-underline-offset:3px; }
+.sg-classroom-profile-link:focus-visible { outline:2px solid var(--sg-theme-accent,#63317D); outline-offset:3px; }
+.sg-classroom-profile-link:active { opacity:.75; }
+.lumora-onboarding-stage { overflow-x:clip; background:#fff; }
+.lumora-onboarding-slide { min-height:100dvh; }
+.lumora-onboarding-slide[data-motion="on"] button {
+  transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease,transform 100ms ease;
 }
-.lumora-onboarding-slide { min-height: 100dvh; animation: lumoraOnboardingForward 300ms cubic-bezier(.2,.75,.25,1) both; will-change: opacity, transform; }
-.lumora-onboarding-slide.is-back { animation-name: lumoraOnboardingBack; }
+.lumora-onboarding-slide[data-motion="on"] button:enabled:active { transform:scale(.985); }
+.lumora-onboarding-slide :is(h1,h2,h3)[tabindex="-1"]:focus { outline:none; }
 @media (prefers-reduced-motion: reduce) {
-  .lumora-onboarding-slide { animation-duration: 1ms; }
+  .lumora-onboarding-slide button { transition:none!important; transform:none!important; }
 }
 .lumora-auth-stage {
   position:relative;
@@ -7355,6 +7366,7 @@ function AdminPanel({ admin, selfTools, animationMode, onAnimationModeChange, on
           <span>Firebase admin role verified. Cross-user actions are logged; test grants below only change your account.</span>
         </div>
 
+        <AdminFeedbackSection enabled={FEEDBACK_ENABLED}/>
         <div style={{...ap.section,border:"1.5px solid #D9C2F0"}}>
           <div style={{...ap.secTitle,color:"#7A5AA0"}}>Background testing kit</div>
           <div style={{fontSize:12,color:"#849087",lineHeight:1.45,marginBottom:10}}>
@@ -7464,6 +7476,7 @@ function AdminPanel({ admin, selfTools, animationMode, onAnimationModeChange, on
         </div>
 
         {/* Merge duplicate identity */}
+
         <div style={{...ap.section,border:"1.5px solid #D9C2F0"}}>
           <div style={{...ap.secTitle,color:"#8B5CB8"}}>Merge duplicate identity</div>
           <div style={{fontSize:11.5,color:"#999",marginBottom:9,lineHeight:1.4}}>
@@ -8590,8 +8603,10 @@ const pd={
   header:{...ap.header,flexShrink:0,position:"relative",zIndex:2,background:"var(--sg-theme-neutral,#FCFDFB)",padding:"20px clamp(18px,5vw,28px) 15px",marginBottom:0,borderBottom:"1px solid #E9EDE8"},
   policyFrame:{display:"block",width:"100%",flex:"1 1 auto",minHeight:0,border:0,background:"var(--sg-theme-neutral,#fff)"},
 };
-export function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onSessions, onProfile, onAccount, onPrivacyData, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
+export function HeaderMenu({ initialAccountOpen=false, user, avatar, skinId, coins, streak, badgeCount, plannerNotificationCount, achievementsNotificationCount, friendRequestsNotificationCount, isAdmin, canAddTestCoins, activeView, onNavigate, themeStyle, backgroundId, animationMode, onAnimationModeChange, onTreeShop, onGardenShop, onBadges, onSessions, onProfile, onAccount, onPrivacyData, onFeedback, onSoundSettings, onCharacterEditor, onReplayOnboarding, onAdmin, onAddTestCoins, onLogout, onClose }) {
   const [statsOpen,setStatsOpen]=useState(false);
+  const [accountOpen,setAccountOpen]=useState(initialAccountOpen);
+  const accountButton=useRef(null);
   const [grantingCoins,setGrantingCoins]=useState(false);
   const [customisationOpen,setCustomisationOpen]=useState(false);
   const customisationButton=useRef(null);
@@ -8617,10 +8632,14 @@ export function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, pl
     { icon:"📝", label:"My Sessions",   sub:"Fix an over-recorded session", onClick:onSessions },
     ...(isAdmin ? [{ icon:"🛠", label:"Admin Console", sub:"User & moderation tools", onClick:onAdmin }] : []),
   ];
-  const boringItems = [
+  const accountItems = [
+    { icon:"⚙️", label:"Account settings", sub:"Sign-in, password and recovery", onClick:onAccount },
     { icon:"♫", label:"Sound & Audio", sub:"Effects, volume and previews", onClick:onSoundSettings },
-    { icon:"⚙️", label:"Account",        sub:"Password & recovery",   onClick:onAccount },
+  ];
+  const boringItems = [
+    { icon:"⚙️", label:"Account", sub:"Account settings, sound and audio", onClick:()=>setAccountOpen(open=>!open) },
     { icon:"◇", label:"Privacy & Data", sub:"Read the Lumora privacy policy", onClick:onPrivacyData },
+    { icon:"💡", label:"Suggest an improvement", sub:"Share an idea or report a problem", onClick:onFeedback },
     { icon:"👋", label:"Replay onboarding", sub:"Replay the full welcome flow", onClick:onReplayOnboarding },
   ];
   return createPortal((
@@ -8628,7 +8647,7 @@ export function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, pl
       <div style={hm.overlay} className="sg-overlay-anim" onClick={onClose}>
         <div ref={menuSheet} style={hm.sheet} className="sg-sheet-anim sg-main-menu-sheet" onClick={e=>e.stopPropagation()}
           role="dialog" aria-modal="true" aria-label="Menu"
-          onKeyDown={event=>{if(customisationOpen&&event.key==="Escape"){event.stopPropagation();backToMenu();}}}>
+          onKeyDown={event=>{if(event.key!=="Escape")return;if(accountOpen&&(!customisationOpen||event.target.closest("#sg-account-options")||event.target===accountButton.current)){event.stopPropagation();setAccountOpen(false);requestAnimationFrame(()=>accountButton.current?.focus());}else if(customisationOpen){event.stopPropagation();backToMenu();}}}>
         <div style={hm.grabber}/>
         <button type="button" style={hm.profile} className="sg-tap-card" onClick={onProfile} aria-label={`View ${user}'s study profile`}>
           <ProfileAvatar username={user} allow size={56} avatar={avatar} skinId={skinId}/>
@@ -8697,14 +8716,16 @@ export function HeaderMenu({ user, avatar, skinId, coins, streak, badgeCount, pl
         <div style={hm.sectionLabel}>THE BORING STUFF</div>
         <div style={hm.list}>
           {boringItems.map(it=>(
-            <button key={it.label} className="sg-tap-card" style={hm.item} onClick={it.onClick}>
+            <Fragment key={it.label}><button type="button" ref={it.label==="Account"?accountButton:undefined} className="sg-tap-card" style={hm.item} onClick={it.onClick} aria-expanded={it.label==="Account"?accountOpen:undefined} aria-controls={it.label==="Account"?"sg-account-options":undefined}>
               <span style={hm.itemIcon}>{it.icon}</span>
               <span style={{flex:1,textAlign:"left"}}>
                 <span style={hm.itemLabel}>{it.label}</span>
                 <span style={hm.itemSub}>{it.sub}</span>
               </span>
-              <span style={hm.chev}>›</span>
+              <span style={hm.chev} aria-hidden="true">{it.label==="Account"?(accountOpen?"⌃":"⌄"):"›"}</span>
             </button>
+            {it.label==="Account"&&accountOpen&&<div id="sg-account-options" className="sg-stats-menu-options" role="group" aria-label="Account options">{accountItems.map(option=><button key={option.label} type="button" className="sg-tap-card" style={hm.item} onClick={option.onClick}><span style={hm.itemIcon} aria-hidden="true">{option.icon}</span><span style={{flex:1,textAlign:"left"}}><span style={hm.itemLabel}>{option.label}</span><span style={hm.itemSub}>{option.sub}</span></span><span style={hm.chev} aria-hidden="true">›</span></button>)}</div>}
+            </Fragment>
           ))}
         </div>
         <div style={hm.divider}/>
@@ -11837,14 +11858,17 @@ function VisitGarden({ username, viewerSubjects, onClose, onProfile }) {
     <div style={sd.overlay} className="sg-overlay-anim" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{...sd.modal,boxSizing:"border-box",maxHeight:"min(92dvh,760px)",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",paddingBottom:"calc(24px + env(safe-area-inset-bottom))"}}
         className="sg-sheet-anim" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${username}'s Classroom`}>
-        <div style={sd.header}>
-          <div>
+        <div style={{...sd.header,gap:12,marginBottom:12}}>
+          <div style={{minWidth:0,flex:1}}>
             <div style={sd.kicker}>VISITING</div>
-            <h3 style={sd.title}>🏫 {username}'s Classroom</h3>
+            <h3 style={{...sd.title,overflowWrap:"anywhere"}}>🏫 {username}'s Classroom</h3>
+            {onProfile&&<button type="button" className="sg-classroom-profile-link" onClick={onProfile} aria-label={`View ${username}'s study profile`}>
+              <span>View study profile</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+            </button>}
           </div>
           <button style={sd.x} onClick={onClose} aria-label="Close friend's classroom">✕</button>
         </div>
-        {onProfile&&<button style={{...sd.doneBtn,width:"auto",margin:"0 0 14px"}} onClick={onProfile}>👥 View Study Profile</button>}
         {load.status==="loading" ? (
           <div style={{textAlign:"center",padding:"30px 0"}} aria-live="polite">
             <div className="sg-skeleton" style={{height:180,width:"100%",borderRadius:18,marginBottom:12}}/>
@@ -12665,7 +12689,6 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [onboardingStep,setOnboardingStep]=useState(()=>
     !lsRaw(LS_USER,lsRaw("ascendu_username",""))&&lsRaw(LS_ONBOARDING_COMPLETE,"")!=="1"?1:0
   );
-  const [onboardingDirection,setOnboardingDirection]=useState(1);
   const [onboardingAnswers,setOnboardingAnswers]=useState({educationStage:"",referralSource:"",studyHours:"",studyGoals:[]});
   const [subjects,setSubjects]=useState(()=>lsGet(LS_SUBJECTS,DEFAULT_SUBJECTS).map(item=>({...item,label:capitalizeSubjectLabel(item.label)})));
   const [subject,setSubject]=useState(()=>lsRaw(LS_SUBJECT,"math"));
@@ -12710,7 +12733,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [enhancements,setEnhancements]=useState(()=>lsGet("studygrove_enhancements",{})); // { skinId: tier 1-3 }
   const theme="light";
   const [animationMode,setAnimationMode]=useState(()=>normalizeAnimationMode(lsRaw(LS_ANIMATION_MODE,"device")));
-  const [prefersReducedMotion,setPrefersReducedMotion]=useState(false);
+  const [prefersReducedMotion,setPrefersReducedMotion]=useState(()=>window.matchMedia?.("(prefers-reduced-motion: reduce)").matches??false);
   const [adminRoleVerified,setAdminRoleVerified]=useState(false);
   const [activeBackground,setActiveBackground]=useState(()=>{
     const cachedUser=lsRaw(LS_USER,"");
@@ -12797,10 +12820,13 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   const [profileUser,setProfileUser]=useState(null);
   const [profileAchievementGallery,setProfileAchievementGallery]=useState(false);
   const [showPrivacyData,setShowPrivacyData]=useState(false);
+  const [showFeedback,setShowFeedback]=useState(false);
+  useEffect(()=>setShowFeedback(false),[user]);
   const [privacyFromMenu,setPrivacyFromMenu]=useState(false);
   const [privacyPrefs,setPrivacyPrefs]=useState({sharePresence:true});
   const [visiting,setVisiting]=useState(null);        // username whose garden we're viewing
   const [accountFromMenu,setAccountFromMenu]=useState(false);
+  const [menuAccountExpanded,setMenuAccountExpanded]=useState(false);
   const [sessionsFromMenu,setSessionsFromMenu]=useState(false);
   const [showAdmin,setShowAdmin]=useState(false);     // admin console
   const [adminFromMenu,setAdminFromMenu]=useState(false);
@@ -12930,6 +12956,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     return()=>media.removeEventListener?.("change",sync);
   },[]);
   const animationsDisabled=shouldDisableAnimations(animationMode,prefersReducedMotion);
+  const onboardingMotionDisabled=animationsDisabled||prefersReducedMotion;
+  const onboardingMotion=useOnboardingMotion({step:onboardingStep,setStep:setOnboardingStep,disabled:onboardingMotionDisabled,identity:user,ready:authReady});
   useEffect(()=>{
     const root=document.documentElement;
     root.setAttribute("data-animation-mode",animationMode);
@@ -13798,8 +13826,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   };
 
   const navigateOnboarding=nextStep=>{
-    setOnboardingDirection(nextStep<onboardingStep?-1:1);
-    setOnboardingStep(nextStep);
+    onboardingMotion.navigate(nextStep);
   };
   const handleReplayOnboarding=()=>{
     if(!user)return;
@@ -13812,7 +13839,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
     if(!user || !onboardingReplayRef.current)return;
     onboardingReplayRef.current=false;
     lsSetR(LS_ONBOARDING_COMPLETE,"1");
-    setOnboardingStep(0);
+    navigateOnboarding(0);
   };
   const changeSubject=id=>{if(running)return;setSubject(id);lsSetR(LS_SUBJECT,id);};
   const addSubject=s=>{
@@ -14233,7 +14260,8 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
           </div>
         </div>
       )}
-      <div key={onboardingStep} className={`lumora-onboarding-slide${onboardingDirection<0?" is-back":""}`}>
+      <div className="lumora-onboarding-stage">
+      <div ref={onboardingMotion.ref} key={onboardingStep} className="lumora-onboarding-slide" data-motion={onboardingMotionDisabled?"off":"on"}>
         {onboardingStep===1
         ? <OnboardingWelcome onNext={()=>navigateOnboarding(2)}/>
         : onboardingStep===2
@@ -14257,14 +14285,14 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             navigateOnboarding(6);
           }}/>
         : onboardingStep===6
-        ? <CharacterEditor initialValue={characterAvatar} onBack={()=>navigateOnboarding(5)} onSave={async value=>{const next=normalizeCharacter(value);if(user)await saveCharacterAvatar(next);setCharacterAvatar(next);setActiveSkin(`lumora-scholar-${next.model}`);lsSetR(LS_SKIN,`lumora-scholar-${next.model}`);if(!user)lsSet("lumora_character_avatar_draft",next);if(onboardingReplayRef.current){navigateOnboarding(7);return;}lsSetR(LS_ONBOARDING_COMPLETE,"1");setOnboardingStep(0);}}/>
+        ? <CharacterEditor initialValue={characterAvatar} onBack={()=>navigateOnboarding(5)} onSave={async value=>{const next=normalizeCharacter(value);if(user)await saveCharacterAvatar(next);if(!onboardingMotion.isCurrentStep(6,user))return;setCharacterAvatar(next);setActiveSkin(`lumora-scholar-${next.model}`);lsSetR(LS_SKIN,`lumora-scholar-${next.model}`);if(!user)lsSet("lumora_character_avatar_draft",next);if(onboardingReplayRef.current){navigateOnboarding(7);return;}lsSetR(LS_ONBOARDING_COMPLETE,"1");navigateOnboarding(0);}}/>
         : onboardingStep===7
         ? <OnboardingFinish isReplay={onboardingReplayRef.current} onBack={()=>navigateOnboarding(6)} onNext={()=>navigateOnboarding(8)}/>
         : <LoginScreen flow="link" onBack={()=>navigateOnboarding(7)}
             onDone={()=>{
               onboardingReplayRef.current=false;
               lsSetR(LS_ONBOARDING_COMPLETE,"1");
-              setOnboardingStep(0);
+              navigateOnboarding(0);
             }}
             onSwitchAccount={()=>{
               onboardingReplayRef.current=false;
@@ -14273,11 +14301,12 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
             }}/>
         }
       </div>
+      </div>
     </>
   );
 
   if(!user)return (
-    <div className="sg-shell" style={{margin:"0 auto"}}>
+    <div ref={onboardingMotion.ref} className="sg-shell" style={{margin:"0 auto"}}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={DEFAULT_BACKGROUND_ID} theme={theme} animationMode={animationMode}/>
       <LoginScreen flow="create" onLogin={handleLogin} initialSocialUser={redirectSocialUser} initialError={redirectAuthError}/>
@@ -14288,7 +14317,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   // behind a short loading shell so a previous user's cached wallet, skins or
   // subjects can never flash or be acted on while the new account hydrates.
   if(!prefsReady)return (
-    <div className="sg-shell" style={appBackgroundStyle}>
+    <div ref={onboardingMotion.ref} className="sg-shell" style={appBackgroundStyle}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} animationMode={animationMode}/>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box"}} aria-live="polite">
@@ -14303,7 +14332,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
   );
 
   return (
-    <div className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
+    <div ref={onboardingMotion.ref} className="sg-shell" style={appBackgroundStyle} data-background={renderedBackgroundId} data-background-tone={renderedBackgroundAppearance.tone}>
       <style>{APP_CSS+BACKGROUND_CSS}</style>
       <BackgroundLayer backgroundId={renderedBackgroundId} theme={theme} focusMode={running||paused} animationMode={animationMode}/>
       {toast&&<div style={S.toast}>{toast}</div>}
@@ -14346,6 +14375,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
         admin={isAdmin?{ user, coins, setCoins:adminSetCoins, grantAllSkins:adminUnlockAll }:null}
         onClose={()=>{setShowAccount(false);setAccountFromMenu(false);}}
         onBack={accountFromMenu?()=>{setShowAccount(false);setAccountFromMenu(false);setShowMenu(true);}:null}/>}
+      {showFeedback&&user&&<FeedbackPanel key={user} enabled={FEEDBACK_ENABLED} onClose={()=>setShowFeedback(false)}/>}
       {showPrivacyData&&<PrivacyDataPanel
         onClose={()=>{setShowPrivacyData(false);setPrivacyFromMenu(false);}}
         onBack={privacyFromMenu?()=>{setShowPrivacyData(false);setPrivacyFromMenu(false);setShowMenu(true);}:null}/>}
@@ -14388,7 +14418,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               <button onClick={()=>{setCameFromMenu(false);setShowShop(true);}} style={{...S.coinChip,cursor:"pointer"}} title="Open shop"><AnimatedNumber value={walletCoins} prefix="🪙 "/></button>
               <button
                 className="sg-main-menu-button"
-                onClick={()=>setShowMenu(true)}
+                onClick={()=>{setMenuAccountExpanded(false);setShowMenu(true);}}
                 style={S.menuBtn}
                 title={notificationCounts.total?`${notificationCounts.total} notification${notificationCounts.total===1?"":"s"}`:"Menu"}
                 aria-label={notificationCounts.total
@@ -14405,6 +14435,7 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
 
           {showMenu&&(
             <HeaderMenu
+              initialAccountOpen={menuAccountExpanded}
               user={user} avatar={characterAvatar} skinId={activeSkin} coins={walletCoins} streak={streak}
               badgeCount={badges.length}
               plannerNotificationCount={notificationCounts.planner}
@@ -14425,9 +14456,10 @@ export default function App({ weekRolloverToken = getStudyWeekKey() }) {
               onBadges={()=>{setShowMenu(false);setShowBadges(true);}}
               onSessions={()=>{setShowMenu(false);setSessionsFromMenu(true);setShowSessions(true);}}
               onProfile={()=>{setShowMenu(false);setProfileAchievementGallery(false);setProfileUser(user);}}
-              onAccount={()=>{setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
+              onAccount={()=>{setMenuAccountExpanded(true);setShowMenu(false);setAccountFromMenu(true);setShowAccount(true);}}
               onPrivacyData={()=>{setShowMenu(false);setPrivacyFromMenu(true);setShowPrivacyData(true);}}
-              onSoundSettings={()=>{setShowMenu(false);setShowSoundSettings(true);}} onCharacterEditor={()=>{setShowMenu(false);setShowCharacterEditor(true);}}
+              onSoundSettings={()=>{setMenuAccountExpanded(true);setShowMenu(false);setShowSoundSettings(true);}} onCharacterEditor={()=>{setShowMenu(false);setShowCharacterEditor(true);}}
+              onFeedback={()=>{setShowMenu(false);setShowFeedback(true);}}
               onReplayOnboarding={handleReplayOnboarding}
               isAdmin={isAdmin}
               canAddTestCoins={canAddTestCoins}
